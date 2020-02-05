@@ -210,11 +210,11 @@ runTranslation instruction@AS.Instruction{..} instrIdent = do
     computeInstructionSignature instruction (iEnc instrIdent) (iSet instrIdent)
   case result of
     Left err -> do
-      logMsg 0 $ "Error computing instruction signature: " ++ show err
+      logMsg (-1) $ "Error computing instruction signature: " ++ show err
     Right (Some (SomeFunctionSignature iSig), instStmts) -> do
       liftSigM (KeyInstr instrIdent) getDefinitions >>= \case
         Left err -> do
-          logMsg 0 $ "Error computing ASL definitions: " ++ show err
+          logMsg (-1) $ "Error computing ASL definitions: " ++ show err
         Right defs -> do
           logMsg 1 $ "Translating instruction: " ++ prettyIdent instrIdent
           logMsg 1 $ (show iSig)
