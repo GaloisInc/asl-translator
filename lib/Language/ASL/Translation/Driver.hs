@@ -31,6 +31,7 @@ module Language.ASL.Translation.Driver
   ) where
 
 import           GHC.Stack ( HasCallStack )
+import qualified GHC.Stack as Ghc
 
 import qualified Control.Exception as X
 
@@ -93,7 +94,7 @@ import qualified Text.PrettyPrint.HughesPJClass as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as LPP
 
 -- FIXME: this should be moved somewhere general
-import           What4.Utils.Log ( HasLogCfg, LogLevel(..), LogCfg, logIOWith, withLogCfg )
+import           What4.Utils.Log ( HasLogCfg, LogLevel(..), LogCfg, withLogCfg )
 import qualified What4.Utils.Log as Log
 import qualified What4.Utils.Util as U
 
@@ -151,12 +152,15 @@ optFormulaOutputFilePath opts = fpOutput (optFilePaths opts)
 serializeFormulas :: TranslatorOptions -> SigMap sym arch -> IO ()
 serializeFormulas opts (sFormulas -> formulas) = do
   let out = optFormulaOutputFilePath opts
-  logMsgIO opts 1 $ "Writing formulas to: " ++ show out
+  logMsgIO opts 0 $ "Writing formulas to: " ++  out
   T.writeFile out (WP.printSymFnEnv (reverse formulas))
+  logMsgIO opts 0 $ "Serialization successful."
   when (optCheckSerialization opts) $ checkSerialization opts
 
 checkSerialization :: TranslatorOptions -> IO ()
 checkSerialization opts = do
+  let out = optFormulaOutputFilePath opts
+  logMsgIO opts 0 $ "Deserializing formulas from: " ++ out
   Some r <- liftIO $ newIONonceGenerator
   sym <- liftIO $ B.newExprBuilder B.FloatRealRepr NoBuilderData r
   let logCfg = optLogCfg opts
@@ -164,7 +168,7 @@ checkSerialization opts = do
     WP.readSymFnEnvFromFile (WP.defaultParserConfig sym) (optFormulaOutputFilePath opts) >>= \case
       Left err -> X.throw $ SimulationDeserializationFailure err ""
       Right _ -> do
-        logMsgIO opts 1 $ "Deserialization successful."
+        logMsgIO opts 0 $ "Deserializing successful."
         return ()
 
 
@@ -173,7 +177,8 @@ collectInstructions aslInsts = do
   List.concat $
     map (\instr -> map (\(AS.InstructionEncoding {AS.encName=encName, AS.encInstrSet=iset}) -> (instr, encName, iset)) (AS.instEncodings instr)) aslInsts
 
-runWithFilters' :: TranslatorOptions
+runWithFilters' :: HasCallStack
+                => TranslatorOptions
                 -> ASLSpec
                 -> SigEnv
                 -> SigState
@@ -190,7 +195,8 @@ runWithFilters' opts spec sigEnv sigState = do
   execSigMapWithScope opts sigState sigEnv $ do
     addMemoryUFs
     forM_ instrs $ \(i, (ident, instr)) -> do
-      logMsg 1 $ "Processing instruction: " ++ show i ++ "/" ++ show (length allInstrs)
+      logMsg 0 $ "Processing instruction: " ++ prettyIdent ident
+        ++ "\n" ++ show i ++ "/" ++ show (length allInstrs)
       runTranslation instr ident
 
 
@@ -256,7 +262,7 @@ translationLoop fromInstr callStack defs (fnname, env) = do
                ++ "\n" ++ show sig ++ "\n"
             mfunc <- translateFunction (KeyFun finalName) sig stmts defs
             let deps = maybe Set.empty AC.funcDepends mfunc
-            logMsg 2 $ "Function Dependencies: " ++ show deps
+            logMsg 1 $ "Function Dependencies: " ++ show deps
             MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
             alldeps <- mapM (translationLoop fromInstr (finalName : callStack) defs) (Set.toList deps)
             let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
@@ -500,7 +506,7 @@ getASL opts = do
 logMsgIO :: HasCallStack => TranslatorOptions -> Integer -> String -> IO ()
 logMsgIO opts logLvl msg = do
   let logCfg = optLogCfg opts
-  logIOWith logCfg (intToLogLvl logLvl) msg
+  Log.writeLogEvent logCfg Ghc.callStack (intToLogLvl logLvl) msg
 
 isKeySimFilteredOut :: InstructionIdent -> ElemKey -> SigMapM sym arch Bool
 isKeySimFilteredOut fromInstr key = case key of
@@ -710,8 +716,8 @@ intToLogLvl i = case i of
 logMsg :: HasCallStack => Integer -> String -> SigMapM scope arch ()
 logMsg logLvl msg = do
   logCfg <- MSS.gets (optLogCfg . sOptions)
-  logIOWith logCfg (intToLogLvl logLvl) msg
-
+  liftIO $ Log.writeLogEvent logCfg Ghc.callStack (intToLogLvl logLvl) msg
+  
 printLog :: [T.Text] -> SigMapM scope arch ()
 printLog [] = return ()
 printLog log' = liftIO $ putStrLn (T.unpack $ T.unlines log')

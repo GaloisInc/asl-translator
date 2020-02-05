@@ -69,7 +69,7 @@ import qualified What4.Utils.StringLiteral as WT
 import qualified Language.ASL.Syntax as AS
 
 import           Language.ASL.Crucible.Extension ( ASLExt, ASLApp(..), ASLStmt(..) )
-import           Language.ASL.Translation.Exceptions ( TranslationException(..), LoggedTranslationException(..) )
+import           Language.ASL.Translation.Exceptions ( TranslationException(..) )
 import           Language.ASL.Signature
 import           Language.ASL.Types
 import           Language.ASL.StaticExpr as SE
@@ -82,7 +82,7 @@ import qualified Lang.Crucible.CFG.Reg as CCR
 import qualified What4.Utils.MonadST as MST
 import qualified Data.STRef as STRef
 
-import           What4.Utils.Log ( MonadHasLogCfg(..), LogLevel(..), LogCfg, logM, logTrace )
+import           What4.Utils.Log ( MonadHasLogCfg(..), LogLevel(..), LogCfg, logTrace )
 import qualified What4.Utils.Log as Log
 
 -- | This wrapper is used as a uniform return type in 'lookupVarRef', as each of
@@ -233,10 +233,9 @@ instance MonadHasLogCfg (Generator h s arch ret) where
 
 intToLogLvl :: Integer -> LogLevel
 intToLogLvl i = case i of
-  1 -> Info
-  2 -> Warn
-  _ -> Debug
-  
+  0 -> Info
+  1 -> Debug
+  _ -> Warn
 
 instance MST.MonadST h (Generator h s arch ret) where
   liftST m = Generator $ MT.lift $ MST.liftST m

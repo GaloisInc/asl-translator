@@ -2,7 +2,7 @@
 
 module Main ( main ) where
 
-import           Control.Monad ( when )
+import           Control.Monad ( when, void )
 import qualified Control.Concurrent as IO
 import qualified Control.Exception as X
 import           GHC.Stack ( HasCallStack )
@@ -11,6 +11,7 @@ import           Data.Maybe ( fromJust )
 
 import           System.Exit (exitFailure)
 import qualified System.Environment as IO
+import qualified System.IO as IO
 import           System.Console.GetOpt
 
 import           Language.ASL.Translation.Driver ( TranslatorOptions(..), StatOptions(..)
@@ -19,6 +20,8 @@ import           Language.ASL.Translation.Driver ( TranslatorOptions(..), StatOp
 import qualified Language.ASL.Translation.Driver as ASL
 
 import qualified What4.Utils.Log as Log
+
+import Debug.Trace
 
 main :: HasCallStack => IO ()
 main = do
@@ -35,7 +38,7 @@ main = do
       usage
       exitFailure
     Just (opts, statOpts) -> do
-      _ <- IO.forkIO $ Log.stdErrLogEventConsumer (intToLogLvlFilter (optVerbosity opts)) logCfg
+      mkLogEventConsumer opts
       (do 
         ASL.SomeSigMap sm <- ASL.runWithFilters opts
         ASL.reportStats statOpts sm
@@ -51,12 +54,24 @@ main = do
         return $ (opts, statOpts')
     applyOption Nothing _ = Nothing
 
-intToLogLvlFilter :: Integer -> (Log.LogEvent -> Bool)
-intToLogLvlFilter i logEvent = case Log.leLevel logEvent of
-  Log.Info -> i >= 0
-  Log.Warn -> i >= 1
-  Log.Debug -> i >= 2
-  Log.Error -> True
+mkLogEventConsumer :: TranslatorOptions -> IO ()
+mkLogEventConsumer opts = void $ IO.forkIO $
+  (Log.consumeUntilEnd (intToLogLvlFilter (optVerbosity opts)) $ \e -> do
+    if optVerbosity opts > 1 then
+      traceIO (Log.prettyLogEvent e)
+    else
+      traceIO (simpleLogEvent e)
+    IO.hFlush IO.stderr) (optLogCfg opts)
+  where
+    simpleLogEvent :: Log.LogEvent -> String
+    simpleLogEvent le = Log.leMsg le
+
+    intToLogLvlFilter :: Integer -> (Log.LogEvent -> Bool)
+    intToLogLvlFilter i logEvent = case Log.leLevel logEvent of
+      Log.Info -> i >= 0
+      Log.Warn -> i >= 1
+      Log.Debug -> i >= 2
+      Log.Error -> True
 
 usage :: IO ()
 usage = do

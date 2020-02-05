@@ -3,7 +3,6 @@
 {-# LANGUAGE StandaloneDeriving #-}
 module Language.ASL.Translation.Exceptions (
       TranslationException(..)
-    , LoggedTranslationException(..)
   ) where
 
 import qualified Control.Exception as X
@@ -90,16 +89,3 @@ data TranslationException = forall ret . NoReturnInFunction (SomeFunctionSignatu
 deriving instance Show TranslationException
 
 instance X.Exception TranslationException
-
-data LoggedTranslationException = LoggedTranslationException [T.Text] TranslationException
-  deriving Show
-
-instance X.Exception LoggedTranslationException
-
--- data TracedTranslationException =
---   TracedTranslationException T.Text (Map.Map T.Text StaticValue)
---     [AS.Stmt] [(AS.Expr, TypeConstraint)] TranslationException
-
--- deriving instance Show TracedTranslationException
-
--- instance X.Exception TracedTranslationException
