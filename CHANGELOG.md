@@ -1,4 +1,4 @@
-# Revision history for semmc-asl
+# Revision history for asl-translator
 
 ## 0.1.0.0 -- YYYY-mm-dd
 
