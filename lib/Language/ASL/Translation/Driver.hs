@@ -37,7 +37,6 @@ import           Control.Monad (forM_, when)
 import qualified Control.Monad.State.Lazy as MSS
 import qualified Control.Monad.Except as E
 import           Control.Monad.IO.Class
-import qualified Control.Concurrent as IO
 
 import           Data.Map ( Map )
 import qualified Data.Map.Strict as Map
@@ -106,6 +105,7 @@ data TranslatorOptions = TranslatorOptions
   , optTranslationDepth :: TranslationDepth
   , optCheckSerialization :: Bool
   , optFilePaths :: FilePathConfig
+  , optLogCfg :: LogCfg
   }
 
 data FilePathConfig = FilePathConfig
@@ -132,7 +132,7 @@ data TranslationDepth = TranslateRecursive
 runWithFilters :: TranslatorOptions -> IO (SomeSigMap)
 runWithFilters opts = do
   spec <- getASL opts
-  logMsgIO opts 0 $ T.pack $ "Loaded "
+  logMsgIO opts 0 $ "Loaded "
     ++ show (length $ aslInstructions spec) ++ " instructions and "
     ++ show (length $ aslDefinitions spec) ++ " definitions and "
     ++ show (length $ aslSupportDefinitions spec) ++ " support definitions and "
@@ -149,7 +149,7 @@ optFormulaOutputFilePath opts = fpOutput (optFilePaths opts)
 serializeFormulas :: TranslatorOptions -> SigMap sym arch -> IO ()
 serializeFormulas opts (sFormulas -> formulas) = do
   let out = optFormulaOutputFilePath opts
-  logMsgIO opts 1 $ T.pack $ "Writing formulas to: " ++ show out
+  logMsgIO opts 1 $ "Writing formulas to: " ++ show out
   T.writeFile out (WP.printSymFnEnv (reverse formulas))
   when (optCheckSerialization opts) $ checkSerialization opts
 
@@ -157,12 +157,12 @@ checkSerialization :: TranslatorOptions -> IO ()
 checkSerialization opts = do
   Some r <- liftIO $ newIONonceGenerator
   sym <- liftIO $ B.newExprBuilder B.FloatRealRepr NoBuilderData r
-  lcfg <- Log.mkLogCfg "check serialization"
-  Log.withLogCfg lcfg $
+  let logCfg = optLogCfg opts
+  Log.withLogCfg logCfg $
     WP.readSymFnEnvFromFile (WP.defaultParserConfig sym) (optFormulaOutputFilePath opts) >>= \case
       Left err -> X.throw $ SimulationDeserializationFailure err ""
       Right _ -> do
-        logMsgIO opts 1 $ T.pack "Deserialization successful."
+        logMsgIO opts 1 $ "Deserialization successful."
         return ()
 
 
@@ -188,7 +188,7 @@ runWithFilters' opts spec sigEnv sigState = do
   execSigMapWithScope opts sigState sigEnv $ do
     addMemoryUFs
     forM_ instrs $ \(i, (ident, instr)) -> do
-      logMsg 1 $ T.pack $ "Processing instruction: " ++ show i ++ "/" ++ show (length allInstrs)
+      logMsg 1 $ "Processing instruction: " ++ show i ++ "/" ++ show (length allInstrs)
       runTranslation instr ident
 
 
@@ -197,19 +197,19 @@ runTranslation :: AS.Instruction
                -> InstructionIdent
                -> SigMapM sym arch ()
 runTranslation instruction@AS.Instruction{..} instrIdent = do
-  logMsg 1 $ "Computing instruction signature for: " <> T.pack (show instrIdent)
+  logMsg 1 $ "Computing instruction signature for: " ++ show instrIdent
   result <- liftSigM (KeyInstr instrIdent) $
     computeInstructionSignature instruction (iEnc instrIdent) (iSet instrIdent)
   case result of
     Left err -> do
-      logMsg 0 $ "Error computing instruction signature: " <> T.pack (show err)
+      logMsg 0 $ "Error computing instruction signature: " ++ show err
     Right (Some (SomeFunctionSignature iSig), instStmts) -> do
       liftSigM (KeyInstr instrIdent) getDefinitions >>= \case
         Left err -> do
-          logMsg 0 $ "Error computing ASL definitions: " <> T.pack (show err)
+          logMsg 0 $ "Error computing ASL definitions: " ++ show err
         Right defs -> do
-          logMsg 1 $ "Translating instruction: " <> T.pack (prettyIdent instrIdent)
-          logMsg 1 $ T.pack $ (show iSig)
+          logMsg 1 $ "Translating instruction: " ++ prettyIdent instrIdent
+          logMsg 1 $ (show iSig)
           mfunc <- translateFunction (KeyInstr instrIdent) iSig instStmts defs
           let deps = maybe Set.empty AC.funcDepends mfunc
           MSS.gets (optTranslationDepth . sOptions) >>= \case
@@ -248,27 +248,19 @@ translationLoop fromInstr callStack defs (fnname, env) = do
             return Set.empty
           Right (Some ssig@(SomeFunctionSignature sig), stmts) -> do
             MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some ssig) (sMap s) }
-            logMsg 1 $ T.pack $ "Translating function: " ++ show finalName ++ " for instruction: "
+            logMsg 1 $ "Translating function: " ++ show finalName ++ " for instruction: "
                ++ prettyIdent fromInstr
                ++ "\n CallStack: " ++ show callStack
                ++ "\n" ++ show sig ++ "\n"
             mfunc <- translateFunction (KeyFun finalName) sig stmts defs
             let deps = maybe Set.empty AC.funcDepends mfunc
-            logMsg 2 $ T.pack $ "Function Dependencies: " ++ show deps
+            logMsg 2 $ "Function Dependencies: " ++ show deps
             MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
             alldeps <- mapM (translationLoop fromInstr (finalName : callStack) defs) (Set.toList deps)
             let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
             MSS.modify' $ \s -> s { funDeps = Map.insert finalName alldepsSet (funDeps s) }
             maybeSimulateFunction fromInstr (KeyFun finalName) mfunc
             return alldepsSet
-
-intToLogLvlFilter :: Integer -> (Log.LogEvent -> Bool)
-intToLogLvlFilter i logEvent = case Log.leLevel logEvent of
-  Info -> i > 0
-  Warn -> i > 1
-  Debug -> i > 2
-  Error -> True
-
 
 execSigMapWithScope :: TranslatorOptions
                     -> SigState
@@ -278,11 +270,6 @@ execSigMapWithScope :: TranslatorOptions
 execSigMapWithScope opts sigState sigEnv action = do
   handleAllocator <- CFH.newHandleAllocator
   let nonceGenerator = globalNonceGenerator
-  
-  let logLvl = optVerbosity opts
-  logCfg <- Log.mkLogCfg "execSigMapWithScope"
-  
-  _ <- IO.forkIO $ Log.stdErrLogEventConsumer (intToLogLvlFilter logLvl) logCfg
   let sigMap =
         SigMap {
           sMap = Map.empty
@@ -296,7 +283,6 @@ execSigMapWithScope opts sigState sigEnv action = do
           , sOptions = opts
           , sNonceGenerator = nonceGenerator
           , sHandleAllocator = handleAllocator
-          , sLogCfg = logCfg
           }
   SomeSigMap <$> execSigMapM action sigMap
 
@@ -357,7 +343,7 @@ translateFunction :: ElemKey
                   -> Definitions arch
                   -> SigMapM sym arch (Maybe (AC.Function arch globalReads globalWrites init tps))
 translateFunction key sig stmts defs = do
-  logMsg 1 $ T.pack $ "Rough function body size:" ++ show (measureStmts stmts)
+  logMsg 1 $ "Rough function body size:" ++ show (measureStmts stmts)
   handleAllocator <- MSS.gets sHandleAllocator
   logLvl <- MSS.gets (optVerbosity . sOptions)
   catchIO key $ AC.functionToCrucible defs sig handleAllocator stmts logLvl
@@ -440,10 +426,10 @@ simulateFunction :: forall arch sym globalReads globalWrites init tps
                  -> AC.Function arch globalReads globalWrites init tps
                  -> SigMapM sym arch ()
 simulateFunction key p = do
-  logMsg 1 $ T.pack $ "Simulating: " ++ prettyKey key
+  logMsg 1 $ "Simulating: " ++ prettyKey key
   isCheck <- MSS.gets (optCheckSerialization . sOptions)
   opts <- MSS.gets sOptions
-  logCfg <- MSS.gets sLogCfg
+  logCfg <- MSS.gets (optLogCfg . sOptions)
   handleAllocator <- MSS.gets sHandleAllocator
   
   mresult <- withOnlineBackend key $ \backend -> do
@@ -509,10 +495,10 @@ getASL opts = do
     (Right aslInsts, Right aslDefs, Right aslRegs, Right aslExtraDefs, Right aslSupportDefs) -> do
       return $ prepASL $ ASLSpec aslInsts aslDefs aslSupportDefs aslExtraDefs aslRegs
 
-logMsgIO :: TranslatorOptions -> Integer -> T.Text -> IO ()
+logMsgIO :: TranslatorOptions -> Integer -> String -> IO ()
 logMsgIO opts logLvl msg = do
-  let verbosity = (optVerbosity opts)
-  E.when (verbosity >= logLvl) $ liftIO $ putStrLn (T.unpack msg)
+  let logCfg = optLogCfg opts
+  logIOWith logCfg (intToLogLvl logLvl) msg
 
 isKeySimFilteredOut :: InstructionIdent -> ElemKey -> SigMapM sym arch Bool
 isKeySimFilteredOut fromInstr key = case key of
@@ -703,7 +689,6 @@ data SigMap scope arch where
             , sOptions :: TranslatorOptions
             , sNonceGenerator :: NonceGenerator IO scope
             , sHandleAllocator :: CFH.HandleAllocator
-            , sLogCfg :: LogCfg
             } -> SigMap scope arch
 
 data SomeSigMap where
@@ -720,10 +705,10 @@ intToLogLvl i = case i of
   2 -> Warn
   _ -> Debug
 
-logMsg :: Integer -> T.Text -> SigMapM scope arch ()
+logMsg :: Integer -> String -> SigMapM scope arch ()
 logMsg logLvl msg = do
-  logCfg <- MSS.gets sLogCfg
-  logIOWith logCfg (intToLogLvl logLvl) (T.unpack msg)
+  logCfg <- MSS.gets (optLogCfg . sOptions)
+  logIOWith logCfg (intToLogLvl logLvl) msg
 
 printLog :: [T.Text] -> SigMapM scope arch ()
 printLog [] = return ()
@@ -757,7 +742,7 @@ collectExcept k e = do
 
 catchIO :: ElemKey -> (HasLogCfg => IO a) -> SigMapM scope arch (Maybe a)
 catchIO k f = do
-  logCfg <- MSS.gets sLogCfg
+  logCfg <- MSS.gets (optLogCfg . sOptions)
   withLogCfg logCfg $ do
     a <- liftIO ((Left <$> f)
                     `X.catch` (\(e :: TranslationException) -> return $ Right $ TExcept k e)
