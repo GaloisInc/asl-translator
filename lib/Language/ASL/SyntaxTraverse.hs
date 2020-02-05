@@ -25,7 +25,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Dismantle.ASL.SyntaxTraverse
+module Language.ASL.SyntaxTraverse
   ( mkSyntaxOverrides
   , applySyntaxOverridesInstrs
   , applySyntaxOverridesDefs
@@ -65,7 +65,7 @@ import qualified Data.Set as Set
 import qualified Data.Map as Map
 import qualified Control.Monad.State as MSS
 import           Data.Maybe (maybeToList, catMaybes, isJust)
-import           Dismantle.ASL.Types
+import           Language.ASL.Types
 import           Data.Parameterized.Classes
 
 pattern VarName :: T.Text -> AS.QualifiedIdentifier

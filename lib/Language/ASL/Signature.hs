@@ -16,7 +16,7 @@ signature with no inputs (just global refs) and a set of outputs that is the uni
 locations touched by that function.
 
 -}
-module Dismantle.ASL.Signature (
+module Language.ASL.Signature (
     FunctionSignature(..)
   , projectStruct
   , SomeFunctionSignature(..)
@@ -40,8 +40,8 @@ import qualified Data.Text as T
 import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.Types as CT
 import qualified What4.BaseTypes as WT
-import           Dismantle.ASL.Types
-import           Dismantle.ASL.StaticExpr
+import           Language.ASL.Types
+import           Language.ASL.StaticExpr
 import qualified Language.ASL.Syntax as AS
 
 -- | A 'FunctionSignature' describes the inputs and output of an ASL function.

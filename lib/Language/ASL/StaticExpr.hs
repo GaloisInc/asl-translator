@@ -20,7 +20,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Dismantle.ASL.StaticExpr
+module Language.ASL.StaticExpr
   (
     StaticValue(..)
   , StaticType(..)
@@ -54,8 +54,8 @@ import qualified Data.Set as Set
 import qualified Data.Map as Map
 import qualified Data.List as List
 import           Data.Maybe (catMaybes)
-import           Dismantle.ASL.Types
-import qualified Dismantle.ASL.SyntaxTraverse as AS ( pattern VarName )
+import           Language.ASL.Types
+import qualified Language.ASL.SyntaxTraverse as AS ( pattern VarName )
 import           Data.Foldable ( traverse_ )
 
 

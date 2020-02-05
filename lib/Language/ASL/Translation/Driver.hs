@@ -14,22 +14,37 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ViewPatterns #-}
 
-module Main ( main ) where
+module Language.ASL.Translation.Driver
+  ( TranslatorOptions(..)
+  , StatOptions(..)
+  , TranslationDepth(..)
+  , FilePathConfig(..)
+  , SomeSigMap(..)
+  , runWithFilters
+  , reportStats
+  , serializeFormulas
+  , getTranslationMode
+  , getSimulationMode
+  , noFilter
+  ) where
 
 import qualified Control.Exception as X
-import           Data.Monoid
+
 import           Control.Monad.Identity
 import           Control.Monad (forM_, when)
 import qualified Control.Monad.State.Lazy as MSS
 import qualified Control.Monad.Except as E
 import           Control.Monad.IO.Class
+import qualified Control.Concurrent as IO
+
 import           Data.Map ( Map )
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import           Data.Maybe ( catMaybes, mapMaybe )
+import           Data.Monoid
 import           Data.Parameterized.Nonce
--- import qualified Data.Parameterized.Ctx as Ctx
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Bits( (.|.) )
 import           Data.Parameterized.Some ( Some(..) )
@@ -43,27 +58,25 @@ import qualified Lang.Crucible.Backend.Online as CBO
 import qualified Lang.Crucible.FunctionHandle as CFH
 import qualified Language.ASL.Parser as AP
 import qualified Language.ASL.Syntax as AS
-import System.Exit (exitFailure)
+import           System.Exit (exitFailure)
 
-import qualified System.Environment as IO
 import qualified System.IO as IO
 import           System.IO (hPutStrLn, stderr)
-import           System.Console.GetOpt
 import           Panic hiding (panic)
 import           Lang.Crucible.Panic ( Crucible )
 
-import qualified Dismantle.ASL.SyntaxTraverse as AS  ( pattern VarName )
-import qualified Dismantle.ASL.SyntaxTraverse as TR
+import qualified Language.ASL.SyntaxTraverse as AS  ( pattern VarName )
+import qualified Language.ASL.SyntaxTraverse as TR
 
-import qualified Dismantle.ASL as ASL
+import qualified Language.ASL as ASL
 
-import qualified Dismantle.ASL.Crucible as AC
+import qualified Language.ASL.Crucible as AC
 
-import Dismantle.ASL.Translation
-import Dismantle.ASL.Translation.Preprocess
-import Dismantle.ASL.Signature
-import Dismantle.ASL.StaticExpr
-import Dismantle.ASL.Exceptions
+import           Language.ASL.Translation
+import           Language.ASL.Translation.Preprocess
+import           Language.ASL.Translation.Exceptions
+import           Language.ASL.Signature
+import           Language.ASL.StaticExpr
 
 import qualified What4.Expr.Builder as B
 import qualified What4.Interface as WI
@@ -74,11 +87,14 @@ import           What4.ProblemFeatures
 import qualified What4.Serialize.Printer as WP
 import qualified What4.Serialize.Parser as WP
 import qualified What4.Serialize.Normalize as WN
-import qualified What4.Utils.Log as U
-import qualified What4.Utils.Util as U
 
 import qualified Text.PrettyPrint.HughesPJClass as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as LPP
+
+-- FIXME: this should be moved somewhere general
+import           What4.Utils.Log ( HasLogCfg, LogLevel(..), LogCfg, logIOWith, withLogCfg )
+import qualified What4.Utils.Log as Log
+import qualified What4.Utils.Util as U
 
 data TranslatorOptions = TranslatorOptions
   { optVerbosity :: Integer
@@ -87,43 +103,19 @@ data TranslatorOptions = TranslatorOptions
   , optFilters :: Filters
   , optCollectAllExceptions :: Bool
   , optCollectExpectedExceptions :: Bool
-  , optASLSpecFilePath :: FilePath
   , optTranslationDepth :: TranslationDepth
   , optCheckSerialization :: Bool
-  , optFormulaOutputFilePath :: FilePath
+  , optFilePaths :: FilePathConfig
   }
 
-
-data TranslationDepth = TranslateRecursive
-                      | TranslateShallow
-
-instsFilePath :: FilePath
-instsFilePath = "arm_instrs.sexpr"
-
-defsFilePath :: FilePath
-defsFilePath = "arm_defs.sexpr"
-
-regsFilePath :: FilePath
-regsFilePath = "arm_regs.sexpr"
-
-supportFilePath :: FilePath
-supportFilePath = "support.sexpr"
-
-extraDefsFilePath :: FilePath
-extraDefsFilePath = "extra_defs.sexpr"
-
-defaultOptions :: TranslatorOptions
-defaultOptions = TranslatorOptions
-  { optVerbosity = 1
-  , optStartIndex = 0
-  , optNumberOfInstructions = Nothing
-  , optFilters = translateArch32 noFilter
-  , optCollectAllExceptions = False
-  , optCollectExpectedExceptions = True
-  , optASLSpecFilePath = "./data/Parsed/"
-  , optTranslationDepth = TranslateRecursive
-  , optCheckSerialization = False
-  , optFormulaOutputFilePath = "./output/formulas.what4"
+data FilePathConfig = FilePathConfig
+  { fpDefs :: FilePath
+  , fpInsts :: FilePath
+  , fpRegs :: FilePath
+  , fpSupport :: FilePath
+  , fpExtraDefs :: FilePath
+  , fpOutput :: FilePath
+  , fpDataRoot :: FilePath
   }
 
 data StatOptions = StatOptions
@@ -134,134 +126,8 @@ data StatOptions = StatOptions
   , reportFunctionDependencies :: Bool
   }
 
-defaultStatOptions :: StatOptions
-defaultStatOptions = StatOptions
-  { reportKnownExceptions = False
-  , reportSucceedingInstructions = False
-  , reportAllExceptions = False
-  , reportKnownExceptionFilter = (\_ -> True)
-  , reportFunctionDependencies = False
-  }
-
-arguments :: [OptDescr (Either (TranslatorOptions -> Maybe TranslatorOptions) (StatOptions -> Maybe StatOptions))]
-arguments =
-  [ Option "a" ["asl-spec"] (ReqArg (\f -> Left (\opts -> Just $ opts { optASLSpecFilePath = f })) "PATH")
-    ("Path to parsed ASL specification. Requires: " ++ instsFilePath ++ " " ++ defsFilePath
-      ++ " " ++ regsFilePath ++ " " ++ supportFilePath ++ " " ++ extraDefsFilePath)
-
-  , Option "c" ["collect-exceptions"] (NoArg (Left (\opts -> Just $ opts { optCollectAllExceptions = True })))
-    "Handle and collect all exceptions thrown during translation"
-
-  , Option [] ["collect-expected-exceptions"] (NoArg (Left (\opts -> Just $ opts { optCollectExpectedExceptions = True })))
-    "Handle and collect exceptions for known issues thrown during translation"
-
-  , Option "v" ["verbosity"] (ReqArg (\f -> (Left (\opts -> Just $ opts { optVerbosity = read f }))) "INT")
-    ("Output verbosity during translation:\n" ++
-    "0 - minimal output.\n" ++
-    "-1 - no translation output.\n" ++
-    "1 (default) - translator/simulator log.\n" ++
-    "2 - translator trace (on exception).\n" ++
-    "3 - instruction post-processing trace (on exception).\n4 - globals collection trace.\n" ++
-    "6 - translator and globals collection trace (always).")
-
-  , Option [] ["offset"] (ReqArg (\f -> Left (\opts -> Just $ opts {optStartIndex = read f})) "INT")
-    "Start processing instructions at the given offset"
-
-  , Option [] ["report-success"] (NoArg (Right (\opts -> Just $ opts { reportSucceedingInstructions = True })))
-    "Print list of successfully translated instructions"
-
-  , Option [] ["report-deps"] (NoArg (Right (\opts -> Just $ opts { reportFunctionDependencies = True })))
-    "Print ancestors of functions when reporting exceptions"
-
-  , Option [] ["report-exceptions"] (NoArg (Right (\opts -> Just $ opts { reportAllExceptions = True })))
-    "Print all collected exceptions thrown during translation (requires collect-exceptions or collect-expected-exceptions)"
-
-  , Option "o" ["output-formulas"] (ReqArg (\f -> Left (\opts -> Just $ opts { optFormulaOutputFilePath = f })) "PATH")
-
-   "Path to serialized formulas."
-  , Option [] ["report-expected-exceptions"] (NoArg (Right (\opts -> Just $ opts {reportKnownExceptions = True })))
-    "Print collected exceptions for known issues thrown during translation (requires collect-exceptions or collect-expected-exceptions)"
-
-  , Option [] ["translation-mode"] (ReqArg (\mode -> Left (\opts -> do
-      task <- case mode of
-        "all" -> return $ translateAll
-        "noArch64" -> return $ translateNoArch64
-        "Arch32" -> return $ translateArch32
-        _ -> case List.splitOn "/" mode of
-          [instr, enc] -> return $ translateOnlyInstr (T.pack instr, T.pack enc)
-          _ -> fail ""
-      return $ opts { optFilters = task (optFilters opts) })) "TRANSLATION_MODE")
-    ("Filter instructions according to TRANSLATION_MODE: \n" ++
-     "all - translate all instructions from " ++ instsFilePath ++ ".\n" ++
-     "noArch64 - translate T16, T32 and A32 instructions.\n" ++
-     "Arch32 (default) - translate T32 and A32 instructions.\n" ++
-     "<INSTRUCTION>/<ENCODING> - translate a single instruction/encoding pair.")
-
-  , Option [] ["simulation-mode"] (ReqArg (\mode -> Left (\opts -> do
-      task <- case mode of
-        "all (default)" -> return $ simulateAll
-        "instructions" -> return $ simulateInstructions
-        "none" -> return $ simulateNone
-        _ -> fail ""
-      return $ opts { optFilters = task (optFilters opts) })) "SIMULATION_MODE")
-    ("Filter instructions and functions for symbolic simulation according to SIMULATION_MODE: \n" ++
-     "all (default) - simulate all successfully translated instructions and functions. \n" ++
-     "instructions - simulate only instructions. \n" ++
-     "none - do not perform any symbolic execution.")
-
-  , Option [] ["no-dependencies"] (NoArg (Left (\opts -> Just $ opts { optTranslationDepth = TranslateShallow } )))
-    "Don't recursively translate function dependencies."
-
-  , Option [] ["check-serialization"] (NoArg (Left (\opts -> Just $ opts { optCheckSerialization = True } )))
-    "Check that serialization/deserialization for any processed formulas is correct."
-  ]
-
-usage :: IO ()
-usage = do
-  pn <- IO.getProgName
-  let msg = "Usage: " <> pn <> " [options]"
-  putStrLn $ usageInfo msg arguments
-
-data BuilderData t = NoBuilderData
-
-main :: IO ()
-main = do
-  stringArgs <- IO.getArgs
-  let (args, rest, errs) = getOpt Permute arguments stringArgs
-
-  when (not $ null $ errs <> rest) $ do
-    usage
-    exitFailure
-
-  case foldl applyOption (Just (defaultOptions, defaultStatOptions)) args of
-    Nothing -> do
-      usage
-      exitFailure
-    Just (opts, statOpts) -> do
-      SomeSigMap sm <- runWithFilters opts
-      reportStats statOpts sm
-      logMsgIO opts 1 $ T.pack $ "Writing formulas to: " ++ show (optFormulaOutputFilePath opts)
-      T.writeFile (optFormulaOutputFilePath opts) (WP.printSymFnEnv (reverse (sFormulas sm)))
-
-      when (optCheckSerialization opts) $ do
-        Some r <- liftIO $ newIONonceGenerator
-        sym <- liftIO $ B.newExprBuilder B.FloatRealRepr NoBuilderData r
-        lcfg <- U.mkLogCfg "check serialization"
-        U.withLogCfg lcfg $
-          WP.readSymFnEnvFromFile (WP.defaultParserConfig sym) (optFormulaOutputFilePath opts) >>= \case
-            Left err -> X.throw $ SimulationDeserializationFailure err ""
-            Right _ -> do
-              logMsgIO opts 1 $ T.pack "Deserialization successful."
-              return ()
-  where
-    applyOption (Just (opts, statOpts)) arg = case arg of
-      Left f -> do
-        opts' <- f opts
-        return $ (opts', statOpts)
-      Right f -> do
-        statOpts' <- f statOpts
-        return $ (opts, statOpts')
-    applyOption Nothing _ = Nothing
+data TranslationDepth = TranslateRecursive
+                      | TranslateShallow
 
 runWithFilters :: TranslatorOptions -> IO (SomeSigMap)
 runWithFilters opts = do
@@ -274,6 +140,31 @@ runWithFilters opts = do
     ++ show (length $ aslRegisterDefinitions spec) ++ " register definitions."
   let (sigEnv, sigState) = buildSigState spec
   runWithFilters' opts spec sigEnv sigState
+
+data BuilderData t = NoBuilderData
+
+optFormulaOutputFilePath :: TranslatorOptions -> FilePath
+optFormulaOutputFilePath opts = fpOutput (optFilePaths opts)
+
+serializeFormulas :: TranslatorOptions -> SigMap sym arch -> IO ()
+serializeFormulas opts (sFormulas -> formulas) = do
+  let out = optFormulaOutputFilePath opts
+  logMsgIO opts 1 $ T.pack $ "Writing formulas to: " ++ show out
+  T.writeFile out (WP.printSymFnEnv (reverse formulas))
+  when (optCheckSerialization opts) $ checkSerialization opts
+
+checkSerialization :: TranslatorOptions -> IO ()
+checkSerialization opts = do
+  Some r <- liftIO $ newIONonceGenerator
+  sym <- liftIO $ B.newExprBuilder B.FloatRealRepr NoBuilderData r
+  lcfg <- Log.mkLogCfg "check serialization"
+  Log.withLogCfg lcfg $
+    WP.readSymFnEnvFromFile (WP.defaultParserConfig sym) (optFormulaOutputFilePath opts) >>= \case
+      Left err -> X.throw $ SimulationDeserializationFailure err ""
+      Right _ -> do
+        logMsgIO opts 1 $ T.pack "Deserialization successful."
+        return ()
+
 
 collectInstructions :: [AS.Instruction] -> [(AS.Instruction, T.Text, AS.InstructionSet)]
 collectInstructions aslInsts = do
@@ -371,6 +262,14 @@ translationLoop fromInstr callStack defs (fnname, env) = do
             maybeSimulateFunction fromInstr (KeyFun finalName) mfunc
             return alldepsSet
 
+intToLogLvlFilter :: Integer -> (Log.LogEvent -> Bool)
+intToLogLvlFilter i logEvent = case Log.leLevel logEvent of
+  Info -> i > 0
+  Warn -> i > 1
+  Debug -> i > 2
+  Error -> True
+
+
 execSigMapWithScope :: TranslatorOptions
                     -> SigState
                     -> SigEnv
@@ -379,6 +278,11 @@ execSigMapWithScope :: TranslatorOptions
 execSigMapWithScope opts sigState sigEnv action = do
   handleAllocator <- CFH.newHandleAllocator
   let nonceGenerator = globalNonceGenerator
+  
+  let logLvl = optVerbosity opts
+  logCfg <- Log.mkLogCfg "execSigMapWithScope"
+  
+  _ <- IO.forkIO $ Log.stdErrLogEventConsumer (intToLogLvlFilter logLvl) logCfg
   let sigMap =
         SigMap {
           sMap = Map.empty
@@ -392,6 +296,7 @@ execSigMapWithScope opts sigState sigEnv action = do
           , sOptions = opts
           , sNonceGenerator = nonceGenerator
           , sHandleAllocator = handleAllocator
+          , sLogCfg = logCfg
           }
   SomeSigMap <$> execSigMapM action sigMap
 
@@ -536,22 +441,23 @@ simulateFunction :: forall arch sym globalReads globalWrites init tps
                  -> SigMapM sym arch ()
 simulateFunction key p = do
   logMsg 1 $ T.pack $ "Simulating: " ++ prettyKey key
-  checkSerialization <- MSS.gets (optCheckSerialization . sOptions)
+  isCheck <- MSS.gets (optCheckSerialization . sOptions)
   opts <- MSS.gets sOptions
+  logCfg <- MSS.gets sLogCfg
   handleAllocator <- MSS.gets sHandleAllocator
+  
   mresult <- withOnlineBackend key $ \backend -> do
     let cfg = ASL.SimulatorConfig { simOutputHandle = IO.stdout
                                   , simHandleAllocator = handleAllocator
                                   , simSym = backend
                                   }
     let nm = prettyKey key
-    when checkSerialization $ B.startCaching backend
+    when isCheck $ B.startCaching backend
     symFn <- ASL.simulateFunction cfg p
 
-    ex <- if checkSerialization then do
+    ex <- if isCheck then do
       let (serializedSymFn, fenv) = WP.printSymFn' symFn
-      lcfg <- U.mkLogCfg "check serialization"
-      res <- U.withLogCfg lcfg $
+      res <- Log.withLogCfg logCfg $
         WP.readSymFn (mkParserConfig backend fenv) serializedSymFn
       case res of
         Left err -> do
@@ -578,12 +484,12 @@ simulateFunction key p = do
 
 getASL :: TranslatorOptions -> IO (ASLSpec)
 getASL opts = do
-  let getPath file = (optASLSpecFilePath opts ++ file)
-  eAslDefs <- AP.parseAslDefsFile (getPath defsFilePath)
-  eAslSupportDefs <- AP.parseAslDefsFile (getPath supportFilePath)
-  eAslExtraDefs <- AP.parseAslDefsFile (getPath extraDefsFilePath)
-  eAslInsts <- AP.parseAslInstsFile (getPath instsFilePath)
-  eAslRegs <- AP.parseAslRegsFile (getPath regsFilePath)
+  let getPath f = (fpDataRoot (optFilePaths opts)) ++ (f (optFilePaths opts))
+  eAslDefs <- AP.parseAslDefsFile (getPath fpDefs)
+  eAslSupportDefs <- AP.parseAslDefsFile (getPath fpSupport)
+  eAslExtraDefs <- AP.parseAslDefsFile (getPath fpExtraDefs)
+  eAslInsts <- AP.parseAslInstsFile (getPath fpInsts)
+  eAslRegs <- AP.parseAslRegsFile (getPath fpRegs)
   case (eAslInsts, eAslDefs, eAslRegs, eAslExtraDefs, eAslSupportDefs) of
     (Left err, _, _, _, _) -> do
       hPutStrLn stderr $ "Error loading ASL instructions: " ++ show err
@@ -797,6 +703,7 @@ data SigMap scope arch where
             , sOptions :: TranslatorOptions
             , sNonceGenerator :: NonceGenerator IO scope
             , sHandleAllocator :: CFH.HandleAllocator
+            , sLogCfg :: LogCfg
             } -> SigMap scope arch
 
 data SomeSigMap where
@@ -807,12 +714,16 @@ type SigMapM scope arch a = MSS.StateT (SigMap scope arch) IO a
 execSigMapM :: SigMapM scope arch a -> SigMap scope arch -> IO (SigMap scope arch)
 execSigMapM m = MSS.execStateT m
 
---instance TR.MonadLog SigMapM where
+intToLogLvl :: Integer -> LogLevel
+intToLogLvl i = case i of
+  1 -> Info
+  2 -> Warn
+  _ -> Debug
+
 logMsg :: Integer -> T.Text -> SigMapM scope arch ()
 logMsg logLvl msg = do
-  verbosity <- MSS.gets (optVerbosity . sOptions)
-  when (verbosity >= logLvl) $ liftIO $ putStrLn $ T.unpack $ msg
-
+  logCfg <- MSS.gets sLogCfg
+  logIOWith logCfg (intToLogLvl logLvl) (T.unpack msg)
 
 printLog :: [T.Text] -> SigMapM scope arch ()
 printLog [] = return ()
@@ -844,15 +755,33 @@ collectExcept k e = do
     KeyFun fun -> MSS.modify' $ \s -> s { funExcepts = Map.insert fun e (funExcepts s) }
   else X.throw e
 
-catchIO :: ElemKey -> IO a -> SigMapM scope arch (Maybe a)
+catchIO :: ElemKey -> (HasLogCfg => IO a) -> SigMapM scope arch (Maybe a)
 catchIO k f = do
-  a <- liftIO ((Left <$> f)
-                  `X.catch` (\(e :: TranslationException) -> return $ Right $ TExcept k e)
-                  `X.catch` (\(e :: SimulationException) -> return $ Right $ SimExcept k e)
-                  `X.catch` (\(e :: X.SomeException) -> return $ Right (SomeExcept e)))
-  case a of
-    Left r -> return (Just r)
-    Right err -> (\_ -> Nothing) <$> collectExcept k err
+  logCfg <- MSS.gets sLogCfg
+  withLogCfg logCfg $ do
+    a <- liftIO ((Left <$> f)
+                    `X.catch` (\(e :: TranslationException) -> return $ Right $ TExcept k e)
+                    `X.catch` (\(e :: SimulationException) -> return $ Right $ SimExcept k e)
+                    `X.catch` (\(e :: X.SomeException) -> return $ Right (SomeExcept e)))
+    case a of
+      Left r -> return (Just r)
+      Right err -> (\_ -> Nothing) <$> collectExcept k err
+
+getTranslationMode :: String -> Maybe (Filters -> Filters)
+getTranslationMode mode = case mode of
+  "all" -> return $ translateAll
+  "noArch64" -> return $ translateNoArch64
+  "Arch32" -> return $ translateArch32
+  _ -> case List.splitOn "/" mode of
+    [instr, enc] -> return $ translateOnlyInstr (T.pack instr, T.pack enc)
+    _ -> fail ""
+
+getSimulationMode :: String -> Maybe (Filters -> Filters)
+getSimulationMode mode = case mode of
+  "all" -> return $ simulateAll
+  "instructions" -> return $ simulateInstructions
+  "none" -> return $ simulateNone
+  _ -> fail ""
 
 noFilter :: Filters
 noFilter = Filters

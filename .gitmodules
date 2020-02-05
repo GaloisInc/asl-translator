@@ -1,0 +1,9 @@
+[submodule "submodules/crucible"]
+	path = submodules/crucible
+	url = git@github.com:GaloisInc/crucible
+[submodule "submodules/parameterized-utils"]
+	path = submodules/parameterized-utils
+	url = git@github.com:GaloisInc/parameterized-utils.git
+[submodule "submodules/arm-asl-parser"]
+	path = submodules/arm-asl-parser
+	url = git@github.com:GaloisInc/arm-asl-parser.git

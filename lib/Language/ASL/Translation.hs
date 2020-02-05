@@ -18,7 +18,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Dismantle.ASL.Translation (
+module Language.ASL.Translation (
     TranslationState(..)
   , translateExpr
   , translateStatement
@@ -68,19 +68,22 @@ import qualified What4.Utils.StringLiteral as WT
 
 import qualified Language.ASL.Syntax as AS
 
-import           Dismantle.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..) )
-import           Dismantle.ASL.Exceptions ( TranslationException(..), LoggedTranslationException(..) )
-import           Dismantle.ASL.Signature
-import           Dismantle.ASL.Types
-import           Dismantle.ASL.StaticExpr as SE
-import           Dismantle.ASL.Translation.Preprocess
-import           Dismantle.ASL.SyntaxTraverse ( logMsg, indentLog, unindentLog )
-import qualified Dismantle.ASL.SyntaxTraverse as TR
-import qualified Dismantle.ASL.SyntaxTraverse as AS ( pattern VarName )
+import           Language.ASL.Crucible.Extension ( ASLExt, ASLApp(..), ASLStmt(..) )
+import           Language.ASL.Translation.Exceptions ( TranslationException(..), LoggedTranslationException(..) )
+import           Language.ASL.Signature
+import           Language.ASL.Types
+import           Language.ASL.StaticExpr as SE
+import           Language.ASL.Translation.Preprocess
+import           Language.ASL.SyntaxTraverse ( logMsg, indentLog, unindentLog )
+import qualified Language.ASL.SyntaxTraverse as TR
+import qualified Language.ASL.SyntaxTraverse as AS ( pattern VarName )
 
 import qualified Lang.Crucible.CFG.Reg as CCR
 import qualified What4.Utils.MonadST as MST
 import qualified Data.STRef as STRef
+
+import           What4.Utils.Log ( MonadHasLogCfg(..), LogLevel(..), LogCfg, logM, logTrace )
+import qualified What4.Utils.Log as Log
 
 -- | This wrapper is used as a uniform return type in 'lookupVarRef', as each of
 -- the lookup types (arguments, locals, or globals) technically return different
@@ -213,7 +216,8 @@ data Overrides arch =
             , overrideExpr :: forall h s ret . AS.Expr -> TypeConstraint -> StaticEnvMap -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
             }
 
-type InnerGenerator h s arch ret a = CCG.Generator (ASLExt arch) s (TranslationState h ret) ret (MST.ST h) a
+type InnerGenerator h s arch ret a =
+  CCG.Generator (ASLExt arch) s (TranslationState h ret) ret (MST.ST h) a
 
 newtype Generator h s arch ret a = Generator
   { _unGenerator :: InnerGenerator h s arch ret a}
@@ -224,21 +228,27 @@ newtype Generator h s arch ret a = Generator
     , MSS.MonadState (TranslationState h ret s)
     )
 
+instance MonadHasLogCfg (Generator h s arch ret) where
+  getLogCfgM = MSS.gets tsLogCfg
+
+intToLogLvl :: Integer -> LogLevel
+intToLogLvl i = case i of
+  1 -> Info
+  2 -> Warn
+  _ -> Debug
+  
+
 instance MST.MonadST h (Generator h s arch ret) where
   liftST m = Generator $ MT.lift $ MST.liftST m
 
+-- FIXME: replace ST with IO for logging
 instance TR.MonadLog (Generator h s arch ret) where
-  logMsg logLvl msg' = do
-    (logHandle, curLvl, indent) <- MSS.gets tsLogHandle
-    let msg = T.replicate (fromIntegral indent) " " <> msg'
-    let mkmsg ex = msg : ex
-    when (curLvl >= logLvl) $
-      MST.liftST (STRef.modifySTRef logHandle mkmsg)
-
-  logIndent f = do
-    (logHandle, curLvl, indent) <- MSS.gets tsLogHandle
-    MSS.modify' $ \s -> s { tsLogHandle = (logHandle, curLvl, f indent) }
-    return indent
+  logMsg logLvl msg = do
+    logCfg <- getLogCfgM
+    Log.withLogCfg logCfg $ do
+      logTrace (intToLogLvl logLvl) (T.unpack msg) `seq` return ()
+  
+  logIndent _f = return 0
 
 instance F.MonadFail (Generator h s arch ret) where
   fail s = throwTrace $ BindingFailure s
@@ -247,9 +257,7 @@ throwTrace :: TranslationException -> Generator h s arch ret a
 throwTrace e = do
   env <- MSS.gets tsStaticValues
   unindentLog $ logMsg 2 $ "Static Environment: " <> (T.pack (show env))
-  (logHandle, _, _) <- MSS.gets tsLogHandle
-  tracedLog <- MST.liftST (STRef.readSTRef logHandle)
-  X.throw $ LoggedTranslationException tracedLog e
+  X.throw $ e
 
 liftGenerator :: InnerGenerator h s arch ret a
               -> Generator h s arch ret a
@@ -305,8 +313,8 @@ data TranslationState h ret s =
                    -- ^ Environment to give concrete instantiations to polymorphic variables
                    , tsSig :: SomeFunctionSignature ret
                    -- ^ Signature of the function/procedure we are translating
-                   , tsLogHandle :: (STRef.STRef h [T.Text], Integer, Integer)
-                   -- ^ Handle for logging output
+                   , tsLogCfg :: LogCfg
+                   -- ^ logging
                    }
 
 

@@ -9,7 +9,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
-module Dismantle.ASL.Extension (
+module Language.ASL.Crucible.Extension (
     ASLExt
   , ASLApp(..)
   , ASLStmt(..)
@@ -43,9 +43,9 @@ import qualified What4.BaseTypes as WT
 import qualified What4.Interface as WI
 import qualified What4.Symbol as WS
 
-import           Dismantle.ASL.Exceptions ( TranslationException(..) )
-import           Dismantle.ASL.Signature ( BaseGlobalVar(..) )
-import           Dismantle.ASL.Types
+import           Language.ASL.Crucible.Exceptions ( CrucibleException(..) )
+import           Language.ASL.Signature ( BaseGlobalVar(..) )
+import           Language.ASL.Types
 
 -- NOTE: Translate calls (both expr and stmt) as What4 uninterpreted functions
 --

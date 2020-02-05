@@ -17,7 +17,7 @@
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
 -- | Convert fragments of ASL code into Crucible CFGs
-module Dismantle.ASL.Crucible (
+module Language.ASL.Crucible (
     functionToCrucible
   , Function(..)
   , FunctionSignature
@@ -42,9 +42,7 @@ module Dismantle.ASL.Crucible (
   , ASLApp(..)
   , ASLStmt
   , aslExtImpl
-  -- * Exceptions
-  , TranslationException(..)
-
+  
   ) where
 
 import           Control.Monad ( when )
@@ -71,17 +69,19 @@ import qualified What4.Utils.StringLiteral as WT
 import qualified What4.FunctionName as WFN
 import qualified What4.ProgramLoc as WP
 
-
 import qualified Language.ASL.Syntax as AS
 
-import           Dismantle.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..), aslExtImpl )
-import           Dismantle.ASL.Exceptions ( TranslationException(..), LoggedTranslationException(..) )
-import           Dismantle.ASL.Signature
-import           Dismantle.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), Definitions(..), InnerGenerator, translateStatement, overrides, addExtendedTypeData, unliftGenerator)
-import           Dismantle.ASL.Types
-import           Dismantle.ASL.StaticExpr
+import           Language.ASL.Crucible.Exceptions ( CrucibleException(..) )
+import           Language.ASL.Crucible.Extension ( ASLExt, ASLApp(..), ASLStmt(..), aslExtImpl )
+import           Language.ASL.Signature
+import           Language.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), Definitions(..), InnerGenerator, translateStatement, overrides, addExtendedTypeData, unliftGenerator)
+import           Language.ASL.Types
+import           Language.ASL.StaticExpr
 
 import qualified Lang.Crucible.CFG.Extension as CCExt
+
+-- FIXME: this should be moved somewhere general
+import           What4.Utils.Log ( HasLogCfg, logIO, LogLevel(..), getLogCfg )
 
 
 data Function arch globalReads globalWrites init tps =
@@ -116,6 +116,7 @@ type ReturnsGlobals ret globalWrites tps = (ret ~ FuncReturn globalWrites tps)
 -- available in the 'TranslationState'
 functionToCrucible :: forall arch globalReads globalWrites init tps ret
                      . (ReturnsGlobals ret globalWrites tps)
+                    => HasLogCfg
                     => Definitions arch
                     -> FunctionSignature globalReads globalWrites init tps
                     -> CFH.HandleAllocator
@@ -128,12 +129,8 @@ functionToCrucible defs sig hdlAlloc stmts logLvl = do
   hdl <- CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (funcName sig)) argReprs retRepr
   globalReads <- FC.traverseFC allocateGlobal (funcGlobalReadReprs sig)
   let pos = WP.InternalPos
-  (CCG.SomeCFG cfg0, depends) <- (do
-    (result, log') <- stToIO $ defineCCGFunction pos hdl
-      (\refs -> funcDef defs sig refs globalReads stmts logLvl)
-    when (logLvl >= 5) $ printLog $ log'
-    return result)
-    `X.catch` (\(LoggedTranslationException log' e) -> printLog log' >> X.throw e)
+  (CCG.SomeCFG cfg0, depends) <- stToIO $ defineCCGFunction pos hdl $ \refs ->
+    funcDef defs sig refs globalReads stmts logLvl
   return $
        Function { funcSig = sig
                 , funcCFG = CCS.toSSA cfg0
@@ -145,29 +142,24 @@ functionToCrucible defs sig hdlAlloc stmts logLvl = do
     allocateGlobal (LabeledValue name rep) =
       BaseGlobalVar <$> CCG.freshGlobalVar hdlAlloc name (CT.baseToType rep)
 
-printLog :: [T.Text] -> IO ()
-printLog [] = return ()
-printLog log' = putStrLn (T.unpack $ T.unlines $ List.reverse $ log')
-
 defineCCGFunction :: CCExt.IsSyntaxExtension ext
                => WP.Position
                -> CFH.FnHandle init ret
-               -> ((STRef.STRef h (Set.Set (T.Text,StaticValues)), STRef.STRef h [T.Text]) ->
+               -> ((STRef.STRef h (Set.Set (T.Text,StaticValues))) ->
                     CCG.FunctionDef ext t init ret (ST h))
-               -> ST h ((CCG.SomeCFG ext init ret, Set.Set (T.Text,StaticValues)), [T.Text])
+               -> ST h ((CCG.SomeCFG ext init ret, Set.Set (T.Text,StaticValues)))
 defineCCGFunction p h f = do
     ng <- newSTNonceGenerator
     funDepRef <- STRef.newSTRef Set.empty
-    logRef <- STRef.newSTRef []
-    (cfg, _) <- CCG.defineFunction p ng h (f (funDepRef, logRef))
-    log' <- STRef.readSTRef logRef
+    (cfg, _) <- CCG.defineFunction p ng h (f funDepRef)
     funDeps <- STRef.readSTRef funDepRef
-    return ((cfg, funDeps), log')
+    return (cfg, funDeps)
 
-funcDef :: (ReturnsGlobals ret globalWrites tps)
+funcDef :: HasLogCfg
+        => ReturnsGlobals ret globalWrites tps
         => Definitions arch
         -> FunctionSignature globalReads globalWrites init tps
-        -> (STRef.STRef h (Set.Set (T.Text, StaticValues)), STRef.STRef h [T.Text])
+        -> STRef.STRef h (Set.Set (T.Text, StaticValues))
         -> Ctx.Assignment BaseGlobalVar globalReads
         -> [AS.Stmt]
         -> Integer -- ^ Logging level
@@ -177,15 +169,16 @@ funcDef defs sig hdls globalReads stmts logLvl args =
   (funcInitialState defs sig hdls logLvl globalReads args, defineFunction overrides sig stmts args)
 
 funcInitialState :: forall init globalReads globalWrites tps h s arch ret
-                  . (ReturnsGlobals ret globalWrites tps)
+                  . HasLogCfg
+                 => ReturnsGlobals ret globalWrites tps
                  => Definitions arch
                  -> FunctionSignature globalReads globalWrites init tps
-                 -> (STRef.STRef h (Set.Set (T.Text, StaticValues)), STRef.STRef h [T.Text])
+                 -> STRef.STRef h (Set.Set (T.Text, StaticValues))
                  -> Integer -- ^ Logging level
                  -> Ctx.Assignment BaseGlobalVar globalReads
                  -> Ctx.Assignment (CCG.Atom s) (ToCrucTypes init)
                  -> TranslationState h ret s
-funcInitialState defs sig (funDepRef, logRef) logLvl globalReads args =
+funcInitialState defs sig funDepRef logLvl globalReads args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgument Map.empty
                    , tsVarRefs = Map.empty
                    , tsExtendedTypes = defExtendedTypes defs
@@ -197,7 +190,7 @@ funcInitialState defs sig (funDepRef, logRef) logLvl globalReads args =
                    , tsHandle = funDepRef
                    , tsStaticValues = funcStaticVals sig
                    , tsSig = SomeFunctionSignature sig
-                   , tsLogHandle = (logRef, logLvl, 0)
+                   , tsLogCfg = getLogCfg
                    }
   where
     addArgument :: forall tp
@@ -217,7 +210,8 @@ funcInitialState defs sig (funDepRef, logRef) logLvl globalReads args =
 projectFunctionName :: LabeledValue FunctionArg a tp -> T.Text
 projectFunctionName (LabeledValue (FunctionArg nm _ _) _) = nm
 
-defineFunction :: (ReturnsGlobals ret globalWrites tps)
+defineFunction :: HasLogCfg
+               => ReturnsGlobals ret globalWrites tps
                => Overrides arch
                -> FunctionSignature globalReads globalWrites init tps
                -> [AS.Stmt]

@@ -1,10 +1,10 @@
 .PHONY: default spec all clean realclean deepclean
 default: all
 
-ASL_PARSER = ../deps/arm-asl-parser
+ASL_PARSER = ../submodules/arm-asl-parser
 PARSED = ./data/Parsed
 
-HS_SOURCES := $(shell find ./src ./tools -name '*.hs' -not -path '*/\.*') $(shell find . -name '*.cabal')
+HS_SOURCES := $(shell find ./src -name '*.hs' -not -path '*/\.*') $(shell find . -name '*.cabal')
 
 .PRECIOUS: ${PARSED}/%.sexpr ./data/%.asl ${ASL_PARSER}/asl/%.asl ${ASL_PARSER}/asl-parsed/%.sexpr
 
@@ -31,8 +31,8 @@ SOURCE_FILES = $(SPEC_FILES:%.sexpr=${PARSED}/%.sexpr)
 spec: ${SOURCE_FILES}
 
 ./output/formulas.what4: spec ${HS_SOURCES}
-	cabal v2-build dismantle-asl-genarm
-	cabal v2-run dismantle-asl-genarm -- --output-formulas="$@" --asl-spec="${PARSED}/" --check-serialization
+	cabal v2-build asl-translator-lib
+	cabal v2-run asl-translator -- --output-formulas="$@" --asl-spec="${PARSED}/" --check-serialization
 
 all: ./output/formulas.what4
 

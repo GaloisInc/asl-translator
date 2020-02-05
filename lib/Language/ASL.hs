@@ -15,7 +15,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE MultiWayIf #-}
 
-module Dismantle.ASL (
+module Language.ASL (
     simulateFunction
   --, simulateInstruction
   , SimulatorConfig(..)
@@ -70,10 +70,12 @@ import qualified What4.Protocol.Online as WPO
 import qualified What4.Expr as S
 
 -- import qualified Dismantle.Formula as SF
-import qualified Dismantle.ASL.Crucible as AC
-import qualified Dismantle.ASL.Signature as AS
-import qualified Dismantle.ASL.Types as AT
-import qualified Dismantle.ASL.Extension as AE
+import qualified Language.ASL.Crucible as AC
+import qualified Language.ASL.Crucible.Extension as AE
+
+import qualified Language.ASL.Signature as AS
+import qualified Language.ASL.Types as AT
+
 
 import qualified Text.PrettyPrint.HughesPJClass as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as LPP

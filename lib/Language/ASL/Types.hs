@@ -12,7 +12,7 @@
 
 
 -- | Functions for converting between What4 and Crucible types.
-module Dismantle.ASL.Types
+module Language.ASL.Types
   ( ToBaseType
   , ToBaseTypes
   , ToBaseTypesList

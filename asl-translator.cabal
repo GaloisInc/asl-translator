@@ -1,6 +1,6 @@
 cabal-version:       2.2
 
-name:                dismantle-asl
+name:                asl-translator
 version:             0.1.0.0
 synopsis:            A conversion from ASL into an architecture specification
 -- description:
@@ -9,7 +9,7 @@ license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Galois Inc.
 maintainer:          dmatichuk@galois.com
-copyright:           (c) Galois, Inc 2014-2019
+copyright:           (c) Galois, Inc 2014-2020
 
 extra-source-files:  CHANGELOG.md
 
@@ -33,33 +33,35 @@ common shared-properties
                        crucible,
                        what4,
                        asl-parser,
+                       what4-serialize,
+                       split,
                        time,
+                       panic >= 0.3,
                        vector
 
-library
+library asl-translator-lib
   import:              shared-properties
-  exposed-modules:     Dismantle.ASL
-                       Dismantle.ASL.Crucible
-                       Dismantle.ASL.Extension
-                       Dismantle.ASL.Exceptions
-                       Dismantle.ASL.Signature
-                       Dismantle.ASL.Translation
-                       Dismantle.ASL.Translation.Preprocess
-                       Dismantle.ASL.SyntaxTraverse
-                       Dismantle.ASL.Types
-                       Dismantle.ASL.StaticExpr
-  hs-source-dirs:      src
+  exposed-modules:     Language.ASL
+                       Language.ASL.Crucible
+                       Language.ASL.Crucible.Extension
+                       Language.ASL.Crucible.Exceptions
+                       Language.ASL.Signature
+                       Language.ASL.Translation
+                       Language.ASL.Translation.Preprocess
+                       Language.ASL.Translation.Driver
+                       Language.ASL.Translation.Exceptions
+                       Language.ASL.SyntaxTraverse
+                       Language.ASL.Types
+                       Language.ASL.StaticExpr
+  hs-source-dirs:      lib
   ghc-options:         -Wcompat -Wall
 
-executable dismantle-asl-genarm
+executable asl-translator
   import:              shared-properties
   main-is:             Main.hs
-  build-depends:       what4-serialize,
-                       filepath,
-                       dismantle-asl,
-                       panic >= 0.3,
-                       split
-  hs-source-dirs:      tools
+  build-depends:       filepath,
+                       asl-translator-lib,
+  hs-source-dirs:      exe
   ghc-options:         -Wcompat -Wall
 
 test-suite dismantle-asl-tests

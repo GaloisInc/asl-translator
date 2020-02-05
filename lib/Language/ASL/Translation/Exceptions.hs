@@ -1,7 +1,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE StandaloneDeriving #-}
-module Dismantle.ASL.Exceptions (
+module Language.ASL.Translation.Exceptions (
       TranslationException(..)
     , LoggedTranslationException(..)
   ) where
@@ -15,9 +15,9 @@ import qualified What4.BaseTypes as WT
 import qualified Language.ASL.Syntax as AS
 
 
-import           Dismantle.ASL.Signature
-import           Dismantle.ASL.Types
-import           Dismantle.ASL.StaticExpr
+import           Language.ASL.Signature
+import           Language.ASL.Types
+import           Language.ASL.StaticExpr
 
 data TranslationException = forall ret . NoReturnInFunction (SomeFunctionSignature ret)
                           | forall tp . InvalidReturnType (CT.TypeRepr tp)
@@ -44,7 +44,6 @@ data TranslationException = forall ret . NoReturnInFunction (SomeFunctionSignatu
                           | forall tp . ExpectedBaseTypeRepr (CT.TypeRepr tp)
                           | forall tp . ExpectedBaseType AS.Expr (CT.TypeRepr tp)
                           | forall tp . ExpectedBaseTypeArgument T.Text (CT.TypeRepr tp)
-                          | InvalidFunctionName T.Text
                           | MissingFunctionDefinition T.Text
                           | ExpectedFunctionSignature T.Text
                           | ExpectedProcedureSignature T.Text
@@ -86,7 +85,6 @@ data TranslationException = forall ret . NoReturnInFunction (SomeFunctionSignatu
                           | BindingFailure String
                           | BadASLFunctionCall
                           | TExceptions [TranslationException]
-                          | BadUninterpretedFunctionCache T.Text
 
 
 deriving instance Show TranslationException
