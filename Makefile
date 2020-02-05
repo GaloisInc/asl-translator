@@ -4,7 +4,7 @@ default: all
 ASL_PARSER = ../submodules/arm-asl-parser
 PARSED = ./data/Parsed
 
-HS_SOURCES := $(shell find ./src -name '*.hs' -not -path '*/\.*') $(shell find . -name '*.cabal')
+HS_SOURCES := $(shell find ./lib ./exe -name '*.hs' -not -path '*/\.*') $(shell find . -name '*.cabal')
 
 .PRECIOUS: ${PARSED}/%.sexpr ./data/%.asl ${ASL_PARSER}/asl/%.asl ${ASL_PARSER}/asl-parsed/%.sexpr
 
