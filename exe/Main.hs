@@ -1,7 +1,11 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Main ( main ) where
 
 import           Control.Monad ( when )
 import qualified Control.Concurrent as IO
+import qualified Control.Exception as X
+import           GHC.Stack ( HasCallStack )
 
 import           Data.Maybe ( fromJust )
 
@@ -16,7 +20,7 @@ import qualified Language.ASL.Translation.Driver as ASL
 
 import qualified What4.Utils.Log as Log
 
-main :: IO ()
+main :: HasCallStack => IO ()
 main = do
   logCfg <- Log.mkLogCfg "main"
   stringArgs <- IO.getArgs
@@ -32,9 +36,11 @@ main = do
       exitFailure
     Just (opts, statOpts) -> do
       _ <- IO.forkIO $ Log.stdErrLogEventConsumer (intToLogLvlFilter (optVerbosity opts)) logCfg
-      ASL.SomeSigMap sm <- ASL.runWithFilters opts
-      ASL.reportStats statOpts sm
-      ASL.serializeFormulas opts sm
+      (do 
+        ASL.SomeSigMap sm <- ASL.runWithFilters opts
+        ASL.reportStats statOpts sm
+        ASL.serializeFormulas opts sm)
+        `X.catch` (\(e :: X.SomeException) -> Log.logIOWith logCfg Log.Error (show e))
   where
     applyOption (Just (opts, statOpts)) arg = case arg of
       Left f -> do
@@ -47,9 +53,9 @@ main = do
 
 intToLogLvlFilter :: Integer -> (Log.LogEvent -> Bool)
 intToLogLvlFilter i logEvent = case Log.leLevel logEvent of
-  Log.Info -> i > 0
-  Log.Warn -> i > 1
-  Log.Debug -> i > 2
+  Log.Info -> i >= 0
+  Log.Warn -> i >= 1
+  Log.Debug -> i >= 2
   Log.Error -> True
 
 usage :: IO ()

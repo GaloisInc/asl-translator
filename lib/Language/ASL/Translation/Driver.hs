@@ -30,6 +30,8 @@ module Language.ASL.Translation.Driver
   , noFilter
   ) where
 
+import           GHC.Stack ( HasCallStack )
+
 import qualified Control.Exception as X
 
 import           Control.Monad.Identity
@@ -129,7 +131,7 @@ data StatOptions = StatOptions
 data TranslationDepth = TranslateRecursive
                       | TranslateShallow
 
-runWithFilters :: TranslatorOptions -> IO (SomeSigMap)
+runWithFilters :: HasCallStack => TranslatorOptions -> IO (SomeSigMap)
 runWithFilters opts = do
   spec <- getASL opts
   logMsgIO opts 0 $ "Loaded "
@@ -495,7 +497,7 @@ getASL opts = do
     (Right aslInsts, Right aslDefs, Right aslRegs, Right aslExtraDefs, Right aslSupportDefs) -> do
       return $ prepASL $ ASLSpec aslInsts aslDefs aslSupportDefs aslExtraDefs aslRegs
 
-logMsgIO :: TranslatorOptions -> Integer -> String -> IO ()
+logMsgIO :: HasCallStack => TranslatorOptions -> Integer -> String -> IO ()
 logMsgIO opts logLvl msg = do
   let logCfg = optLogCfg opts
   logIOWith logCfg (intToLogLvl logLvl) msg
@@ -701,11 +703,11 @@ execSigMapM m = MSS.execStateT m
 
 intToLogLvl :: Integer -> LogLevel
 intToLogLvl i = case i of
-  1 -> Info
-  2 -> Warn
-  _ -> Debug
+  0 -> Info
+  1 -> Debug
+  _ -> Warn
 
-logMsg :: Integer -> String -> SigMapM scope arch ()
+logMsg :: HasCallStack => Integer -> String -> SigMapM scope arch ()
 logMsg logLvl msg = do
   logCfg <- MSS.gets (optLogCfg . sOptions)
   logIOWith logCfg (intToLogLvl logLvl) msg
