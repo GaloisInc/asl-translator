@@ -43,7 +43,9 @@ main = do
         ASL.SomeSigMap sm <- ASL.runWithFilters opts
         ASL.reportStats statOpts sm
         ASL.serializeFormulas opts sm)
-        `X.catch` (\(e :: X.SomeException) -> Log.logIOWith logCfg Log.Error (show e))
+        `X.catch` (\(e :: X.SomeException) -> do
+                      Log.logIOWith logCfg Log.Error (show e)
+                      exitFailure)
   where
     applyOption (Just (opts, statOpts)) arg = case arg of
       Left f -> do
@@ -68,7 +70,7 @@ mkLogEventConsumer opts = void $ IO.forkIO $
 
     intToLogLvlFilter :: Integer -> (Log.LogEvent -> Bool)
     intToLogLvlFilter i logEvent = case Log.leLevel logEvent of
-      Log.Info -> i >= 0
+      Log.Info -> i >= 1
       Log.Warn -> i >= 1
       Log.Debug -> i >= 2
       Log.Error -> True

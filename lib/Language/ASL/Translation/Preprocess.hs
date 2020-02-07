@@ -176,7 +176,7 @@ asDefType def =
 
 -- | Monad for computing ASL signatures of 'AS.Definition's.
 newtype SigM ext f a =
-  SigM { getSigM :: E.ExceptT SigException (RWS.RWST SigEnv () SigState MonadLogIO) a }
+  SigM { _getSigM :: E.ExceptT SigException (RWS.RWST SigEnv () SigState MonadLogIO) a }
   deriving ( Functor
            , Applicative
            , Monad
@@ -1019,11 +1019,14 @@ computeInstructionSignature daEnc AS.Instruction{..} enc = do
     name = T.pack $ DA.encName daEnc
     iset = AS.encInstrSet enc
     initUnusedFields = initializeUnusedFields (AS.encFields enc) (map AS.encFields instEncodings)
-    initStmts = {- initializeEncoding daEnc ++ -} AS.encDecode enc ++ initUnusedFields
+    initStmts = initializeEncoding daEnc ++ AS.encDecode enc ++ initUnusedFields
   liftedStmts <- liftOverEnvs instName enc instExecute
 
   let
-    instStmts = pruneInfeasableInstrSets iset $ initStmts ++ instPostDecode ++ liftedStmts
+    instStmts = pruneInfeasableInstrSets iset $
+      initStmts
+      ++ instPostDecode
+      ++ liftedStmts
     staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
   labeledArgs <- getFunctionArgSig enc
 
@@ -1098,7 +1101,9 @@ liftOverEnvs :: T.Text -- ^ instruction name (for hint lookup)
              -> [AS.Stmt] -- ^ instruction body
              -> SigM ext f [AS.Stmt]
 liftOverEnvs instName enc stmts = case dependentVariablesOfStmts stmts of
-  ([], _)-> return stmts
+  ([], _)-> do
+    logMsg 2 $ "No dependent variables found for: " <> instName
+    return stmts
   (vars', optvars') -> let
     fields = AS.encFields enc
     decodes = AS.encDecode enc
@@ -1147,7 +1152,6 @@ liftOverEnvs instName enc stmts = case dependentVariablesOfStmts stmts of
       case cases possibleEnvs of
         [] -> E.throwError $ FailedToDetermineStaticEnvironment vars
         x -> return $ [staticEnvironmentStmt x stmts]
-
 
 -- | Scan the instruction body for function calls to overly type-dependent functions
 dependentVariablesOfStmts :: [AS.Stmt] -> ([T.Text], [T.Text])

@@ -191,7 +191,7 @@ runWithFilters' opts spec sigEnv sigState = do
   execSigMapWithScope opts sigState sigEnv $ do
     addMemoryUFs
     forM_ (zip [1..] encodings) $ \(i :: Int, (daEnc, (instr, instrEnc))) -> do
-      logMsgStr 0 $ "Processing instruction: " ++ DA.encName daEnc
+      logMsgStr 1 $ "Processing instruction: " ++ DA.encName daEnc ++ " (" ++ DA.encASLIdent daEnc ++ ")"
         ++ "\n" ++ show i ++ "/" ++ show (length encodings)
       runTranslation daEnc instr instrEnc
 
@@ -201,7 +201,7 @@ runTranslation :: DA.Encoding
                -> SigMapM sym arch ()
 runTranslation daEnc instr instrEnc = do
   let instrIdent = instrToIdent daEnc instr instrEnc
-  logMsgStr 1 $ "Computing instruction signature for: " ++ prettyIdent instrIdent
+  logMsgStr 2 $ "Computing instruction signature for: " ++ prettyIdent instrIdent
   result <- liftSigM (KeyInstr instrIdent) $
     computeInstructionSignature daEnc instr instrEnc
   case result of
@@ -212,14 +212,14 @@ runTranslation daEnc instr instrEnc = do
         Left err -> do
           logMsgStr (-1) $ "Error computing ASL definitions: " ++ show err
         Right defs -> do
-          logMsgStr 1 $ "Translating instruction: " ++ prettyIdent instrIdent
-          logMsgStr 1 $ (show iSig)
+          logMsgStr 2 $ "Translating instruction: " ++ prettyIdent instrIdent
+          logMsgStr 2 $ (show iSig)
           mfunc <- translateFunction (KeyInstr instrIdent) iSig instStmts defs
           let deps = maybe Set.empty AC.funcDepends mfunc
           MSS.gets (optTranslationDepth . sOptions) >>= \case
             TranslateRecursive -> do
-              logMsg 1 $ "--------------------------------"
-              logMsg 1 $ "Translating functions: "
+              logMsg 2 $ "--------------------------------"
+              logMsg 2 $ "Translating functions: "
               alldeps <- mapM (translationLoop instrIdent [] defs) (Set.toList deps)
               let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
               MSS.modify' $ \s -> s { instrDeps = Map.insert instrIdent alldepsSet (instrDeps s) }
@@ -347,7 +347,7 @@ translateFunction :: ElemKey
                   -> Definitions arch
                   -> SigMapM sym arch (Maybe (AC.Function arch globalReads globalWrites init tps))
 translateFunction key sig stmts defs = do
-  logMsgStr 1 $ "Rough function body size:" ++ show (measureStmts stmts)
+  logMsgStr 2 $ "Rough function body size:" ++ show (measureStmts stmts)
   handleAllocator <- MSS.gets sHandleAllocator
   logLvl <- MSS.gets (optVerbosity . sOptions)
   catchIO key $ AC.functionToCrucible defs sig handleAllocator stmts logLvl
@@ -430,7 +430,7 @@ simulateFunction :: forall arch sym globalReads globalWrites init tps
                  -> AC.Function arch globalReads globalWrites init tps
                  -> SigMapM sym arch ()
 simulateFunction key p = do
-  logMsg 1 $ "Simulating: " <> T.pack (prettyKey key)
+  logMsg 2 $ "Simulating: " <> T.pack (prettyKey key)
   isCheck <- MSS.gets (optCheckSerialization . sOptions)
   opts <- MSS.gets sOptions
   logCfg <- MSS.gets (optLogCfg . sOptions)
@@ -453,19 +453,19 @@ simulateFunction key p = do
         Left err -> do
           return $ Just $ SimulationDeserializationFailure err serializedSymFn
         Right (U.SomeSome symFn') -> do
-          logMsgIO opts 1 $ "Serialization/Deserialization succeeded."
+          logMsgIO opts 2 $ "Serialization/Deserialization succeeded."
           WN.testEquivSymFn backend symFn symFn' >>= \case
             WN.ExprUnequal e1 e2 env -> do
-              logMsgIO opts 1 $ "Mismatch in deserialized function."
+              logMsgIO opts (-1) $ "Mismatch in deserialized function."
               return $ Just $ SimulationDeserializationMismatch serializedSymFn e1 e2 env
             _ -> do
-              logMsgIO opts 1 $ "Deserialized function matches."
+              logMsgIO opts 2 $ "Deserialized function matches."
               return Nothing
       else return Nothing
     return $ (nm, symFn, ex)
   case mresult of
     Just (_, symFn, mex) -> do
-      logMsg 1 "Simulation succeeded!"
+      logMsg 2 "Simulation succeeded!"
       addFormula key symFn
       case mex of
         Just ex -> void $ catchIO key $ X.throw ex
