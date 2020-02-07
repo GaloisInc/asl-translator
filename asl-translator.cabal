@@ -20,6 +20,8 @@ common shared-properties
                        bv-sized >= 0.7.0,
                        panic >= 0.3,
                        containers,
+                       dismantle-arm-xml,
+                       dismantle-tablegen,
                        hashtables,
                        ilist,
                        bimap,

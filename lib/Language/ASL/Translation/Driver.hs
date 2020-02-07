@@ -62,6 +62,10 @@ import qualified Language.ASL.Parser as AP
 import qualified Language.ASL.Syntax as AS
 import           System.Exit (exitFailure)
 
+import qualified Dismantle.ARM.A32 as A32
+import qualified Dismantle.ARM.ASL as DA ( Encoding(..) )
+import           Dismantle.ARM.ASL ( encodingIdentifier )
+
 import qualified System.IO as IO
 import           System.IO (hPutStrLn, stderr)
 import           Panic hiding (panic)
@@ -170,12 +174,6 @@ checkSerialization opts = do
       Right _ -> do
         logMsgIO opts 0 $ "Deserializing successful."
         return ()
-
-
-collectInstructions :: [AS.Instruction] -> [(AS.Instruction, T.Text, AS.InstructionSet)]
-collectInstructions aslInsts = do
-  List.concat $
-    map (\instr -> map (\(AS.InstructionEncoding {AS.encName=encName, AS.encInstrSet=iset}) -> (instr, encName, iset)) (AS.instEncodings instr)) aslInsts
 
 runWithFilters' :: HasCallStack
                 => TranslatorOptions
@@ -537,7 +535,7 @@ expectedExceptions k ex = case ex of
   -- TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
   -- TExcept _ (CannotDetermineBVLength _ _) -> Just $ InsufficientStaticTypeInformation
   TExcept _ (UnsupportedType (AS.TypeFun "bits" (AS.ExprLitInt 0)))
-    | KeyInstr (InstructionIdent nm _ _) <- k
+    | KeyInstr (InstructionIdent nm _ _ _) <- k
     , nm `elem` ["aarch32_USAT16_A", "aarch32_USAT_A"] ->
       Just $ ASLSpecMissingZeroCheck
   TExcept _ (CannotStaticallyEvaluateType (AS.TypeFun "bits" (AS.ExprCall (AS.VarName fnm) _)) _)
@@ -545,7 +543,7 @@ expectedExceptions k ex = case ex of
       Just $ BVLengthFromGlobalState
   SomeExcept e
     | Just (Panic (_ :: Crucible) _ _ _) <- X.fromException e
-    , KeyInstr (InstructionIdent nm _ _) <- k
+    , KeyInstr (InstructionIdent nm _ _ _) <- k
     , nm `elem` ["aarch32_WFE_A", "aarch32_WFI_A", "aarch32_VTBL_A", "aarch32_VTST_A"] ->
       Just $ CruciblePanic
   SomeExcept e
@@ -555,7 +553,7 @@ expectedExceptions k ex = case ex of
       Just $ CruciblePanic
   SomeExcept e
     | Just (ASL.SimulationAbort _ _) <- X.fromException e
-    , KeyInstr (InstructionIdent nm _ _) <- k
+    , KeyInstr (InstructionIdent nm _ _ _) <- k
     , nm `elem` [ "aarch32_VTBL_A" ] ->
       Just $ CruciblePanic
   _ -> Nothing
@@ -635,7 +633,7 @@ reportStats sopts sm = do
       Nothing -> id
 
 prettyIdent :: InstructionIdent -> String
-prettyIdent (InstructionIdent nm enc iset) = T.unpack $ nm <> "_" <> enc <> "_" <> (T.pack $ show iset)
+prettyIdent (InstructionIdent _ _ _ opnm) = opnm
 
 
 prettyKey :: ElemKey -> String
@@ -660,11 +658,12 @@ instance Show TranslatorException where
 instance X.Exception TranslatorException
 
 data InstructionIdent =
-  InstructionIdent { iName :: T.Text, iEnc :: T.Text, iSet :: AS.InstructionSet }
+  InstructionIdent { iName :: T.Text, iEnc :: T.Text, iSet :: AS.InstructionSet, iOpName :: String }
   deriving (Eq, Ord, Show)
 
-instrToIdent :: AS.Instruction -> T.Text -> AS.InstructionSet -> InstructionIdent
-instrToIdent AS.Instruction{..} enc iset = InstructionIdent instName enc iset
+instrToIdent :: DA.Encoding -> AS.Instruction -> AS.InstructionEncoding -> InstructionIdent
+instrToIdent daEnc instr enc =
+  InstructionIdent (AS.instName instr) (AS.encName enc) (AS.encInstrSet enc) (DA.encName daEnc)
 
 finalDepsOf :: Set.Set (T.Text, StaticValues) -> Set.Set T.Text
 finalDepsOf deps = Set.map (\(nm, env) -> mkFinalFunctionName env nm) deps
@@ -798,22 +797,22 @@ translateAll f =
 
 translateOnlyInstr :: (T.Text, T.Text) -> Filters -> Filters
 translateOnlyInstr inm f =
-  f { funFilter = (\(InstructionIdent nm enc _) -> \_ -> inm == (nm, enc))
-    , instrFilter = (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
+  f { funFilter = (\(InstructionIdent nm enc _ _) -> \_ -> inm == (nm, enc))
+    , instrFilter = (\(InstructionIdent nm enc _ _) -> (nm, enc) == inm)
     }
 
 
 translateNoArch64 :: Filters -> Filters
 translateNoArch64 f =
-  f { funFilter = (\(InstructionIdent _ _ iset) -> \_ -> iset /= AS.A64 )
-    , instrFilter = (\(InstructionIdent _ _ iset) -> iset /= AS.A64)
+  f { funFilter = (\(InstructionIdent _ _ iset _) -> \_ -> iset /= AS.A64 )
+    , instrFilter = (\(InstructionIdent _ _ iset _) -> iset /= AS.A64)
     }
 
 
 translateArch32 :: Filters -> Filters
 translateArch32 f =
-  f { funFilter = (\(InstructionIdent _ _ iset) -> \_ -> iset `elem` [AS.A32, AS.T32] )
-    , instrFilter = (\(InstructionIdent _ _ iset) -> iset `elem` [AS.A32, AS.T32])
+  f { funFilter = (\(InstructionIdent _ _ iset _) -> \_ -> iset `elem` [AS.A32, AS.T32] )
+    , instrFilter = (\(InstructionIdent _ _ iset _) -> iset `elem` [AS.A32, AS.T32])
     }
 
 simulateAll :: Filters -> Filters

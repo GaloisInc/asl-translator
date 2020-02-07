@@ -94,7 +94,6 @@ defaultFilePaths = FilePathConfig
 defaultOptions :: Log.LogCfg -> TranslatorOptions
 defaultOptions logCfg = TranslatorOptions
   { optVerbosity = 1
-  , optStartIndex = 0
   , optNumberOfInstructions = Nothing
   , optFilters = (fromJust $ ASL.getTranslationMode "Arch32") ASL.noFilter
   , optCollectAllExceptions = False
@@ -135,9 +134,6 @@ arguments =
     "2 - translator trace (on exception).\n" ++
     "3 - instruction post-processing trace (on exception).\n4 - globals collection trace.\n" ++
     "6 - translator and globals collection trace (always).")
-
-  , Option [] ["offset"] (ReqArg (\f -> Left (\opts -> Just $ opts {optStartIndex = read f})) "INT")
-    "Start processing instructions at the given offset"
 
   , Option [] ["report-success"] (NoArg (Right (\opts -> Just $ opts { reportSucceedingInstructions = True })))
     "Print list of successfully translated instructions"

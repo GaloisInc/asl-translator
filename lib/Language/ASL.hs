@@ -172,7 +172,7 @@ simulateFunction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
               --print (WI.printSymExpr (CS.regValue re))
               let name = T.unpack (AS.funcName sig)
                   solverSymbolName = case WI.userSymbol name of
-                    Left err -> error (show err)
+                    Left err -> error $ name ++ " " ++ (show err)
                     Right symbol -> symbol
               --print (WI.printSymExpr fnexpr)
               let allArgBvs = (argBVs Ctx.:> globalBV)
@@ -189,24 +189,6 @@ simulateFunction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
               
               return $ fn
           | otherwise -> X.throwIO (UnexpectedReturnType btr)
-
-
-
-data WFException sym where
-  DanglingBoundVar :: forall sym ret. WI.BoundVar sym ret -> WFException sym
-
-data WFBoundVarEnv sym = WFBoundVarEnv [Some (WI.BoundVar sym)]
-
-newtype WFCheckM sym a = WFCheckM (ReaderT (WFBoundVarEnv sym) (ExceptT (WFException sym) IO) a)
-  deriving ( Functor
-           , Applicative
-           , Monad
-           , MonadReader (WFBoundVarEnv sym)
-           , MonadError (WFException sym)
-           )
-
-
-  
 
 -- simulateInstruction :: forall sym init globalReads globalWrites tps scope
 --                      . (CB.IsSymInterface sym, OnlineSolver scope sym)

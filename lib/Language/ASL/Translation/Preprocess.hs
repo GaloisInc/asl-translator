@@ -58,13 +58,16 @@ import qualified Control.Monad.RWS as RWS
 import qualified Data.BitVector.Sized as BVS
 import           Data.Foldable ( find )
 import           Data.List ( nub )
-import           Data.Maybe ( maybeToList, catMaybes, fromMaybe )
+import           Data.Maybe ( maybeToList, catMaybes, fromMaybe, isJust, fromJust )
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..) )
 
+import qualified Data.BitMask as BM
+import qualified Dismantle.ARM.ASL as DA ( Encoding(..), FieldConstraint(..) )
+import qualified Dismantle.Tablegen.ByteTrie as BT
 import qualified Data.Text as T
 import           Data.Traversable (forM)
 import qualified Data.Parameterized.TraversableFC as FC
@@ -823,72 +826,6 @@ globalsOfStmts stmts = let
       AS.CasePatternTuple pats -> mconcat <$> traverse casePatternGlobalVars pats
       _ -> return mempty
 
-data RegIdxMap = RegIdxMap
-  { idxR :: Map.Map T.Text RegisterKind -- from register index variable to register name
-  , opMap :: Map.Map T.Text T.Text -- from operand to register index variable
-  }
-  deriving Show
-
--- | Unpack register/index operand and setup global state to match
--- RGen generalizes R where RGen[15] is the PC.
--- (__R_temp, d_bits) = Rd
--- d = UInt(d_bits)
--- RGen[d] = __R_temp
-registerPreamble :: T.Text -> T.Text -> AS.Stmt
-registerPreamble opvar idx  =
-  let rtemp = "__R_temp"
-  in
-    letInStmt [rtemp] $
-      [ AS.StmtAssign (AS.LValTuple
-         [ AS.LValVarRef (AS.VarName rtemp)
-         , AS.LValVarRef (AS.VarName opvar)
-         ])
-           (AS.ExprCall (AS.VarName "unpackRegister") [AS.ExprVarRef (AS.VarName (opvar <> "_packed"))])
-       , AS.StmtAssign (AS.LValVarRef (AS.VarName idx))
-          (AS.ExprCall (AS.VarName "UInt")
-           [AS.ExprVarRef (AS.VarName opvar)])
-       , AS.StmtCall (AS.VarName "SETTER_RGen") [AS.ExprVarRef (AS.VarName rtemp), AS.ExprVarRef (AS.VarName idx)]
-       ]
-
--- | Pack up resulting register values.
--- RGen generalizes R where RGen[15] is the PC.
--- return (.. (RGen[d], d_bits) ..)
-registerPostamble :: T.Text -> T.Text -> AS.Expr
-registerPostamble idx opvar =
-  AS.ExprCall (AS.VarName "packRegister")
-    [ AS.ExprCall (AS.VarName "GETTER_RGen") [AS.ExprVarRef (AS.VarName idx)]
-    , AS.ExprVarRef (AS.VarName opvar)
-    ]
-
-swapROperands :: Set.Set T.Text -> [AS.Stmt] -> ([AS.Stmt], RegIdxMap)
-swapROperands opvars stmts = let
-  collectRkind :: forall t. TR.KnownSyntaxRepr t => t -> Identity (Map.Map T.Text RegisterKind)
-  collectRkind = TR.useKnownSyntaxRepr $ \syn -> \case
-    TR.SyntaxCallRepr
-      | (AS.VarName nm, [AS.ExprVarRef (AS.VarName idx)]) <- syn
-      , nm `elem` ["GETTER_R", "SETTER_R"] -> do
-        return $ Map.singleton idx RegisterR
-    _ -> return mempty
-
-  rkindMap = runIdentity $ mconcat <$> traverse (TR.collectSyntax collectRkind) stmts
-
-  collectOpMap :: forall t. TR.KnownSyntaxRepr t => t -> W.Writer (Map.Map T.Text T.Text) t
-  collectOpMap = TR.useKnownSyntaxRepr $ \syn -> \case
-   TR.SyntaxStmtRepr
-      | AS.StmtAssign (AS.LValVarRef (AS.VarName idx)) (AS.ExprCall (AS.VarName "UInt")
-          [AS.ExprVarRef (AS.VarName opvar)]) <- syn
-      , Set.member opvar opvars
-      , Just _ <- Map.lookup idx rkindMap -> do
-        W.tell $ Map.singleton opvar idx
-        return $ blockStmt [] -- erase this line, since it is subsumed by the preamble
-   _ -> return syn
-
-  (stmts', opmap) = W.runWriter (traverse (TR.traverseStmt collectOpMap) stmts)
-
-  header = map (uncurry registerPreamble) (Map.assocs opmap)
-
-  in (header ++ stmts', RegIdxMap rkindMap opmap)
-
 directVarsOfExpr :: AS.Expr -> [T.Text]
 directVarsOfExpr = \case
   AS.ExprBinOp _ e1 e2 ->
@@ -1059,12 +996,6 @@ mkSignature env sig =
     mkLabel fa@(FunctionArg _ t _) = do
       Some tp <- mkType t
       return $ Some (LabeledValue fa tp)
-        
-
-mkInstructionName :: T.Text -- ^ name of instruction
-                  -> T.Text -- ^ name of encoding
-                  -> T.Text
-mkInstructionName instName encName = instName <> "_" <> encName
 
 computeFieldType :: AS.InstructionField -> SigM ext f (Some WT.BaseTypeRepr, AS.Type)
 computeFieldType AS.InstructionField{..} = do
@@ -1074,95 +1005,90 @@ computeFieldType AS.InstructionField{..} = do
       Nothing -> error $ "Bad field width: " ++ show instFieldName ++ ", " ++ show instFieldOffset
       Just WT.LeqProof -> return $ (Some (WT.BaseBVRepr repr), AS.TypeFun "bin" (AS.ExprLitInt (WT.intValue repr)))
 
+
+
 -- | Convert an ASL instruction-encoding pair into a function, where the instruction
 -- operands are the natural arguments if the resulting function
-computeInstructionSignature :: AS.Instruction -- ^ ASL instruction
-                            -> T.Text -- ^ name of encoding
-                            -> AS.InstructionSet -- ^ target instruction set
+computeInstructionSignature :: DA.Encoding -- ^ the named constraints that identifies this specific encoding
+                            -> AS.Instruction -- ^ ASL instruction
+                            -> AS.InstructionEncoding -- ^ ASL encoding
                             -> SigM ext f (Some SomeFunctionSignature, [AS.Stmt])
-computeInstructionSignature AS.Instruction{..} encName iset = do
-  let name = mkInstructionName instName encName
+computeInstructionSignature daEnc AS.Instruction{..} enc = do
+  logMsg 2 $ T.pack $ "computeInstructionSignature: " ++ DA.encName daEnc
+  let
+    name = T.pack $ DA.encName daEnc
+    iset = AS.encInstrSet enc
+    initUnusedFields = initializeUnusedFields (AS.encFields enc) (map AS.encFields instEncodings)
+    initStmts = {- initializeEncoding daEnc ++ -} AS.encDecode enc ++ initUnusedFields
+  liftedStmts <- liftOverEnvs instName enc instExecute
 
-  let mEnc = find (\e -> AS.encName e == encName && AS.encInstrSet e == iset) instEncodings
-  case mEnc of
-    Nothing -> error $ "Invalid encoding " ++ show encName ++ " for instruction " ++ show instName
-    Just enc -> do
-      let initUnusedFields = initializeUnusedFields (AS.encFields enc) (map AS.encFields instEncodings)
-      let initStmts = AS.encDecode enc ++ initUnusedFields
-      liftedStmts <- liftOverEnvs instName enc instExecute
-      let instStmts = pruneInfeasableInstrSets (AS.encInstrSet enc) $ initStmts ++ instPostDecode ++ liftedStmts
-      let staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
-      (finalInstStmts, labeledArgs, _, Some retT) <- extractRegisterArgs enc instStmts
+  let
+    instStmts = pruneInfeasableInstrSets iset $ initStmts ++ instPostDecode ++ liftedStmts
+    staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
+  labeledArgs <- getFunctionArgSig enc
 
-      computeSignatures finalInstStmts
-      globalVars <- globalsOfStmts finalInstStmts
-      (globalReads, globalWrites) <- return $ unpackGVarRefs globalVars
-      labeledReads <- forM globalReads $ \(varName, Some varTp) -> do
-        return $ Some (LabeledValue varName varTp)
-      labeledWrites <- forM globalWrites $ \(varName, Some varTp) -> do
-        return $ Some (LabeledValue varName varTp)
-      Some globalReadReprs <- return $ Ctx.fromList labeledReads
-      Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
-      Some argReprs <- return $ Ctx.fromList labeledArgs
-      let pSig = FunctionSignature { funcName = name
-                                   , funcArgReprs = argReprs
-                                   , funcRetRepr = retT
-                                   , funcGlobalReadReprs = globalReadReprs
-                                   , funcGlobalWriteReprs = globalWriteReprs
-                                   , funcStaticVals = staticEnvMapVals staticEnv
-                                   }
-      return (Some (SomeFunctionSignature pSig), finalInstStmts)
+  computeSignatures instStmts
+  globalVars <- globalsOfStmts instStmts
+  (globalReads, globalWrites) <- return $ unpackGVarRefs globalVars
+  labeledReads <- forM globalReads $ \(varName, Some varTp) -> do
+    return $ Some (LabeledValue varName varTp)
+  labeledWrites <- forM globalWrites $ \(varName, Some varTp) -> do
+    return $ Some (LabeledValue varName varTp)
+  Some globalReadReprs <- return $ Ctx.fromList labeledReads
+  Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
+  Some argReprs <- return $ Ctx.fromList labeledArgs
+  let pSig = FunctionSignature { funcName = name
+                               , funcArgReprs = argReprs
+                               , funcRetRepr = Ctx.empty
+                               , funcGlobalReadReprs = globalReadReprs
+                               , funcGlobalWriteReprs = globalWriteReprs
+                               , funcStaticVals = staticEnvMapVals staticEnv
+                               }
+  return (Some (SomeFunctionSignature pSig), instStmts)
 
-
--- | Swap instruction field Rd for Rd_packed where Rd_packed = (R[d], Rd) and d = UInt(Rd)
--- FIXME: Actually Rd_packed is just R[d] and we need to figure out where Rd (the register index)
--- should be stored, or if we just need a single bit to indicate that R[d] is the PC
-extractRegisterArgs :: AS.InstructionEncoding
-                    -> [AS.Stmt]
-                    -> SigM ext f  ([AS.Stmt]
-                                  , [Some (LabeledValue FunctionArg CT.BaseTypeRepr)]
-                                  , [FunctionArg]
-                                  , Some (Ctx.Assignment WT.BaseTypeRepr))
-extractRegisterArgs enc stmts = do
-  let opvars = Set.fromList $ map (\(AS.InstructionField fieldName _ _) -> fieldName) (AS.encFields enc)
-  let (stmts', ridxMap) = swapROperands opvars stmts
-  (mpostambles, labeledArgs, args) <- unzip3 <$>
-    (forM (AS.encFields enc) $ \field@(AS.InstructionField fieldName _ fieldOffset) -> do
-    case Map.lookup fieldName (opMap ridxMap) of
-      Just idx -> case fieldOffset of
-        4 -> do
-          let
-            name = fieldName <> "_packed"
-            -- idxtp = AS.TypeFun "bits" (AS.ExprLitInt 4)
-            -- valtp = AS.TypeFun "bits" (AS.ExprLitInt 32)
-
-            -- Currently we treat register operands as just 32 bits,
-            -- and we invent their index as an uninterpreted value.
-            -- obviously this is wrong and needs further thought.
-            structtp = AS.TypeFun "bits" (AS.ExprLitInt 32) -- AS.TypeTuple [valtp, idxtp]
-            funarg = FunctionArg name structtp (Just $ RegisterR)
-          Some tp <- computeType structtp
-          return ( Just (registerPostamble idx fieldName, structtp)
-                 , Some (LabeledValue funarg tp)
-                 , funarg)
-        _ -> E.throwError $ UnexpectedRegisterFieldLength fieldName fieldOffset
-      _ -> do
-        (Some tp, ty) <- computeFieldType field
-        let funarg = FunctionArg fieldName ty Nothing
-        return (Nothing, Some (LabeledValue funarg tp), funarg))
-  let (retExprs, tps) = unzip $ catMaybes mpostambles
-  let retFin = AS.StmtReturn (Just (AS.ExprTuple retExprs))
-  retT <- Ctx.fromList <$> mapM (computeType) tps
-  let stmts'' = map (TR.mapSyntax (swapEOI retFin)) (stmts' ++ [retFin])
-
-  return (stmts'', labeledArgs, args, retT)
+bitMaskToASL :: BM.SomeBitMask BM.QuasiBit -> Either AS.Mask AS.BitVector
+bitMaskToASL (BM.SomeBitMask mask) =
+  let
+    bits = map getMaskBit $ BM.toList mask
+  in if all (\(_,mb) -> isJust mb) bits then Right $ map (\(_,mb) -> fromJust mb) bits
+  else Left $ map fst bits
   where
-    swapEOI :: AS.Stmt -> forall t. TR.KnownSyntaxRepr t => t -> t
-    swapEOI retFin = TR.useKnownSyntaxRepr $ \syn -> \case
-      TR.SyntaxStmtRepr
-        | AS.StmtCall (AS.VarName "EndOfInstruction") [] <- syn ->
-          retFin
-      _ -> syn
+    getMaskBit :: BM.QuasiBit -> (AS.MaskBit, Maybe Bool)
+    getMaskBit qb = case BM.unQuasiBit qb of
+      (BT.ExpectedBit True, _) -> (AS.MaskBitSet, Just True)
+      (BT.ExpectedBit False, _) -> (AS.MaskBitUnset, Just False)
+      (BT.Any, _) -> (AS.MaskBitEither, Nothing)
+
+initializeEncoding :: DA.Encoding -> [AS.Stmt]
+initializeEncoding daEnc =
+  map addConstraint (DA.encConstraint daEnc)
+  ++ concat (map (map addNegConstraint) (DA.encNegConstraints daEnc))
+  where
+    nameOf :: DA.FieldConstraint -> AS.QualifiedIdentifier
+    nameOf fc = AS.VarName (T.pack $ DA.cFieldName fc)
+
+    addConstraint :: DA.FieldConstraint -> AS.Stmt
+    addConstraint fc = case bitMaskToASL (DA.cFieldMask fc) of
+      Left mask ->
+        AS.StmtAssert (AS.ExprBinOp AS.BinOpEQ (AS.ExprVarRef (nameOf fc)) (AS.ExprLitMask mask))
+      Right bv ->
+        AS.StmtAssign (AS.LValVarRef (nameOf fc)) (AS.ExprLitBin bv)
+
+    addNegConstraint :: DA.FieldConstraint -> AS.Stmt
+    addNegConstraint fc = case bitMaskToASL (DA.cFieldMask fc) of
+      Left mask ->
+        AS.StmtAssert (AS.ExprBinOp AS.BinOpNEQ (AS.ExprVarRef (nameOf fc)) (AS.ExprLitMask mask))
+      Right bv ->
+        AS.StmtAssert (AS.ExprBinOp AS.BinOpNEQ (AS.ExprVarRef (nameOf fc)) (AS.ExprLitBin bv))
+
+
+getFunctionArgSig :: AS.InstructionEncoding
+                     -> SigM ext f [Some (LabeledValue FunctionArg CT.BaseTypeRepr)]
+getFunctionArgSig enc =
+  forM (AS.encFields enc) $ \field -> do
+    (Some tp, ty) <- computeFieldType field
+    let funarg = FunctionArg (AS.instFieldName field) ty Nothing
+    return (Some (LabeledValue funarg tp))
 
 -- | According to the 'dependentVariableHints', lift the given instruction body
 -- over all possible assignments to the given variables in the "decode" section
@@ -1215,9 +1141,9 @@ liftOverEnvs instName enc stmts = case dependentVariablesOfStmts stmts of
       let optvarasns = catMaybes $ map (optvarToStatic asns) optvars
       return $ (varasns ++ optvarasns)
     in do
-      logMsg 3 $ "Lifting " <> instName <> " over dependent variables:" <> T.pack (show (vars', optvars'))
+      logMsg 2 $ "Lifting " <> instName <> " over dependent variables:" <> T.pack (show (vars', optvars'))
       possibleEnvs <- return $ getPossibleVarValues vartps vars optvars decodes
-      logMsg 3 $ "Possible environments found: " <> T.pack (show possibleEnvs)
+      logMsg 2 $ "Possible environments found: " <> T.pack (show possibleEnvs)
       case cases possibleEnvs of
         [] -> E.throwError $ FailedToDetermineStaticEnvironment vars
         x -> return $ [staticEnvironmentStmt x stmts]
