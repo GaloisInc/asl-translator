@@ -583,9 +583,9 @@ executionFeatures :: sym ~ CBO.OnlineBackend scope solver fs
 executionFeatures nm sym = do
   gft <- CSP.pathSatisfiabilityFeature sym (CBO.considerSatisfiability sym)
   -- FIXME: What is the general requirement here?
-  let psf = if nm `elem` ["aarch32_VLDM_A_aarch32_VLDM_T1A1_A","aarch32_VMOV_r_A_aarch32_VMOV_r_T2A2_A"
-                         , "aarch32_VSTM_A_aarch32_VSTM_T1A1_A", "aarch32_VMOV_i_A_aarch32_VMOV_i_A2_A"
-                         , "aarch32_VMOV_i_A_aarch32_VMOV_i_T2_A"
+  let psf = if nm `elem` [ "VLDMDB_A1", "VLDM_A1", "FLDMDBX_A1"
+                         , "FLDMIAX_A1", "FSTMDBX_A1", "FSTMIAX_A1"
+                         , "VSTMDB_A1", "VSTM_A1"
                          ]
         then [CS.genericToExecutionFeature gft] else []
   timeout <- CS.genericToExecutionFeature <$> CS.timeoutFeature (5.00 :: NominalDiffTime)
