@@ -73,15 +73,15 @@ import qualified What4.BaseTypes as WT
 
 import qualified Language.ASL.Syntax as AS
 
-
 import           Language.ASL.Signature
 import           Language.ASL.Types
 import           Language.ASL.StaticExpr as SE
 
-import           Language.ASL.SyntaxTraverse ( logMsg, unindentLog )
 import qualified Language.ASL.SyntaxTraverse as TR
 import qualified Language.ASL.SyntaxTraverse as AS ( pattern VarName )
 import           Language.ASL.SyntaxTraverse (mkFunctionName)
+
+import           Util.Log ( MonadLog(..), MonadLogIO, LogCfg, runMonadLogIO, indentLog, unindentLog  )
 
 data Definitions arch =
   Definitions { defSignatures :: Map.Map T.Text (SomeSimpleFunctionSignature, [AS.Stmt])
@@ -172,14 +172,15 @@ asDefType def =
     _ -> Nothing
 
 -- | Monad for computing ASL signatures of 'AS.Definition's.
-newtype SigM ext f a = SigM { getSigM ::  E.ExceptT SigException (TR.MonadLogT (RWS.RWS SigEnv () SigState)) a }
+newtype SigM ext f a =
+  SigM { getSigM :: E.ExceptT SigException (RWS.RWST SigEnv () SigState MonadLogIO) a }
   deriving ( Functor
            , Applicative
            , Monad
            , RWS.MonadReader SigEnv
            , RWS.MonadState SigState
            , E.MonadError SigException
-           , TR.MonadLog
+           , MonadLog
            )
 
 instance F.MonadFail (SigM ext f) where
@@ -487,25 +488,23 @@ initializeSigM ASLSpec{..} = do
       RWS.modify' $ \s -> s { globalVars = insertUnique globalname (Some tp) (globalVars s) }
       return $ Map.singleton nm globalname
 
-buildSigState :: ASLSpec -> (SigEnv, SigState)
-buildSigState spec =
-  let env = (buildEnv spec) in
-  case runSigM env (buildInitState spec) 0 (initializeSigM spec) of
-    ((Left err, _), log') -> error $ "Unexpected exception when initializing SigState: " ++ show err ++ show log'
-    ((Right _, state), _) -> (env, state)
+buildSigState :: ASLSpec -> LogCfg -> IO (SigEnv, SigState)
+buildSigState spec logCfg = do
+  let env = (buildEnv spec)
+  runSigM (initializeSigM spec) env (buildInitState spec) logCfg  >>= \case
+    (Left err, _) -> error $ "Unexpected exception when initializing SigState: " ++ show err
+    (Right _, state) -> return (env, state)
 
-runSigM :: SigEnv
+runSigM :: SigM ext f a
+        -> SigEnv
         -> SigState
-        -> Integer
-        -> SigM ext f a
-        -> ((Either SigException a, SigState), [T.Text])
-runSigM env state logLvl action =
-  let rws = TR.runMonadLogT (E.runExceptT (getSigM action)) logLvl
-      ((e, log'), s, _) = RWS.runRWS rws env state
-  in (case e of
-    Left err -> (Left err, s)
-    Right a -> (Right a, s), log')
-
+        -> LogCfg
+        -> IO (Either SigException a, SigState)
+runSigM (SigM m) env state logCfg = do
+  (result, s, _) <- runMonadLogIO (RWS.runRWST (E.runExceptT m) env state) logCfg
+  case result of
+    Left err -> return $ (Left err, s)
+    Right a -> return $ (Right a, s)
 
 data SigEnv = SigEnv { envCallables :: Map.Map T.Text Callable
                      , enums :: Map.Map T.Text Integer
@@ -769,7 +768,7 @@ callableGlobalVars c = do
 
 collectStmts :: forall w m
               . Monoid w
-             => TR.MonadLog m
+             => MonadLog m
              => T.Text
              -> (forall t. TR.KnownSyntaxRepr t => t -> m w)
              -> [AS.Stmt]

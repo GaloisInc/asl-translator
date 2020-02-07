@@ -74,7 +74,6 @@ import           Language.ASL.Signature
 import           Language.ASL.Types
 import           Language.ASL.StaticExpr as SE
 import           Language.ASL.Translation.Preprocess
-import           Language.ASL.SyntaxTraverse ( logMsg, indentLog, unindentLog )
 import qualified Language.ASL.SyntaxTraverse as TR
 import qualified Language.ASL.SyntaxTraverse as AS ( pattern VarName )
 
@@ -84,6 +83,8 @@ import qualified Data.STRef as STRef
 
 import           What4.Utils.Log ( MonadHasLogCfg(..), LogLevel(..), LogCfg, logTrace )
 import qualified What4.Utils.Log as Log
+
+import           Util.Log ( MonadLog(..), logMsg, logIntToLvl, indentLog, unindentLog )
 
 -- | This wrapper is used as a uniform return type in 'lookupVarRef', as each of
 -- the lookup types (arguments, locals, or globals) technically return different
@@ -231,21 +232,15 @@ newtype Generator h s arch ret a = Generator
 instance MonadHasLogCfg (Generator h s arch ret) where
   getLogCfgM = MSS.gets tsLogCfg
 
-intToLogLvl :: Integer -> LogLevel
-intToLogLvl i = case i of
-  0 -> Info
-  1 -> Debug
-  _ -> Warn
-
 instance MST.MonadST h (Generator h s arch ret) where
   liftST m = Generator $ MT.lift $ MST.liftST m
 
 -- FIXME: replace ST with IO for logging
-instance TR.MonadLog (Generator h s arch ret) where
+instance MonadLog (Generator h s arch ret) where
   logMsg logLvl msg = do
     logCfg <- getLogCfgM
     Log.withLogCfg logCfg $ do
-      logTrace (intToLogLvl logLvl) (T.unpack msg) `seq` return ()
+      logTrace (logIntToLvl logLvl) (T.unpack msg) `seq` return ()
   
   logIndent _f = return 0
 

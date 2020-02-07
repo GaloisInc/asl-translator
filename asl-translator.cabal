@@ -53,6 +53,7 @@ library asl-translator-lib
                        Language.ASL.SyntaxTraverse
                        Language.ASL.Types
                        Language.ASL.StaticExpr
+                       Util.Log
   hs-source-dirs:      lib
   ghc-options:         -Wcompat -Wall
 

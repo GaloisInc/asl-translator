@@ -6,7 +6,6 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TypeApplications #-}
@@ -40,6 +39,7 @@ import           Control.Monad (forM_, when)
 import qualified Control.Monad.State.Lazy as MSS
 import qualified Control.Monad.Except as E
 import           Control.Monad.IO.Class
+import qualified Control.Monad.Fail as MF
 
 import           Data.Map ( Map )
 import qualified Data.Map.Strict as Map
@@ -97,10 +97,10 @@ import qualified Text.PrettyPrint.ANSI.Leijen as LPP
 import           What4.Utils.Log ( HasLogCfg, LogLevel(..), LogCfg, withLogCfg )
 import qualified What4.Utils.Log as Log
 import qualified What4.Utils.Util as U
+import           Util.Log ( MonadLog(..), logIntToLvl, logMsgStr )
 
 data TranslatorOptions = TranslatorOptions
   { optVerbosity :: Integer
-  , optStartIndex :: Int
   , optNumberOfInstructions :: Maybe Int
   , optFilters :: Filters
   , optCollectAllExceptions :: Bool
@@ -141,7 +141,7 @@ runWithFilters opts = do
     ++ show (length $ aslSupportDefinitions spec) ++ " support definitions and "
     ++ show (length $ aslExtraDefinitions spec) ++ " extra definitions and "
     ++ show (length $ aslRegisterDefinitions spec) ++ " register definitions."
-  let (sigEnv, sigState) = buildSigState spec
+  (sigEnv, sigState) <- buildSigState spec (optLogCfg opts)
   runWithFilters' opts spec sigEnv sigState
 
 data BuilderData t = NoBuilderData
@@ -184,40 +184,38 @@ runWithFilters' :: HasCallStack
                 -> SigState
                 -> IO (SomeSigMap)
 runWithFilters' opts spec sigEnv sigState = do
-  let startidx = optStartIndex opts
   let numInstrs = optNumberOfInstructions opts
-  let getInstr (instr, enc, iset) = do
+  let doInstrFilter (daEnc, (instr, enc)) = do
         let test = instrFilter $ optFilters $ opts
-        let ident = instrToIdent instr enc iset
-        if test ident then Just (ident, instr) else Nothing
-  let allInstrs = imap (\i -> \nm -> (i,nm)) $ mapMaybe getInstr (collectInstructions (aslInstructions spec))
-  let instrs = case numInstrs of {Just i -> take i (drop startidx allInstrs); _ -> drop startidx allInstrs}
+        test (instrToIdent daEnc instr enc)
+
+  let encodings = filter doInstrFilter $ getEncodingConstraints (aslInstructions spec)
   execSigMapWithScope opts sigState sigEnv $ do
     addMemoryUFs
-    forM_ instrs $ \(i, (ident, instr)) -> do
-      logMsg 0 $ "Processing instruction: " ++ prettyIdent ident
-        ++ "\n" ++ show i ++ "/" ++ show (length allInstrs)
-      runTranslation instr ident
+    forM_ (zip [1..] encodings) $ \(i :: Int, (daEnc, (instr, instrEnc))) -> do
+      logMsgStr 0 $ "Processing instruction: " ++ DA.encName daEnc
+        ++ "\n" ++ show i ++ "/" ++ show (length encodings)
+      runTranslation daEnc instr instrEnc
 
-
-
-runTranslation :: AS.Instruction
-               -> InstructionIdent
+runTranslation :: DA.Encoding
+               -> AS.Instruction
+               -> AS.InstructionEncoding
                -> SigMapM sym arch ()
-runTranslation instruction@AS.Instruction{..} instrIdent = do
-  logMsg 1 $ "Computing instruction signature for: " ++ show instrIdent
+runTranslation daEnc instr instrEnc = do
+  let instrIdent = instrToIdent daEnc instr instrEnc
+  logMsgStr 1 $ "Computing instruction signature for: " ++ prettyIdent instrIdent
   result <- liftSigM (KeyInstr instrIdent) $
-    computeInstructionSignature instruction (iEnc instrIdent) (iSet instrIdent)
+    computeInstructionSignature daEnc instr instrEnc
   case result of
     Left err -> do
-      logMsg (-1) $ "Error computing instruction signature: " ++ show err
+      logMsgStr (-1) $ "Error computing instruction signature: " ++ show err
     Right (Some (SomeFunctionSignature iSig), instStmts) -> do
       liftSigM (KeyInstr instrIdent) getDefinitions >>= \case
         Left err -> do
-          logMsg (-1) $ "Error computing ASL definitions: " ++ show err
+          logMsgStr (-1) $ "Error computing ASL definitions: " ++ show err
         Right defs -> do
-          logMsg 1 $ "Translating instruction: " ++ prettyIdent instrIdent
-          logMsg 1 $ (show iSig)
+          logMsgStr 1 $ "Translating instruction: " ++ prettyIdent instrIdent
+          logMsgStr 1 $ (show iSig)
           mfunc <- translateFunction (KeyInstr instrIdent) iSig instStmts defs
           let deps = maybe Set.empty AC.funcDepends mfunc
           MSS.gets (optTranslationDepth . sOptions) >>= \case
@@ -256,13 +254,13 @@ translationLoop fromInstr callStack defs (fnname, env) = do
             return Set.empty
           Right (Some ssig@(SomeFunctionSignature sig), stmts) -> do
             MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some ssig) (sMap s) }
-            logMsg 1 $ "Translating function: " ++ show finalName ++ " for instruction: "
+            logMsgStr 2 $ "Translating function: " ++ show finalName ++ " for instruction: "
                ++ prettyIdent fromInstr
                ++ "\n CallStack: " ++ show callStack
                ++ "\n" ++ show sig ++ "\n"
             mfunc <- translateFunction (KeyFun finalName) sig stmts defs
             let deps = maybe Set.empty AC.funcDepends mfunc
-            logMsg 1 $ "Function Dependencies: " ++ show deps
+            logMsgStr 2 $ "Function Dependencies: " ++ show deps
             MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
             alldeps <- mapM (translationLoop fromInstr (finalName : callStack) defs) (Set.toList deps)
             let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
@@ -351,7 +349,7 @@ translateFunction :: ElemKey
                   -> Definitions arch
                   -> SigMapM sym arch (Maybe (AC.Function arch globalReads globalWrites init tps))
 translateFunction key sig stmts defs = do
-  logMsg 1 $ "Rough function body size:" ++ show (measureStmts stmts)
+  logMsgStr 1 $ "Rough function body size:" ++ show (measureStmts stmts)
   handleAllocator <- MSS.gets sHandleAllocator
   logLvl <- MSS.gets (optVerbosity . sOptions)
   catchIO key $ AC.functionToCrucible defs sig handleAllocator stmts logLvl
@@ -434,7 +432,7 @@ simulateFunction :: forall arch sym globalReads globalWrites init tps
                  -> AC.Function arch globalReads globalWrites init tps
                  -> SigMapM sym arch ()
 simulateFunction key p = do
-  logMsg 1 $ "Simulating: " ++ prettyKey key
+  logMsg 1 $ "Simulating: " <> T.pack (prettyKey key)
   isCheck <- MSS.gets (optCheckSerialization . sOptions)
   opts <- MSS.gets sOptions
   logCfg <- MSS.gets (optLogCfg . sOptions)
@@ -506,7 +504,7 @@ getASL opts = do
 logMsgIO :: HasCallStack => TranslatorOptions -> Integer -> String -> IO ()
 logMsgIO opts logLvl msg = do
   let logCfg = optLogCfg opts
-  Log.writeLogEvent logCfg Ghc.callStack (intToLogLvl logLvl) msg
+  Log.writeLogEvent logCfg Ghc.callStack (logIntToLvl logLvl) msg
 
 isKeySimFilteredOut :: InstructionIdent -> ElemKey -> SigMapM sym arch Bool
 isKeySimFilteredOut fromInstr key = case key of
@@ -699,42 +697,51 @@ data SigMap scope arch where
             , sHandleAllocator :: CFH.HandleAllocator
             } -> SigMap scope arch
 
+getInstructionMap :: [AS.Instruction] -> Map.Map String (AS.Instruction, AS.InstructionEncoding)
+getInstructionMap instrs = Map.fromList $ concat $
+  map (\instr -> [ (encodingIdentifier instr enc, (instr, enc)) | enc <- AS.instEncodings instr ] ) instrs
+
+getEncodingConstraints :: [AS.Instruction] -> [(DA.Encoding, (AS.Instruction, AS.InstructionEncoding))]
+getEncodingConstraints instrs = map getEnc $ Map.elems A32.aslEncodingMap
+  where
+    instructionMap = getInstructionMap instrs
+
+    getEnc :: DA.Encoding -> (DA.Encoding, (AS.Instruction, AS.InstructionEncoding))
+    getEnc enc = case Map.lookup (DA.encASLIdent enc) instructionMap of
+      Just instr -> (enc, instr)
+      Nothing -> error $ "Missing encoding for: " ++ show (DA.encASLIdent enc)
+
 data SomeSigMap where
   SomeSigMap :: forall scope arch. SigMap scope arch -> SomeSigMap
 
-type SigMapM scope arch a = MSS.StateT (SigMap scope arch) IO a
+newtype SigMapM scope arch a = SigMapM (MSS.StateT (SigMap scope arch) IO a)
+  deriving ( Functor
+           , Applicative
+           , Monad
+           , MSS.MonadState (SigMap scope arch)
+           , MonadIO
+           , MF.MonadFail
+           )
+
+instance MonadLog (SigMapM scope arch) where
+  logMsg logLvl msg = do
+    logCfg <- MSS.gets (optLogCfg . sOptions)
+    liftIO $ Log.logIOWith logCfg (logIntToLvl logLvl) (T.unpack msg)
 
 execSigMapM :: SigMapM scope arch a -> SigMap scope arch -> IO (SigMap scope arch)
-execSigMapM m = MSS.execStateT m
-
-intToLogLvl :: Integer -> LogLevel
-intToLogLvl i = case i of
-  0 -> Info
-  1 -> Debug
-  _ -> Warn
-
-logMsg :: HasCallStack => Integer -> String -> SigMapM scope arch ()
-logMsg logLvl msg = do
-  logCfg <- MSS.gets (optLogCfg . sOptions)
-  liftIO $ Log.writeLogEvent logCfg Ghc.callStack (intToLogLvl logLvl) msg
-  
-printLog :: [T.Text] -> SigMapM scope arch ()
-printLog [] = return ()
-printLog log' = liftIO $ putStrLn (T.unpack $ T.unlines log')
+execSigMapM (SigMapM m) = MSS.execStateT m
 
 liftSigM :: ElemKey -> SigM ext f a -> SigMapM scope arch (Either SigException a)
 liftSigM k f = do
   state <- MSS.gets sigState
   env <- MSS.gets sigEnv
-  logLvl <- MSS.gets (optVerbosity . sOptions)
-  let ((result, state'), log') = runSigM env state logLvl f
+  logCfg <- MSS.gets (optLogCfg . sOptions)
+  (result, state') <- liftIO $ runSigM f env state logCfg
   case result of
     Right a -> do
-      when (logLvl >= 5) $ printLog log'
       MSS.modify' $ \s -> s { sigState = state' }
       return $ Right a
     Left err -> do
-      printLog log'
       collectExcept k (SExcept k err)
       return $ Left err
 
