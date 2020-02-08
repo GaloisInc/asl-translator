@@ -1795,13 +1795,18 @@ translateIfExpr ov orig clauses elseExpr ty =
           atom <- mkAtom (CCG.App (CCE.BaseIte btr (CCG.AtomExpr testA) (CCG.AtomExpr resA) (CCG.AtomExpr trA)))
           return (Some atom, ext)
 
-maskToBV :: AS.Mask -> AS.BitVector
-maskToBV mask = map maskBitToBit mask
+maskToBVs :: AS.Mask -> (AS.Expr, AS.Expr)
+maskToBVs mask = (AS.ExprLitBin $ map maskBitToSet mask, AS.ExprLitBin $ map maskBitToRequired mask)
   where
-    maskBitToBit mb = case mb of
+    maskBitToSet mb = case mb of
       AS.MaskBitSet -> True
       AS.MaskBitUnset -> False
       AS.MaskBitEither -> False
+
+    maskBitToRequired mb = case mb of
+       AS.MaskBitSet -> True
+       AS.MaskBitUnset -> True
+       AS.MaskBitEither -> False
 
 -- | Translate set element tests
 --
@@ -1816,11 +1821,17 @@ translateSetElementTest :: Overrides arch
 translateSetElementTest ov e0 a0 elt =
   case elt of
     AS.SetEltSingle expr@(AS.ExprLitMask mask) -> do
-      let maskExpr = AS.ExprLitBin (maskToBV mask)
-      Some maskAtom <- translateExpr ov maskExpr
-      Refl <- assertAtomType expr (CCG.typeOfAtom a0) maskAtom
-      Some maskedBV <- bvBinOp CCE.BVOr (e0, a0) (maskExpr, maskAtom)
-      Some testAtom <- applyBinOp eqOp (e0, a0) (AS.ExprBinOp AS.BinOpBitwiseOr e0 expr, maskedBV)
+      let ty = CCG.typeOfAtom a0
+      let (setMaskE, requiredMaskE) = maskToBVs mask
+      Some setMask <- translateExpr ov setMaskE
+      Some requiredMask <- translateExpr ov requiredMaskE
+      Refl <- assertAtomType setMaskE ty setMask
+      Refl <- assertAtomType requiredMaskE ty requiredMask
+      -- zero-out 'either' bits from the mask in our source bitvector
+      Some maskedBV <- bvBinOp CCE.BVAnd (e0, a0) (requiredMaskE, requiredMask)
+      -- test if the result is equivalent to the mandatory set bits from the mask
+      Some testAtom <- applyBinOp eqOp
+        (AS.ExprBinOp AS.BinOpBitwiseAnd e0 requiredMaskE, maskedBV) (setMaskE, setMask)
       Refl <- assertAtomType expr CT.BoolRepr testAtom
       return (CCG.AtomExpr testAtom)
 

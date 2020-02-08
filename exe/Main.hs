@@ -43,9 +43,11 @@ main = do
         ASL.SomeSigMap sm <- ASL.runWithFilters opts
         ASL.reportStats statOpts sm
         ASL.serializeFormulas opts sm)
-        `X.catch` (\(e :: X.SomeException) -> do
+        `X.catch` \(e :: X.SomeException) -> do
                       Log.logIOWith logCfg Log.Error (show e)
-                      exitFailure)
+                      Log.logEndWith logCfg
+                      exitFailure
+      Log.logEndWith logCfg
   where
     applyOption (Just (opts, statOpts)) arg = case arg of
       Left f -> do

@@ -586,6 +586,9 @@ executionFeatures nm sym = do
   let psf = if nm `elem` [ "VLDMDB_A1", "VLDM_A1", "FLDMDBX_A1"
                          , "FLDMIAX_A1", "FSTMDBX_A1", "FSTMIAX_A1"
                          , "VSTMDB_A1", "VSTM_A1"
+                         , "VLDMDB_T1", "VLDM_T1", "FLDMDBX_T1"
+                         , "FLDMIAX_T1", "FSTMDBX_T1", "FSTMIAX_T1"
+                         , "VSTMDB_T1", "VSTM_T1"
                          ]
         then [CS.genericToExecutionFeature gft] else []
   timeout <- CS.genericToExecutionFeature <$> CS.timeoutFeature (5.00 :: NominalDiffTime)

@@ -62,6 +62,7 @@ import qualified Language.ASL.Parser as AP
 import qualified Language.ASL.Syntax as AS
 import           System.Exit (exitFailure)
 
+import qualified Dismantle.ARM.T32 as T32
 import qualified Dismantle.ARM.A32 as A32
 import qualified Dismantle.ARM.ASL as DA ( Encoding(..) )
 import           Dismantle.ARM.ASL ( encodingIdentifier )
@@ -701,7 +702,9 @@ getInstructionMap instrs = Map.fromList $ concat $
   map (\instr -> [ (encodingIdentifier instr enc, (instr, enc)) | enc <- AS.instEncodings instr ] ) instrs
 
 getEncodingConstraints :: [AS.Instruction] -> [(DA.Encoding, (AS.Instruction, AS.InstructionEncoding))]
-getEncodingConstraints instrs = map getEnc $ Map.elems A32.aslEncodingMap
+getEncodingConstraints instrs =
+  map getEnc (Map.elems A32.aslEncodingMap)
+  ++ map getEnc (Map.elems T32.aslEncodingMap)
   where
     instructionMap = getInstructionMap instrs
 
@@ -780,7 +783,9 @@ getSimulationMode mode = case mode of
   "all" -> return $ simulateAll
   "instructions" -> return $ simulateInstructions
   "none" -> return $ simulateNone
-  _ -> fail ""
+  _ -> case List.splitOn "/" mode of
+    [instr, enc] -> return $ simulateOnlyInstr (T.pack instr, T.pack enc)
+    _ -> fail ""
 
 noFilter :: Filters
 noFilter = Filters
@@ -826,6 +831,13 @@ simulateInstructions f =
   f { funSimFilter = \_ _ -> False
     , instrSimFilter = \_ -> True
     }
+
+simulateOnlyInstr :: (T.Text, T.Text) -> Filters -> Filters
+simulateOnlyInstr inm f =
+  f { funSimFilter = (\(InstructionIdent nm enc _ _) -> \_ -> inm == (nm, enc))
+    , instrSimFilter = (\(InstructionIdent nm enc _ _) -> (nm, enc) == inm)
+    }
+
 
 simulateNone :: Filters -> Filters
 simulateNone f =
