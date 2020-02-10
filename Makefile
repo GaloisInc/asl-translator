@@ -35,7 +35,7 @@ spec: ${SOURCE_FILES}
 
 ./output/formulas.what4: spec ${HS_SOURCES}
 	cabal v2-build asl-translator-lib
-	cabal v2-run asl-translator -- --output-formulas="$@" --asl-spec="${PARSED}/" --check-serialization
+	cabal v2-run asl-translator -- --output-formulas="$@" --asl-spec="${PARSED}/" --check-serialization --parallel
 
 all: ./output/formulas.what4
 
