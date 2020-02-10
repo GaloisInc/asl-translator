@@ -475,7 +475,8 @@ doSimulation opts handleAllocator key p = do
     when isCheck $ B.startCaching backend
     logMsgIO opts 2 $ "Simulating: " ++ (prettyKey key)
     U.SomeSome symFn <- trySimulation cfg
-    let (serializedSymFn, fenv) = WP.printSymFn' symFn
+    (serializedSymFn, fenv) <- return $ WP.printSymFn' symFn
+    logMsgIO opts 2 $ "Serialized formula size: " ++ show (T.length serializedSymFn)
     when isCheck $ Log.withLogCfg logCfg $ do
       WP.readSymFn (mkParserConfig backend fenv) serializedSymFn >>= \case
         Left err -> X.throw $ SimulationDeserializationFailure (show err) serializedSymFn
@@ -486,7 +487,7 @@ doSimulation opts handleAllocator key p = do
               X.throw $ SimulationDeserializationMismatch serializedSymFn e1 e2 env
             _ -> do
               logMsgIO opts 2 $ "Deserialized function matches."
-    return $ serializedSymFn
+    return $! serializedSymFn
 
 
 -- | Simulate the given crucible CFG, and if it is a function add it to
