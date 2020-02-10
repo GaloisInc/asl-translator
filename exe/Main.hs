@@ -40,7 +40,7 @@ main = do
     Just (opts', statOpts) -> do
       Log.withLogging "main" (logEventConsumer opts') $ do
         let opts = opts' { optLogCfg = Log.getLogCfg }
-        ASL.SomeSigMap sm <- ASL.runWithFilters opts
+        sm <- ASL.runWithFilters opts
         ASL.reportStats statOpts sm
         ASL.serializeFormulas opts sm
   where
