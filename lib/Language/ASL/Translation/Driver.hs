@@ -170,8 +170,8 @@ serializeFormulas opts (sFormulaPromises -> promises) = do
   logMsgIO opts 0 $ "Serialization successful."
   when (optCheckSerialization opts) $ checkSerialization opts
   where
-    getFormula :: (T.Text, MVar (Either SimulationException T.Text)) -> IO T.Text
-    getFormula (name, mvar) = takeMVar mvar >>= \case
+    getFormula :: (T.Text, IO (Either SimulationException T.Text)) -> IO T.Text
+    getFormula (name, getresult) = getresult >>= \case
       Left err -> X.throw err
       Right result -> return $ T.concat ["(\"", name, "\" ", result, ")"]
 
@@ -396,10 +396,9 @@ data SomeSymFn where
 addFormula :: T.Text -> B.ExprSymFn scope args ret -> SigMapM arch ()
 addFormula name' symFn = do
   let name = "uf." <> name'
-  mvar <- liftIO $ newEmptyMVar
   let (serializedSymFn, _) = WP.printSymFn' symFn
-  liftIO $ putMVar mvar (Right serializedSymFn)
-  MSS.modify $ \st -> st { sFormulaPromises = (name, mvar) : (sFormulaPromises st) }
+  let result = return (Right serializedSymFn)
+  MSS.modify $ \st -> st { sFormulaPromises = (name, result) : (sFormulaPromises st) }
 
 data SimulationException where
   SimulationDeserializationFailure :: String -> T.Text -> SimulationException
@@ -499,26 +498,31 @@ simulateFunction :: forall arch sym globalReads globalWrites init tps
 simulateFunction key p = do
   opts <- MSS.gets sOptions
   halloc <- MSS.gets sHandleAllocator
-  f <- getExceptionFilter
-  
-  mvar <- liftIO $ do
-    mvar <- newEmptyMVar
-    tid <- IO.myThreadId
-    if (optParallel opts) then
-      void $ IO.forkFinally (doSimulation opts halloc key p) $ \case
-        Left ex
-          | Just (e :: SimulationException) <- X.fromException ex
-          , f key (SimExcept key e) -> putMVar mvar (Left e)
-        Left ex -> do
-          logMsgIO opts (-1) $ show ex
-          IO.throwTo tid ex
-        Right result -> putMVar mvar (Right result)
-    else do
-      result <- doSimulation opts halloc key p
-      putMVar mvar (Right result)
-    return mvar
+ 
   let name = T.pack $ "uf." ++ prettyKey key
-  MSS.modify $ \st -> st { sFormulaPromises = (name, mvar) : (sFormulaPromises st) }
+  let doSim = doSimulation opts halloc key p
+  getresult <- case optParallel opts of
+    True -> forkedResult doSim
+    False -> (return . Right) <$> liftIO doSim
+  MSS.modify $ \st -> st { sFormulaPromises = (name, getresult) : (sFormulaPromises st) }
+  where
+    forkedResult :: IO T.Text
+                 -> SigMapM arch (IO (Either SimulationException T.Text))
+    forkedResult f = do
+      opts <- MSS.gets sOptions
+      exf <- getExceptionFilter
+      liftIO $ do
+        mvar <- newEmptyMVar
+        tid <- IO.myThreadId
+        void $ IO.forkFinally f $ \case
+          Left ex
+            | Just (e :: SimulationException) <- X.fromException ex
+            , exf key (SimExcept key e) -> putMVar mvar (Left e)
+          Left ex -> do
+            logMsgIO opts (-1) $ show ex
+            IO.throwTo tid ex
+          Right result -> putMVar mvar (Right result)
+        return (takeMVar mvar)
 
 getASL :: TranslatorOptions -> IO (ASLSpec)
 getASL opts = do
@@ -740,7 +744,7 @@ data SigMap arch where
             , funDeps :: Map.Map T.Text (Set.Set T.Text)
             , sOptions :: TranslatorOptions
             , sHandleAllocator :: CFH.HandleAllocator
-            , sFormulaPromises :: [(T.Text, MVar (Either SimulationException T.Text))]
+            , sFormulaPromises :: [(T.Text, IO (Either SimulationException T.Text))]
             } -> SigMap arch
 
 getInstructionMap :: [AS.Instruction] -> Map.Map String (AS.Instruction, AS.InstructionEncoding)
