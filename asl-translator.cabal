@@ -66,15 +66,35 @@ executable asl-translator
                        what4-serialize,
                        asl-translator-lib
   hs-source-dirs:      exe
-  ghc-options:         -Wcompat -Wall
+  ghc-options:         -Wcompat -Wall -O2 -threaded -rtsopts "-with-rtsopts=-N"
   default-language: Haskell2010
 
-test-suite asl-translator-tests
-  type: exitcode-stdio-1.0
+common tests-common
   hs-source-dirs: tests
-  main-is: Main.hs
   default-language: Haskell2010
   build-depends:       base >= 4.10.0.0 && < 5,
                        filepath,
                        what4-serialize,
                        asl-translator-lib
+
+test-suite asl-translator-tests
+  type: exitcode-stdio-1.0
+  hs-source-dirs: tests/Translation
+  default-language: Haskell2010
+  build-depends:       base >= 4.10.0.0 && < 5,
+                       filepath,
+                       what4-serialize,
+                       asl-translator-lib
+  main-is: Main.hs
+
+test-suite asl-translator-deserialize-test
+  type: exitcode-stdio-1.0
+  hs-source-dirs: tests/Deserialize
+  default-language: Haskell2010
+  build-depends:       base >= 4.10.0.0 && < 5,
+                       filepath,
+                       what4-serialize,
+                       what4,
+                       parameterized-utils,
+                       asl-translator-lib
+  main-is: Main.hs

@@ -25,7 +25,7 @@ import Debug.Trace
 
 main :: HasCallStack => IO ()
 main = do
-  logCfg <- Log.mkLogCfg "main"
+  nonLogCfg <- Log.mkNonLogCfg
   stringArgs <- IO.getArgs
   let (args, rest, errs) = getOpt Permute arguments stringArgs
 
@@ -33,21 +33,16 @@ main = do
     usage
     exitFailure
 
-  case foldl applyOption (Just (defaultOptions logCfg, defaultStatOptions)) args of
+  case foldl applyOption (Just (defaultOptions nonLogCfg, defaultStatOptions)) args of
     Nothing -> do
       usage
       exitFailure
-    Just (opts, statOpts) -> do
-      mkLogEventConsumer opts
-      (do 
+    Just (opts', statOpts) -> do
+      Log.withLogging "main" (logEventConsumer opts') $ do
+        let opts = opts' { optLogCfg = Log.getLogCfg }
         ASL.SomeSigMap sm <- ASL.runWithFilters opts
         ASL.reportStats statOpts sm
-        ASL.serializeFormulas opts sm)
-        `X.catch` \(e :: X.SomeException) -> do
-                      Log.logIOWith logCfg Log.Error (show e)
-                      Log.logEndWith logCfg
-                      exitFailure
-      Log.logEndWith logCfg
+        ASL.serializeFormulas opts sm
   where
     applyOption (Just (opts, statOpts)) arg = case arg of
       Left f -> do
@@ -58,14 +53,14 @@ main = do
         return $ (opts, statOpts')
     applyOption Nothing _ = Nothing
 
-mkLogEventConsumer :: TranslatorOptions -> IO ()
-mkLogEventConsumer opts = void $ IO.forkIO $
+logEventConsumer :: TranslatorOptions -> Log.LogCfg -> IO ()
+logEventConsumer opts logCfg =
   (Log.consumeUntilEnd (intToLogLvlFilter (optVerbosity opts)) $ \e -> do
     if optVerbosity opts > 1 then
       traceIO (Log.prettyLogEvent e)
     else
       traceIO (simpleLogEvent e)
-    IO.hFlush IO.stderr) (optLogCfg opts)
+    IO.hFlush IO.stderr) logCfg
   where
     simpleLogEvent :: Log.LogEvent -> String
     simpleLogEvent le = Log.leMsg le
@@ -106,6 +101,7 @@ defaultOptions logCfg = TranslatorOptions
   , optCheckSerialization = False
   , optFilePaths = defaultFilePaths
   , optLogCfg = logCfg
+  , optParallel = False
   }
   
 
@@ -148,9 +144,11 @@ arguments =
   , Option [] ["report-exceptions"] (NoArg (Right (\opts -> Just $ opts { reportAllExceptions = True })))
     "Print all collected exceptions thrown during translation (requires collect-exceptions or collect-expected-exceptions)"
 
+  , Option "p" ["parallel"] (NoArg (Left (\opts -> Just $ opts { optParallel = True  })))
+    "Run symbolic simulation concurrently with multiple threads."
+
   , Option "o" ["output-formulas"]
     (ReqArg (\f -> Left (\opts -> Just $ opts { optFilePaths = (optFilePaths opts){ fpOutput = f} })) "PATH")
-
    "Path to serialized formulas."
   , Option [] ["report-expected-exceptions"] (NoArg (Right (\opts -> Just $ opts {reportKnownExceptions = True })))
     "Print collected exceptions for known issues thrown during translation (requires collect-exceptions or collect-expected-exceptions)"

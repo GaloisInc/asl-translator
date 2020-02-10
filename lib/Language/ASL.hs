@@ -591,13 +591,13 @@ executionFeatures nm sym = do
                          , "VSTMDB_T1", "VSTM_T1"
                          ]
         then [CS.genericToExecutionFeature gft] else []
-  timeout <- CS.genericToExecutionFeature <$> CS.timeoutFeature (5.00 :: NominalDiffTime)
+  timeout <- CS.genericToExecutionFeature <$> CS.timeoutFeature (20.00 :: NominalDiffTime)
   let fts = psf ++ [timeout]
   let cfg = WI.getConfiguration sym
   pathSetter <- WC.getOptionSetting CBO.solverInteractionFile cfg
-  res <- WC.setOpt pathSetter (T.pack "./output/yices.out")
-  X.assert (null res) (return fts)
-  --return []
+  -- res <- WC.setOpt pathSetter (T.pack "./output/yices.out")
+  -- X.assert (null res) (return fts)
+  return fts
 
 data SimulationException = SimulationTimeout (Some AC.SomeFunctionSignature)
                          | SimulationAbort (Some AC.SomeFunctionSignature) T.Text

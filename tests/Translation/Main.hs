@@ -9,7 +9,7 @@ import qualified What4.Utils.Log as Log
 
 
 main :: IO ()
-main = do 
+main = do
   Log.withLogging "main" (Log.stdErrLogEventConsumer logLvl) $ do
     let opts = defaultTestOptions Log.getLogCfg
     ASL.SomeSigMap sm <- ASL.runWithFilters opts
@@ -19,7 +19,7 @@ logLvl :: Log.LogEvent -> Bool
 logLvl le = case Log.leLevel le of
   Log.Error -> True
   _ -> False
-    
+
 defaultFilePaths :: FilePathConfig
 defaultFilePaths = FilePathConfig
   { fpDataRoot = "./data/Parsed/"
@@ -44,4 +44,3 @@ defaultTestOptions logCfg = TranslatorOptions
   , optFilePaths = defaultFilePaths
   , optLogCfg = logCfg
   }
-  
