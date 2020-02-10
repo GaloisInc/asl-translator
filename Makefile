@@ -1,7 +1,7 @@
 .PHONY: default spec all clean realclean deepclean
 default: all
 
-ASL_PARSER = ../submodules/arm-asl-parser
+ASL_PARSER = ./submodules/arm-asl-parser
 PARSED = ./data/Parsed
 
 HS_SOURCES := $(shell find ./lib ./exe -name '*.hs' -not -path '*/\.*') $(shell find . -name '*.cabal') cabal.project
