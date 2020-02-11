@@ -39,6 +39,7 @@ common shared-properties
                        split,
                        time,
                        panic >= 0.3,
+                       template-haskell,
                        vector
 
 library asl-translator-lib
@@ -55,6 +56,9 @@ library asl-translator-lib
                        Language.ASL.SyntaxTraverse
                        Language.ASL.Types
                        Language.ASL.StaticExpr
+                       Language.ASL.Globals
+                       Language.ASL.Globals.Types
+                       Language.ASL.Globals.Definitions
                        Util.Log
   hs-source-dirs:      lib
   ghc-options:         -Wcompat -Wall

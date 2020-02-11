@@ -34,7 +34,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeFunctionSignatu
                           | forall tp . ExpectedBVLValType AS.LValExpr (CT.TypeRepr tp)
                           | forall tp . ExpectedIntegerType AS.Expr (CT.TypeRepr tp)
                           | forall tp . ExpectedStructType (Maybe AS.Expr) (CT.TypeRepr tp)
-                          | forall tp . UnsupportedComparisonType AS.Expr (CT.TypeRepr tp)
+                          | forall tp . UnsupportedComparisonType (Maybe AS.Expr) (CT.TypeRepr tp)
                           | UnboundName T.Text
                           | LocalAlreadyDefined T.Text
                           | UnsupportedBinaryOperator AS.BinOp
@@ -83,6 +83,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeFunctionSignatu
                           | UnexpectedReturnInExprCall
                           | BindingFailure String
                           | BadASLFunctionCall
+                          | GlobalsError String
                           | TExceptions [TranslationException]
 
 

@@ -31,6 +31,7 @@ module Language.ASL.StaticExpr
   , staticEnvValue
   , staticEnvType
   , bitsToInteger
+  , integerToBits
   , applyTypeSynonyms
   , simpleStaticEnvMap
   , applyStaticEnv
@@ -69,6 +70,21 @@ bitsToInteger xs = let
   secondInt = bitsToInteger second
   in (firstInt * 2 ^ (length second)) + secondInt
 
+
+integerToBits :: Integer -> Integer -> [Bool]
+integerToBits len val =
+  if length (go val) <= (fromIntegral len) then
+    reverse $ take (fromIntegral len) (go val ++ repeat False)
+  else
+    error $ "integerToBits: Integer: " ++ show val ++ " is too large for a bitvector of length: " ++ show len
+  where
+    go :: Integer -> [Bool]
+    go 0 = []
+    go val | val > 0 =
+      let
+        (half, rem) = val `divMod` 2
+      in (rem == 1) : go half
+    go _ = error $ "integerToBits: Unsupported negative int:" ++ show val
 
 -- TODO: Type synonyms are currently a global property,
 -- ideally type normalization should happen with respect to

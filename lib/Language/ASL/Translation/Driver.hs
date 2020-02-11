@@ -221,15 +221,15 @@ runTranslation daEnc instr instrEnc = do
   case result of
     Left err -> do
       logMsgStr (-1) $ "Error computing instruction signature: " ++ show err
-    Right (Some (SomeFunctionSignature iSig), instStmts) -> do
+    Right (SomeInstructionSignature iSig, instStmts) -> do
       liftSigM (KeyInstr instrIdent) getDefinitions >>= \case
         Left err -> do
           logMsgStr (-1) $ "Error computing ASL definitions: " ++ show err
         Right defs -> do
           logMsgStr 2 $ "Translating instruction: " ++ prettyIdent instrIdent
           logMsgStr 2 $ (show iSig)
-          mfunc <- translateFunction (KeyInstr instrIdent) iSig instStmts defs
-          let deps = maybe Set.empty AC.funcDepends mfunc
+          minstr <- translateInstruction instrIdent iSig instStmts defs
+          let deps = maybe Set.empty AC.funcDepends minstr
           MSS.gets (optTranslationDepth . sOptions) >>= \case
             TranslateRecursive -> do
               logMsg 2 $ "--------------------------------"
@@ -238,7 +238,7 @@ runTranslation daEnc instr instrEnc = do
               let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
               MSS.modify' $ \s -> s { instrDeps = Map.insert instrIdent alldepsSet (instrDeps s) }
             TranslateShallow -> return ()
-          maybeSimulateFunction instrIdent (KeyInstr instrIdent) mfunc
+          maybeSimulateInstruction instrIdent minstr
 
 translationLoop :: InstructionIdent
                 -> [T.Text]
@@ -270,14 +270,14 @@ translationLoop fromInstr callStack defs (fnname, env) = do
                ++ prettyIdent fromInstr
                ++ "\n CallStack: " ++ show callStack
                ++ "\n" ++ show sig ++ "\n"
-            mfunc <- translateFunction (KeyFun finalName) sig stmts defs
+            mfunc <- translateFunction finalName sig stmts defs
             let deps = maybe Set.empty AC.funcDepends mfunc
             logMsgStr 2 $ "Function Dependencies: " ++ show deps
             MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
             alldeps <- mapM (translationLoop fromInstr (finalName : callStack) defs) (Set.toList deps)
             let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
             MSS.modify' $ \s -> s { funDeps = Map.insert finalName alldepsSet (funDeps s) }
-            maybeSimulateFunction fromInstr (KeyFun finalName) mfunc
+            maybeSimulateFunction fromInstr finalName mfunc
             return alldepsSet
 
 execSigMapWithScope :: TranslatorOptions
@@ -358,37 +358,58 @@ measureStmts stmts = getSum $ runIdentity $ mconcat <$> traverse (TR.collectSynt
 -- | Translate an ASL instruction or function into a crucible CFG.
 -- Optionally we may return Nothing if translation fails and we are capturing
 -- the resulting exception instead of throwing it.
-translateFunction :: ElemKey
+translateFunction :: T.Text
                   -> FunctionSignature globalReads globalWrites init tps
                   -> [AS.Stmt]
                   -> Definitions arch
                   -> SigMapM arch (Maybe (AC.Function arch globalReads globalWrites init tps))
-translateFunction key sig stmts defs = do
+translateFunction name sig stmts defs = do
   logMsgStr 2 $ "Rough function body size:" ++ show (measureStmts stmts)
   handleAllocator <- MSS.gets sHandleAllocator
-  logLvl <- MSS.gets (optVerbosity . sOptions)
-  catchIO key $ AC.functionToCrucible defs sig handleAllocator stmts logLvl
+  catchIO (KeyFun name) $ AC.functionToCrucible defs sig handleAllocator stmts
+
+translateInstruction :: InstructionIdent
+                     -> FunctionSignature globalReads globalWrites init Ctx.EmptyCtx
+                     -> [AS.Stmt]
+                     -> Definitions arch
+                     -> SigMapM arch (Maybe (AC.Instruction arch globalReads globalWrites init))
+translateInstruction ident sig stmts defs = do
+  logMsgStr 2 $ "Rough instruction body size:" ++ show (measureStmts stmts)
+  handleAllocator <- MSS.gets sHandleAllocator
+  catchIO (KeyInstr ident) $ AC.instructionToCrucible defs sig handleAllocator stmts
 
 
 -- | Simulate a function if we have one, and it is not filtered out.
 -- If we are skipping translation, then simply emit an uninterpreted function with
 -- the correct signature
 maybeSimulateFunction :: InstructionIdent
-                      -> ElemKey
+                      -> T.Text
                       -> Maybe (AC.Function arch globalReads globalWrites init tps)
                       -> SigMapM arch ()
 maybeSimulateFunction _ _ Nothing = return ()
-maybeSimulateFunction fromInstr key (Just func) =
- isKeySimFilteredOut fromInstr key >>= \case
-   False -> simulateFunction key func
-   True -> do
-     Just (SomeSymFn symFn) <- withOnlineBackend key $ \sym -> do
-        let sig = AC.funcSig func
-        let symbol = U.makeSymbol (T.unpack (funcName sig))
-        let retT = funcSigBaseRepr sig
-        let argTs = funcSigAllArgsRepr sig
-        SomeSymFn <$> WI.freshTotalUninterpFn sym symbol argTs retT
-     addFormula (T.pack $ prettyKey key) symFn
+maybeSimulateFunction fromInstr name (Just func) =
+ isKeySimFilteredOut fromInstr (KeyFun name) >>= \case
+   False -> simulateGenFunction (KeyFun name) (\cfg -> U.SomeSome <$> ASL.simulateFunction cfg func)
+   True -> mkUninterpretedFun (KeyFun name) (AC.funcSig func)
+
+maybeSimulateInstruction :: InstructionIdent
+                         -> Maybe (AC.Instruction arch globalReads globalWrites init)
+                         -> SigMapM arch ()
+maybeSimulateInstruction _ Nothing = return ()
+maybeSimulateInstruction ident (Just instr) =
+ isKeySimFilteredOut ident (KeyInstr ident) >>= \case
+   False -> simulateGenFunction (KeyInstr ident) (\cfg -> U.SomeSome <$> ASL.simulateInstruction cfg instr)
+   True -> mkUninterpretedFun (KeyInstr ident) (AC.funcSig instr)
+
+
+mkUninterpretedFun :: ElemKey -> FunctionSignature globalReads globalWrites init tps -> SigMapM arch ()
+mkUninterpretedFun key sig = do
+  Just (SomeSymFn symFn) <- withOnlineBackend key $ \sym -> do
+     let symbol = U.makeSymbol (T.unpack (funcName sig))
+     let retT = funcSigBaseRepr sig
+     let argTs = funcSigAllArgsRepr sig
+     SomeSymFn <$> WI.freshTotalUninterpFn sym symbol argTs retT
+  addFormula (T.pack $ prettyKey key) symFn
 
 data SomeSymFn where
   SomeSymFn :: B.ExprSymFn scope args ret -> SomeSymFn
@@ -446,11 +467,10 @@ mkParserConfig sym fenv =
                   , pSym = sym
                   }
 
-doSimulation :: forall arch globalReads globalWrites init tps
-              . TranslatorOptions
+doSimulation :: TranslatorOptions
              -> CFH.HandleAllocator
              -> ElemKey
-             -> AC.Function arch globalReads globalWrites init tps             
+             -> (forall scope. ASL.SimulatorConfig scope -> IO (U.SomeSome (B.ExprSymFn scope)))
              -> IO (T.Text)
 doSimulation opts handleAllocator key p = do
   let
@@ -458,7 +478,7 @@ doSimulation opts handleAllocator key p = do
                    . ASL.SimulatorConfig scope
                   -> IO (U.SomeSome (B.ExprSymFn scope))
     trySimulation cfg = do
-      (U.SomeSome <$> ASL.simulateFunction cfg p)
+      p cfg
         `X.catch`
         \(e :: X.SomeException) -> do
           X.throw $ SimulationFailure $ T.pack (show e)
@@ -476,7 +496,8 @@ doSimulation opts handleAllocator key p = do
     U.SomeSome symFn <- trySimulation cfg
     (serializedSymFn, fenv) <- return $ WP.printSymFn' symFn
     logMsgIO opts 2 $ "Serialized formula size: " ++ show (T.length serializedSymFn)
-    when isCheck $ Log.withLogCfg logCfg $ do
+
+    when isCheck $ Log.withLogCfg logCfg $ void $ do
       WP.readSymFn (mkParserConfig backend fenv) serializedSymFn >>= \case
         Left err -> X.throw $ SimulationDeserializationFailure (show err) serializedSymFn
         Right (U.SomeSome symFn') -> do
@@ -491,11 +512,10 @@ doSimulation opts handleAllocator key p = do
 
 -- | Simulate the given crucible CFG, and if it is a function add it to
 -- the formula map.
-simulateFunction :: forall arch sym globalReads globalWrites init tps
-                  . ElemKey
-                 -> AC.Function arch globalReads globalWrites init tps
-                 -> SigMapM arch ()
-simulateFunction key p = do
+simulateGenFunction :: ElemKey
+                    -> (forall scope. ASL.SimulatorConfig scope -> IO (U.SomeSome (B.ExprSymFn scope)))
+                    -> SigMapM arch ()
+simulateGenFunction key p = do
   opts <- MSS.gets sOptions
   halloc <- MSS.gets sHandleAllocator
  
@@ -701,11 +721,16 @@ data TranslatorException =
 
 instance Show TranslatorException where
   show e = case e of
-    TExcept k te -> "Translator exception in: " ++ prettyKey k ++ "\n" ++ show te
+    TExcept k te -> "Translator exception in: " ++ prettyKey k ++ "\n" ++ prettyTExcept te
     SExcept k se -> "Signature exception in:" ++ prettyKey k ++ "\n" ++ show se
     SimExcept k se -> "Simulation exception in:" ++ prettyKey k ++ "\n" ++ show se
     SomeExcept err -> "General exception:\n" ++ show err
     BadTranslatedInstructionsFile -> "Failed to load translated instructions."
+
+prettyTExcept :: TranslationException -> String
+prettyTExcept te = case te of
+  GlobalsError msg -> "GlobalsError: \n" ++ msg
+  _ -> show te
 
 instance X.Exception TranslatorException
 

@@ -63,7 +63,9 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
+import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Classes
 
 import qualified Data.BitMask as BM
 import qualified Dismantle.ARM.ASL as DA ( Encoding(..), FieldConstraint(..) )
@@ -79,6 +81,7 @@ import qualified Language.ASL.Syntax as AS
 import           Language.ASL.Signature
 import           Language.ASL.Types
 import           Language.ASL.StaticExpr as SE
+import qualified Language.ASL.Globals as G
 
 import qualified Language.ASL.SyntaxTraverse as TR
 import qualified Language.ASL.SyntaxTraverse as AS ( pattern VarName )
@@ -434,8 +437,6 @@ globalFunctions =
   , ("IntDiv", 2)
   , ("setSlice", 4)
   , ("getSlice", 4)
-  , ("packRegister", 2)
-  , ("unpackRegister", 1)
   , ("UNDEFINED_bitvector", 0)
   , ("UNDEFINED_integer", 0)
   , ("UNDEFINED_boolean", 0)]
@@ -470,11 +471,12 @@ initializeSigM ASLSpec{..} = do
       st <- RWS.get
       RWS.put $ st { globalVars = f nm tp (globalVars st),
                      extendedTypeData = f nm ext (extendedTypeData st) }
-    initDefGlobal f (AS.DefArray nm ty _) = do
+    initDefGlobal f (AS.DefArray nm ty idxty) = do
       Some tp <- computeType ty
+      Some idxtp <- computeIdxType idxty
       ext <- mkExtendedTypeData ty
       st <- RWS.get
-      let atp = Some $ WT.BaseArrayRepr (Ctx.empty Ctx.:> WT.BaseIntegerRepr) tp
+      let atp = Some $ WT.BaseArrayRepr (Ctx.empty Ctx.:> idxtp) tp
       let aext = TypeArray ext
       RWS.put $ st { globalVars = f nm atp (globalVars st),
                      extendedTypeData = f nm aext (extendedTypeData st) }
@@ -490,6 +492,12 @@ initializeSigM ASLSpec{..} = do
       let globalname = structname <> "_" <> nm
       RWS.modify' $ \s -> s { globalVars = insertUnique globalname (Some tp) (globalVars s) }
       return $ Map.singleton nm globalname
+
+computeIdxType :: AS.IndexType -> SigM ext f (Some WT.BaseTypeRepr)
+computeIdxType ixt = case ixt of
+  AS.IxTypeRange _ _ -> return $ Some WT.BaseIntegerRepr
+  AS.IxTypeRef "regidx" -> return $ Some (WT.BaseBVRepr (WT.knownNat @4))
+  AS.IxTypeRef nm -> error $ "Unsupported index type: " ++ show nm
 
 buildSigState :: ASLSpec -> LogCfg -> IO (SigEnv, SigState)
 buildSigState spec logCfg = do
@@ -563,7 +571,9 @@ data SigException = TypeNotFound T.Text
                   | FailedToDetermineStaticEnvironment [T.Text]
                   | FailedToMonomorphizeSignature AS.Type StaticValues
                   | UnexpectedRegisterFieldLength T.Text Integer
-  deriving (Eq, Show)
+                  | forall tp. MissingOrInvalidGlobal T.Text (WT.BaseTypeRepr tp)
+
+deriving instance Show SigException
 
 storeType :: T.Text -> UserType tp -> SigM ext f ()
 storeType tpName tp = do
@@ -988,6 +998,7 @@ mkSignature env sig =
         , funcGlobalReadReprs = sfuncGlobalReadReprs fsig
         , funcGlobalWriteReprs = sfuncGlobalWriteReprs fsig
         , funcStaticVals = env
+        , funcIsInstruction = False
         }
   where
     mkType t = case applyStaticEnv (simpleStaticEnvMap env) t of
@@ -1012,7 +1023,7 @@ computeFieldType AS.InstructionField{..} = do
 computeInstructionSignature :: DA.Encoding -- ^ the named constraints that identifies this specific encoding
                             -> AS.Instruction -- ^ ASL instruction
                             -> AS.InstructionEncoding -- ^ ASL encoding
-                            -> SigM ext f (Some SomeFunctionSignature, [AS.Stmt])
+                            -> SigM ext f (SomeInstructionSignature, [AS.Stmt])
 computeInstructionSignature daEnc AS.Instruction{..} enc = do
   logMsg 2 $ T.pack $ "computeInstructionSignature: " ++ DA.encName daEnc
   let
@@ -1032,7 +1043,13 @@ computeInstructionSignature daEnc AS.Instruction{..} enc = do
 
   computeSignatures instStmts
   globalVars <- globalsOfStmts instStmts
+
   (globalReads, globalWrites) <- return $ unpackGVarRefs globalVars
+  forM_ globalReads $ \(varName, Some varTp) ->
+    case G.lookupGlobal (LabeledValue varName varTp) of
+      Just _ -> return ()
+      Nothing -> E.throwError $ MissingOrInvalidGlobal varName varTp
+
   labeledReads <- forM globalReads $ \(varName, Some varTp) -> do
     return $ Some (LabeledValue varName varTp)
   labeledWrites <- forM globalWrites $ \(varName, Some varTp) -> do
@@ -1040,14 +1057,17 @@ computeInstructionSignature daEnc AS.Instruction{..} enc = do
   Some globalReadReprs <- return $ Ctx.fromList labeledReads
   Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
   Some argReprs <- return $ Ctx.fromList labeledArgs
+
+  Some argReprs <- return $ Ctx.fromList labeledArgs
   let pSig = FunctionSignature { funcName = name
                                , funcArgReprs = argReprs
                                , funcRetRepr = Ctx.empty
                                , funcGlobalReadReprs = globalReadReprs
                                , funcGlobalWriteReprs = globalWriteReprs
                                , funcStaticVals = staticEnvMapVals staticEnv
+                               , funcIsInstruction = True
                                }
-  return (Some (SomeFunctionSignature pSig), instStmts)
+  return (SomeInstructionSignature pSig, instStmts)
 
 bitMaskToASL :: BM.SomeBitMask BM.QuasiBit -> Either AS.Mask AS.BitVector
 bitMaskToASL (BM.SomeBitMask mask) =

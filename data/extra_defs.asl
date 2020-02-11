@@ -24,17 +24,6 @@ integer UNDEFINED_integer()
 boolean UNDEFINED_boolean()
     return boolean UNKNOWN;
 
-
-// Unclear how to actually determine the register index
-(bits(32), bits(4)) unpackRegister(bits(32) register)
-    bits(32) realRegister = register;
-    bits(4) registerIdx = bits(4) UNKNOWN;
-    return (realRegister, registerIdx);
-
-// Throw away the register index currently
-bits(32) packRegister(bits(32) realRegister, bits(4) registerIdx)
-    return realRegister;
-
 // Defining slicing with primitive bitvector operations
 
 bits(M) truncate(bits(N) bv, integer M);
@@ -111,7 +100,24 @@ boolean __EndOfInstruction;
 boolean __UndefinedBehavior;
 boolean __UnpredictableBehavior;
 
-array bits(32) _R[0..15];
+// A re-abstraction of _R which matches a real aarch32 model of 15 32-bit registers.
+type regidx = bits(4);
+
+array bits(32) _Rbv[regidx];
+
+_R[integer n] = bits(32) value
+    assert n >= 0 && n <= 14;
+    bits(4) idx = '0000';
+    idx = idx + n;
+    _Rbv[idx] = value;
+
+bits(32) _R[integer n]
+    assert n >= 0 && n <= 14;
+    bits(4) idx = '0000';
+    idx = idx + n;
+    return _Rbv[idx];
+
+array bits(32) _R[0..14];
 bits(32) _PC;
 
 PC[] = bits(32) value
@@ -133,40 +139,6 @@ RGen[integer n] = bits(32) value
         _PC = value;
     else
         R[n] = value;
-
-bits(32) Rmode[integer n, bits(5) mode]
-    assert n >= 0 && n <= 14;
-    // Check for attempted use of Monitor mode in Non-secure state.
-    if !IsSecure() then assert mode != M32_Monitor;
-    assert !BadMode(mode);
-
-    if mode == M32_Monitor then
-        if n == 13 then
-            return SP_mon;
-        elsif n == 14 then
-            return LR_mon;
-        else
-            return _R[n];
-    else
-        return _R[LookUpRIndex(n, mode)];
-
-Rmode[integer n, bits(5) mode] = bits(32) value
-    assert n >= 0 && n <= 14;
-
-    // Check for attempted use of Monitor mode in Non-secure state.
-    if !IsSecure() then assert mode != M32_Monitor;
-    assert !BadMode(mode);
-
-    if mode == M32_Monitor then
-        if n == 13 then
-            SP_mon = value;
-        elsif n == 14 then
-            LR_mon = value;
-        else
-            _R[n] = value;
-    else
-        _R[LookUpRIndex(n, mode)] = value;
-    return;
 
 // Allow us to model the internal PC as a 32 bit value
 bits(N) ThisInstrAddr()

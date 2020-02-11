@@ -37,12 +37,7 @@ main = do
     Nothing -> do
       usage
       exitFailure
-    Just (opts', statOpts) -> do
-      Log.withLogging "main" (logEventConsumer opts') $ do
-        let opts = opts' { optLogCfg = Log.getLogCfg }
-        sm <- ASL.runWithFilters opts
-        ASL.reportStats statOpts sm
-        ASL.serializeFormulas opts sm
+    Just (opts', statOpts) -> runTranslator opts' statOpts
   where
     applyOption (Just (opts, statOpts)) arg = case arg of
       Left f -> do
@@ -52,6 +47,14 @@ main = do
         statOpts' <- f statOpts
         return $ (opts, statOpts')
     applyOption Nothing _ = Nothing
+
+runTranslator :: TranslatorOptions -> StatOptions -> IO ()
+runTranslator opts' statOpts = do
+  Log.withLogging "main" (logEventConsumer opts') $ do
+    let opts = opts' { optLogCfg = Log.getLogCfg }
+    sm <- ASL.runWithFilters opts
+    ASL.reportStats statOpts sm
+    ASL.serializeFormulas opts sm
 
 logEventConsumer :: TranslatorOptions -> Log.LogCfg -> IO ()
 logEventConsumer opts logCfg =

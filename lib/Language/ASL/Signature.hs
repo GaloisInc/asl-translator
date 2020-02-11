@@ -20,6 +20,7 @@ module Language.ASL.Signature (
     FunctionSignature(..)
   , projectStruct
   , SomeFunctionSignature(..)
+  , SomeInstructionSignature(..)
   , FuncReturn
   , FuncReturnCtx
   , funcSigRepr
@@ -59,8 +60,19 @@ data FunctionSignature globalReads globalWrites init tps =
                     , funcGlobalWriteReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globalWrites
                     -- ^ The globals (transitively) affected by the function
                     , funcStaticVals :: StaticValues
+                    , funcIsInstruction :: Bool
+                    -- ^ flag indicating that this function is representative of an instruction, and
+                    -- therefore requires additional instrumentation to have it serve as a top-level
+                    -- transition
                     }
-  deriving (Show)
+  deriving Show
+-- instance Show (FunctionSignature globalReads globalWrites init tps) where
+--   show sig = (if funcIsInstruction sig then "Instruction: " else "Function: ") ++ T.unpack (funcName sig)
+--              ++ "\nReturns: " ++ show (funcRetRepr sig)
+--              ++ "\nArguments; " ++ show (funcArgReprs sig)
+--              ++ "\nGlobal Reads: " ++ show (funcGlobalReadReprs sig)
+--              ++ "\nGlobal Writes: " ++ show (funcGlobalWriteReprs sig)
+--              ++ "\nStatic Environment: " ++ show (funcStaticVals sig)
 
 type FuncReturnCtx globalWrites tps =
   (Ctx.EmptyCtx Ctx.::> (CT.BaseStructType globalWrites) Ctx.::> (CT.BaseStructType tps))
@@ -77,6 +89,10 @@ instance ShowF BaseGlobalVar
 data SomeFunctionSignature ret where
   SomeFunctionSignature :: FunctionSignature globalReads globalWrites init tps ->
     SomeFunctionSignature (FuncReturn globalWrites tps)
+
+data SomeInstructionSignature where
+  SomeInstructionSignature :: FunctionSignature globalReads globalWrites init Ctx.EmptyCtx ->
+    SomeInstructionSignature
 
 projectStruct :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) ctx
               -> WT.BaseTypeRepr (CT.BaseStructType ctx)

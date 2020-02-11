@@ -19,7 +19,9 @@
 -- | Convert fragments of ASL code into Crucible CFGs
 module Language.ASL.Crucible (
     functionToCrucible
-  , Function(..)
+  , GenFunction(..)
+  , Function
+  , Instruction
   , FunctionSignature
   , funcRetRepr
   , funcArgReprs
@@ -27,6 +29,7 @@ module Language.ASL.Crucible (
   , funcSigAllArgsRepr
   , funcGlobalReadReprs
   , funcGlobalWriteReprs
+  , instructionToCrucible
   , SomeFunctionSignature(..)
   , LabeledValue(..)
   , BaseGlobalVar(..)
@@ -54,6 +57,8 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.Nonce ( newSTNonceGenerator )
 import qualified Data.Parameterized.TraversableFC as FC
+import qualified Data.Parameterized.Map as MapF
+import           Data.Maybe ( fromJust )
 import qualified Data.Text as T
 import qualified Data.Set as Set
 import qualified Data.List as List
@@ -66,17 +71,22 @@ import qualified Lang.Crucible.Types as CT
 import qualified What4.BaseTypes as WT
 import qualified What4.Utils.StringLiteral as WT
 
+import           System.IO
+
 import qualified What4.FunctionName as WFN
 import qualified What4.ProgramLoc as WP
 
 import qualified Language.ASL.Syntax as AS
 
-import           Language.ASL.Crucible.Exceptions ( CrucibleException(..) )
+import           Language.ASL.Translation.Exceptions ( TranslationException(..) )
 import           Language.ASL.Crucible.Extension ( ASLExt, ASLApp(..), ASLStmt(..), aslExtImpl )
 import           Language.ASL.Signature
-import           Language.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), Definitions(..), InnerGenerator, translateStatement, overrides, addExtendedTypeData, unliftGenerator)
+import           Language.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..)
+                                          , Definitions(..), InnerGenerator
+                                          , translateBody, overrides, unliftGenerator)
 import           Language.ASL.Types
 import           Language.ASL.StaticExpr
+import qualified Language.ASL.Globals as G
 
 import qualified Lang.Crucible.CFG.Extension as CCExt
 
@@ -84,12 +94,21 @@ import qualified Lang.Crucible.CFG.Extension as CCExt
 import           What4.Utils.Log ( HasLogCfg, logIO, LogLevel(..), getLogCfg )
 
 
-data Function arch globalReads globalWrites init tps =
-   Function { funcSig :: FunctionSignature globalReads globalWrites init tps
-            , funcCFG :: CCC.SomeCFG (ASLExt arch) (ToCrucTypes init) (FuncReturn globalWrites tps)
-            , funcGlobalReads :: Ctx.Assignment BaseGlobalVar globalReads
-            , funcDepends :: Set.Set (T.Text, StaticValues)
-            }
+data GenFunction arch innerReads innerWrites outerReads outerWrites init tps =
+   GenFunction { funcSig :: FunctionSignature innerReads innerWrites init tps
+               , funcCFG :: CCC.SomeCFG (ASLExt arch) (ToCrucTypes init) (FuncReturn innerWrites tps)
+               , funcGlobalReads :: Ctx.Assignment BaseGlobalVar innerReads
+               , funcOuterReadReprs :: Ctx.Assignment (LabeledValue T.Text CT.BaseTypeRepr) outerReads
+               , funcOuterWriteReprs :: Ctx.Assignment (LabeledValue T.Text CT.BaseTypeRepr) outerWrites
+               , funcDepends :: Set.Set (T.Text, StaticValues)
+               , funcReadProj :: forall tp. Ctx.Index outerReads tp -> Maybe (Ctx.Index innerReads tp)
+               , funcWriteProj :: forall tp. Ctx.Index outerWrites tp -> Maybe (Ctx.Index innerWrites tp)
+               }
+type Function arch globalReads globalWrites init tps =
+  GenFunction arch globalReads globalWrites globalReads globalWrites init tps
+
+type Instruction arch globalReads globalWrites init =
+  GenFunction arch globalReads globalWrites G.GlobalsCtx G.GlobalsCtx init Ctx.EmptyCtx
 
 -- | This type alias is a constraint relating the 'globals' (base types) to the
 -- actual return type in terms of Crucible types
@@ -114,33 +133,78 @@ type ReturnsGlobals ret globalWrites tps = (ret ~ FuncReturn globalWrites tps)
 -- NOTE: The signature computation MUST account for the UNPREDICTABLE and
 -- UNDEFINED globals.  They may be accessed during the translation and must be
 -- available in the 'TranslationState'
-functionToCrucible :: forall arch globalReads globalWrites init tps ret
-                     . (ReturnsGlobals ret globalWrites tps)
-                    => HasLogCfg
-                    => Definitions arch
-                    -> FunctionSignature globalReads globalWrites init tps
+functionToCrucible' :: forall arch innerReads innerWrites outerReads outerWrites init tps ret
+                    . HasLogCfg
+                    => ReturnsGlobals ret innerWrites tps
+                    => Ctx.Assignment (LabeledValue T.Text CT.BaseTypeRepr) outerReads
+                    -> Ctx.Assignment (LabeledValue T.Text CT.BaseTypeRepr) outerWrites
+                    -> (forall tp. Ctx.Index outerReads tp -> Maybe (Ctx.Index innerReads tp))
+                    -> (forall tp. Ctx.Index outerWrites tp -> Maybe (Ctx.Index innerWrites tp))
+                    -> Definitions arch
+                    -> FunctionSignature innerReads innerWrites init tps
                     -> CFH.HandleAllocator
                     -> [AS.Stmt]
-                    -> Integer -- ^ Logging level
-                    -> IO (Function arch globalReads globalWrites init tps)
-functionToCrucible defs sig hdlAlloc stmts logLvl = do
+                    -> IO (GenFunction arch innerReads innerWrites outerReads outerWrites init tps)
+functionToCrucible' readReprs writeReprs projReads projWrites defs sig hdlAlloc stmts = do
   let argReprs = toCrucTypes $ FC.fmapFC (projectValue) (funcArgReprs sig)
   let retRepr = funcSigRepr sig
   hdl <- CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (funcName sig)) argReprs retRepr
-  globalReads <- FC.traverseFC allocateGlobal (funcGlobalReadReprs sig)
+  globalReadVars <- FC.traverseFC allocateGlobal (funcGlobalReadReprs sig)
   let pos = WP.InternalPos
   (CCG.SomeCFG cfg0, depends) <- stToIO $ defineCCGFunction pos hdl $ \refs ->
-    funcDef defs sig refs globalReads stmts logLvl
+    funcDef defs sig refs globalReadVars stmts
   return $
-       Function { funcSig = sig
-                , funcCFG = CCS.toSSA cfg0
-                , funcGlobalReads = globalReads
-                , funcDepends = depends
-                }
+       GenFunction { funcSig = sig
+                   , funcCFG = CCS.toSSA cfg0
+                   , funcGlobalReads = globalReadVars
+                   , funcOuterReadReprs = readReprs
+                   , funcOuterWriteReprs = writeReprs
+                   , funcDepends = depends
+                   , funcReadProj = projReads
+                   , funcWriteProj = projWrites
+                   }
   where
     allocateGlobal :: forall tp . LabeledValue T.Text WT.BaseTypeRepr tp -> IO (BaseGlobalVar tp)
     allocateGlobal (LabeledValue name rep) =
       BaseGlobalVar <$> CCG.freshGlobalVar hdlAlloc name (CT.baseToType rep)
+
+functionToCrucible :: forall arch globalReads globalWrites init tps ret
+                    . HasLogCfg
+                   => ReturnsGlobals ret globalWrites tps
+                   => Definitions arch
+                   -> FunctionSignature globalReads globalWrites init tps
+                   -> CFH.HandleAllocator
+                   -> [AS.Stmt]
+                   -> IO (Function arch globalReads globalWrites init tps)
+functionToCrucible defs sig = do
+  functionToCrucible' (funcGlobalReadReprs sig) (funcGlobalWriteReprs sig) Just Just defs sig
+
+instructionToCrucible :: forall arch globalReads globalWrites init ret
+                       . HasLogCfg
+                      => ReturnsGlobals ret G.GlobalsCtx Ctx.EmptyCtx
+                      => Definitions arch
+                      -> FunctionSignature globalReads globalWrites init Ctx.EmptyCtx
+                      -> CFH.HandleAllocator
+                      -> [AS.Stmt]
+                      -> IO (Instruction arch globalReads globalWrites init)
+instructionToCrucible defs sig hdlAlloc stmts = do
+  projReads <- case G.getGlobalsSubMap (funcGlobalReadReprs sig) of
+    Left err -> X.throw $ GlobalsError ("instructionToCrucible: " ++ err)
+    Right r -> return r
+
+  projWrites <- case G.getGlobalsSubMap (funcGlobalWriteReprs sig) of
+    Left err -> X.throw $ GlobalsError ("instructionToCrucible: " ++ err)
+    Right r -> return $ r
+
+  let
+    projR :: forall tp. Ctx.Index G.GlobalsCtx tp -> Maybe (Ctx.Index globalReads tp)
+    projR idx = MapF.lookup idx projReads
+
+    projW :: forall tp. Ctx.Index G.GlobalsCtx tp -> Maybe (Ctx.Index globalWrites tp)
+    projW idx = MapF.lookup idx projWrites
+
+  functionToCrucible' G.trackedGlobalReprs G.trackedGlobalReprs projR projW defs sig hdlAlloc stmts
+
 
 defineCCGFunction :: CCExt.IsSyntaxExtension ext
                => WP.Position
@@ -156,29 +220,27 @@ defineCCGFunction p h f = do
     return (cfg, funDeps)
 
 funcDef :: HasLogCfg
-        => ReturnsGlobals ret globalWrites tps
+        => ReturnsGlobals ret innerWrites tps
         => Definitions arch
-        -> FunctionSignature globalReads globalWrites init tps
+        -> FunctionSignature innerReads innerWrites init tps
         -> STRef.STRef h (Set.Set (T.Text, StaticValues))
-        -> Ctx.Assignment BaseGlobalVar globalReads
+        -> Ctx.Assignment BaseGlobalVar outerReads
         -> [AS.Stmt]
-        -> Integer -- ^ Logging level
         -> Ctx.Assignment (CCG.Atom s) (ToCrucTypes init)
         -> (TranslationState h ret s, InnerGenerator h s arch ret (CCG.Expr (ASLExt arch) s ret))
-funcDef defs sig hdls globalReads stmts logLvl args =
-  (funcInitialState defs sig hdls logLvl globalReads args, defineFunction overrides sig stmts args)
+funcDef defs sig hdls globalReads stmts args =
+  (funcInitialState defs sig hdls globalReads args, defineFunction overrides sig stmts args)
 
-funcInitialState :: forall init globalReads globalWrites tps h s arch ret
+funcInitialState :: forall init innerReads innerWrites outerReads tps h s arch ret
                   . HasLogCfg
-                 => ReturnsGlobals ret globalWrites tps
+                 => ReturnsGlobals ret innerWrites tps
                  => Definitions arch
-                 -> FunctionSignature globalReads globalWrites init tps
+                 -> FunctionSignature innerReads innerWrites init tps
                  -> STRef.STRef h (Set.Set (T.Text, StaticValues))
-                 -> Integer -- ^ Logging level
-                 -> Ctx.Assignment BaseGlobalVar globalReads
+                 -> Ctx.Assignment BaseGlobalVar outerReads
                  -> Ctx.Assignment (CCG.Atom s) (ToCrucTypes init)
                  -> TranslationState h ret s
-funcInitialState defs sig funDepRef logLvl globalReads args =
+funcInitialState defs sig funDepRef globalReads args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgument Map.empty
                    , tsVarRefs = Map.empty
                    , tsExtendedTypes = defExtendedTypes defs
@@ -188,7 +250,7 @@ funcInitialState defs sig funDepRef logLvl globalReads args =
                    , tsFunctionSigs = fst <$> defSignatures defs
                    , tsUserTypes = defTypes defs
                    , tsHandle = funDepRef
-                   , tsStaticValues = funcStaticVals sig
+                   , tsStaticValues = Map.union (funcStaticVals sig) G.staticGlobals
                    , tsSig = SomeFunctionSignature sig
                    , tsLogCfg = getLogCfg
                    }
@@ -218,11 +280,7 @@ defineFunction :: HasLogCfg
                -> Ctx.Assignment (CCG.Atom s) (ToCrucTypes init)
                -> InnerGenerator h s arch ret (CCG.Expr (ASLExt arch) s ret)
 defineFunction ov sig stmts _args = do
-  unliftGenerator $ FC.forFC_ (funcArgReprs sig) (\(LabeledValue (FunctionArg nm t _) _) -> addExtendedTypeData nm t)
-  unliftGenerator $ mapM_ (translateStatement ov) stmts
-  case funcRetRepr sig of
-    Ctx.Empty -> unliftGenerator $ translateStatement ov (AS.StmtReturn Nothing)
-    _ -> return ()
+  unliftGenerator $ translateBody ov stmts
   let errmsg = "Function " <> funcName sig <> " does not return."
   errStr <- CCG.mkAtom (CCG.App (CCE.StringLit $ WT.UnicodeLiteral errmsg))
   CCG.reportError (CCG.AtomExpr errStr)

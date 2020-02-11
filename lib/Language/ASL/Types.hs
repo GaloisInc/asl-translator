@@ -9,7 +9,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
-
+{-# LANGUAGE TemplateHaskell #-}
 
 -- | Functions for converting between What4 and Crucible types.
 module Language.ASL.Types
@@ -54,6 +54,7 @@ import qualified Data.Parameterized.List as PL
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.TraversableFC as FC
 import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.NatRepr as NR
 import           Numeric.Natural ( Natural )
 import qualified Data.Text as T
 import qualified Lang.Crucible.Types as CT
@@ -62,6 +63,10 @@ import           Data.Parameterized.Classes
 import qualified Data.BitVector.Sized as BVS
 import qualified Language.ASL.Syntax as AS
 import qualified Data.Map as Map
+
+import qualified Language.Haskell.TH as TH
+import qualified Language.Haskell.TH.Syntax as TH
+
 
 type family ToBaseType (ctp :: CT.CrucibleType) :: WT.BaseType where
   ToBaseType (CT.BaseToType bt) = bt
@@ -153,6 +158,13 @@ instance (Eq a, TestEquality b) => TestEquality (LabeledValue a b) where
         True -> Just Refl
         False -> Nothing
       Nothing -> Nothing
+
+instance (Ord a, OrdF b) => OrdF (LabeledValue a b) where
+  compareF (LabeledValue a1 b1) (LabeledValue a2 b2) =
+    case compare a1 a2 of
+      LT -> LTF
+      GT -> GTF
+      EQ -> compareF b1 b2
 
 addLabels :: Ctx.Assignment (LabeledValue l a) ctx
           -> Ctx.Assignment f ctx
