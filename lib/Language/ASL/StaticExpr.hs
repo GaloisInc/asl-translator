@@ -585,6 +585,9 @@ applyStaticEnv env t = case applyTypeSynonyms t of
   AS.TypeFun "bits" e -> case exprToStatic env e of
     Just (StaticInt i) -> Just $ AS.TypeFun "bits" (AS.ExprLitInt i)
     _ -> Nothing
+  AS.TypeArray t idxt -> do
+    t' <- applyStaticEnv env t
+    return $ AS.TypeArray t' idxt
   _ -> Just $ t
 
 

@@ -61,14 +61,30 @@ trackedGlobals' = Some $ empty
   :> bool "__AssertionFailure"
   :> bool "__UndefinedBehavior"
   :> bool "__UnpredictableBehavior"
+  :> bool "__EndOfInstruction"
+  -- meta-state reifying information about this encoding
+  :> int "__ThisInstrEnc"
+  :> bv @32 "__ThisInstr"
   -- tracking updates to the program counter
   :> bool "__BranchTaken"
+  -- tracking additional execution flags
+  :> bool "__PendingInterrupt"
+  :> bool "__PendingPhysicalSError"
+  :> bool "__Sleeping"
+  
+  :> bool "__conditionPassed"
+  :> bv @4 "__currentCond"   
   :> bv @32 "_PC"
   -- the register state, represented as an array indexed by 4-bit bitvectors with 32-bit values
   :> def "_Rbv" (WI.BaseArrayRepr (empty :> WI.BaseBVRepr (WI.knownNat @4))
                   (WI.BaseBVRepr (WI.knownNat @32))) domainUnbounded
-  -- the processor state. We assume always user mode
-  :> bvbits @5 "10000" "PSTATE_M"
+  -- vector registers
+  :> intarraybv @64 "_Dclone"
+  :> intarraybv @128 "_V"
+  
+  -- the underlying memory state as a 32-bit indexed array of bytes
+  :> def "__Memory" (WI.BaseArrayRepr (empty :> WI.BaseBVRepr (WI.knownNat @32))
+                  (WI.BaseBVRepr (WI.knownNat @8))) domainUnbounded  
 
   -- rest of the processor state is unconstrained
   :> bv @1 "PSTATE_A"
@@ -96,8 +112,20 @@ trackedGlobals' = Some $ empty
   :> bv @1 "PSTATE_nRW"
 
 
+
 def :: T.Text -> WI.BaseTypeRepr tp -> GlobalDomain tp -> Global tp
 def nm repr dom = Global nm repr dom
+
+noval :: T.Text -> Global (WI.BaseStructType EmptyCtx)
+noval nm = def nm WI.knownRepr domainUnbounded
+
+intarraybv :: forall n. 1 <= n
+           => KnownNat n
+           => T.Text -> Global (WI.BaseArrayType (EmptyCtx ::> WI.BaseIntegerType) (WI.BaseBVType n))
+intarraybv nm = def nm WI.knownRepr domainUnbounded
+
+int :: T.Text -> Global WI.BaseIntegerType
+int nm = def nm WI.BaseIntegerRepr domainUnbounded
 
 bool :: T.Text -> Global WI.BaseBoolType
 bool nm = def nm WI.BaseBoolRepr domainUnbounded
@@ -106,12 +134,12 @@ bv :: forall n. 1 <= n => KnownNat n => T.Text -> Global (WI.BaseBVType n)
 bv nm = def nm (WI.BaseBVRepr WI.knownNat) domainUnbounded
 
 bvsingle :: forall n. 1 <= n => KnownNat n => T.Text -> Integer -> Global (WI.BaseBVType n)
-bvsingle nm i = def nm (WI.BaseBVRepr WI.knownNat) (domainSingleton (WI.ConcreteBV WI.knownNat i))
+bvsingle nm i = def nm WI.knownRepr (domainSingleton (WI.ConcreteBV WI.knownNat i))
 
 bvbits :: forall n. 1 <= n => KnownNat n => String -> T.Text -> Global (WI.BaseBVType n)
 bvbits bits nm  =
   if fromIntegral (length bits) == (WI.intValue $ WI.knownNat @n) then
-    def nm (WI.BaseBVRepr WI.knownNat)
+    def nm WI.knownRepr
       (domainSingleton (WI.ConcreteBV WI.knownNat (bitsToInteger $ parseBits bits)))
   else error $ "Bad bits: " ++ show bits
 
@@ -130,37 +158,72 @@ untrackedGlobals' = Some $ empty
   -- the debug flag should not be set
   :> bvsingle @1 "PSTATE_D" 0
    -- processor mode should always be M32_User
-  -- :> bvbits @5 "10000" "PSTATE_M"
+  :> bvbits @5 "10000" "PSTATE_M"
   -- memory model
   :> noflag "__ExclusiveLocal"
   -- this flag is set but never read
   :> noflag "ShouldAdvanceIT"
-
   -- system registers
-  :> bv @1 "EventRegister"
+  :> bv @32 "CPACR"
+  :> bv @32 "CPACR_EL1"
+  :> bv @32 "CPTR_EL2"
+  :> bv @32 "CPTR_EL3"
+  :> bv @32 "DBGDSCRext"
   :> bv @1 "DBGEN"
-  :> bv @1 "SPIDEN"
-  :> bv @64 "HCR_EL2"
-
-  :> bv @32 "LR_mon"
   :> bv @32 "DBGOSDLR"
   :> bv @32 "DBGOSLSR"
   :> bv @32 "DBGPRCR"
   :> bv @32 "DBGPRCR_EL1"
+  :> bv @32 "DFAR"
+  :> bv @32 "DFSR"
+  :> bv @32 "DISR"
+  :> bv @64 "DISR_EL1"
+  :> bv @32 "DLR"
+  :> bv @64 "DLR_EL0"
+  :> bv @32 "DSPSR"
+  :> bv @32 "DSPSR_EL0"
+  :> bv @32 "DTRRX"
+  :> bv @32 "DTRTX"
   :> bv @32 "EDSCR"
+  :> bv @32 "ELR_hyp"
+  :> bv @1 "EventRegister"
+  :> bv @32 "FPEXC"
+  :> bv @32 "FPSCR"
+  :> bv @32 "FPSID"
+  :> bv @32 "FPSR"
+  :> bv @32 "HCPTR"
   :> bv @32 "HCR"
+  :> bv @32 "HCR2"
+  :> bv @64 "HCR_EL2"
   :> bv @32 "HDCR"
+  :> bv @32 "HDFAR"
+  :> bv @32 "HIFAR"
+  :> bv @32 "HPFAR"
   :> bv @32 "HSCTLR"
-  :> bv @32 "MDSCR_EL1"
+  :> bv @32 "HSR"
+  :> bv @32 "HVBAR"
+  :> bv @32 "IFAR"
+  :> bv @32 "IFSR"
+  :> bv @32 "LR_mon"
   :> bv @32 "MDCR_EL2"
   :> bv @32 "MDCR_EL3"
+  :> bv @32 "MDSCR_EL1"
+  :> bv @32 "MVBAR"
+  :> bv @32 "MVFR0"
+  :> bv @32 "MVFR1"
+  :> bv @32 "MVFR2"
+  :> bv @32 "NSACR"
   :> bv @32 "OSDLR_EL1"
   :> bv @32 "OSLSR_EL1"
   :> bv @32 "SCR"
   :> bv @32 "SCR_EL3"
   :> bv @32 "SCTLR"
+  :> bv @64 "SCTLR_EL1"
+  :> bv @64 "SCTLR_EL2"
+  :> bv @64 "SCTLR_EL3"
   :> bv @32 "SDCR"
   :> bv @32 "SDER"
+  :> bv @1 "SPIDEN"
   :> bv @32 "SPSR_EL1"
   :> bv @32 "SPSR_EL2"
   :> bv @32 "SPSR_EL3"
@@ -172,3 +235,10 @@ untrackedGlobals' = Some $ empty
   :> bv @32 "SPSR_svc"
   :> bv @32 "SPSR_und"
   :> bv @32 "SP_mon"
+  :> bv @32 "TTBCR"
+  :> bv @32 "TTBCR_S"
+  :> bv @32 "VBAR"
+  :> bv @32 "VDFSR"
+  :> bv @32 "VDISR"
+  :> bv @64 "VDISR_EL2"
+  :> bv @64 "VSESR_EL2"

@@ -572,6 +572,7 @@ data SigException = TypeNotFound T.Text
                   | FailedToMonomorphizeSignature AS.Type StaticValues
                   | UnexpectedRegisterFieldLength T.Text Integer
                   | forall tp. MissingOrInvalidGlobal T.Text (WT.BaseTypeRepr tp)
+                  | MissingGlobals [(T.Text, Some WT.BaseTypeRepr)]
 
 deriving instance Show SigException
 
@@ -719,9 +720,15 @@ computeType' tp = case applyTypeSynonyms tp of
     ctps = map (\t -> case computeType' t of {Left bt -> bt; _ -> error "Bad type tuple"}) tps
     in case Ctx.fromList ctps of
          Some ctx -> Left $ Some (WT.BaseStructRepr ctx)
+  AS.TypeArray tp (AS.IxTypeRange (AS.ExprLitInt _) (AS.ExprLitInt _)) ->
+    case computeType' tp of
+      Left (Some ty) -> Left $ Some $ WT.BaseArrayRepr (Ctx.empty Ctx.:> WT.BaseIntegerRepr) ty
+      Right t' -> error $ "invalid target type for array: " ++ show t'
+
+  AS.TypeArray _ _ -> error "computeType, TypeArray"
   AS.TypeOf _ -> error "computeType, TypeOf"
   AS.TypeReg _ _ -> error "computeType, TypeReg"
-  AS.TypeArray _ _ -> error "computeType, TypeArray"
+
   _ -> error $ "computeType" ++ show tp
 
 -- | Compute the What4 representation of an ASL 'AS.Type'.
@@ -1056,8 +1063,6 @@ computeInstructionSignature daEnc AS.Instruction{..} enc = do
     return $ Some (LabeledValue varName varTp)
   Some globalReadReprs <- return $ Ctx.fromList labeledReads
   Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
-  Some argReprs <- return $ Ctx.fromList labeledArgs
-
   Some argReprs <- return $ Ctx.fromList labeledArgs
   let pSig = FunctionSignature { funcName = name
                                , funcArgReprs = argReprs

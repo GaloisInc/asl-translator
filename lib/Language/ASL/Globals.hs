@@ -63,32 +63,25 @@ import           Language.ASL.Globals.Definitions
 type UntrackedGlobalsCtx = $(mkTypeFromGlobals untrackedGlobals')
 type GlobalsCtx = $(mkTypeFromGlobals trackedGlobals')
 
+untrackedGlobalBaseReprs :: Assignment WI.BaseTypeRepr UntrackedGlobalsCtx
+untrackedGlobalBaseReprs = $(mkReprFromGlobals untrackedGlobals')
+
+trackedGlobalBaseReprs :: Assignment WI.BaseTypeRepr GlobalsCtx
+trackedGlobalBaseReprs = $(mkReprFromGlobals trackedGlobals')
+
 untrackedGlobals :: Assignment Global UntrackedGlobalsCtx
 untrackedGlobals = case untrackedGlobals' of
-  Some gbs | Just Refl <- testEquality (FC.fmapFC gbType gbs) (knownRepr :: Assignment WI.BaseTypeRepr UntrackedGlobalsCtx) -> gbs
+  Some gbs | Just Refl <- testEquality (FC.fmapFC gbType gbs) untrackedGlobalBaseReprs -> gbs
 
 untrackedGlobalReprs :: Assignment (LabeledValue T.Text WI.BaseTypeRepr) UntrackedGlobalsCtx
 untrackedGlobalReprs = FC.fmapFC (\gb -> LabeledValue (gbName gb) (gbType gb)) untrackedGlobals
 
 trackedGlobals :: Assignment Global GlobalsCtx
 trackedGlobals = case trackedGlobals' of
-  Some gbs | Just Refl <- testEquality (FC.fmapFC gbType gbs) (knownRepr :: Assignment WI.BaseTypeRepr GlobalsCtx) -> gbs
-
+  Some gbs | Just Refl <- testEquality (FC.fmapFC gbType gbs) trackedGlobalBaseReprs -> gbs
 
 trackedGlobalReprs :: Assignment (LabeledValue T.Text WI.BaseTypeRepr) GlobalsCtx
 trackedGlobalReprs = FC.fmapFC (\gb -> LabeledValue (gbName gb) (gbType gb)) trackedGlobals
-
-mkTrackedGlobals :: WI.IsSymExprBuilder sym
-                 => sym
-                 -> IO (Assignment (WI.BoundVar sym) GlobalsCtx)
-mkTrackedGlobals sym = do
-  FC.traverseFC (mkFreshGlobalBoundVar sym) trackedGlobals
-
-mkUntrackedGlobals :: WI.IsSymExprBuilder sym
-                   => sym
-                   -> IO (Assignment (WI.SymExpr sym) UntrackedGlobalsCtx)
-mkUntrackedGlobals sym = do
-  FC.traverseFC (mkFreshGlobalFree sym) untrackedGlobals
 
 getPrecond :: forall ext s reads writes args ret err m
             . (Monad m, ME.MonadError err m)
@@ -136,11 +129,11 @@ lookupTrackedGlobal :: LabeledValue T.Text WI.BaseTypeRepr tp -> Maybe (Global t
 lookupTrackedGlobal lbl = (\idx -> trackedGlobals ! idx) <$> MapF.lookup lbl globalsMapIndexF
 
 lookupGlobal :: LabeledValue T.Text WI.BaseTypeRepr tp -> Maybe (Either (Global tp) (Global tp))
-lookupGlobal lbl = case lookupTrackedGlobal lbl of
-  Just glb -> Just $ Right glb
-  Nothing -> case lookupUntrackedGlobal lbl of
-    Just glb -> Just $ Left glb
-    Nothing -> Nothing
+lookupGlobal lbl = case (lookupUntrackedGlobal lbl, lookupTrackedGlobal lbl) of
+  (Just uglb, Nothing) -> Just $ Left uglb
+  (Nothing, Just tglb) -> Just $ Right tglb
+  (Nothing, Nothing) -> Nothing
+  _ -> error $ "Duplicate global: " ++ show lbl
 
 concreteToStatic :: WI.ConcreteVal tp -> Maybe StaticValue
 concreteToStatic cv = case cv of

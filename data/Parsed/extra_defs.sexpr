@@ -178,6 +178,34 @@
                 (TypeRef
                   (QualifiedIdentifier Any boolean)))))))))
   (DefCallable
+    (QualifiedIdentifier Any UNDEFINED_IntArray)
+    (list)
+    (Just
+      (ReturnType
+        (list
+          (TypeArray
+            (TypeFun
+              bits
+              (ExprVarRef
+                (QualifiedIdentifier Any N)))
+            (IxTypeRange
+              (ExprLitNat 0)
+              (ExprLitNat 0))))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprUnknown
+                (TypeArray
+                  (TypeFun
+                    bits
+                    (ExprVarRef
+                      (QualifiedIdentifier Any N)))
+                  (IxTypeRange
+                    (ExprLitNat 0)
+                    (ExprLitNat 0))))))))))
+  (DefCallable
     (QualifiedIdentifier Any truncate)
     (list
       (SymDecl

@@ -15,13 +15,11 @@ module Language.ASL.Globals.Types
   ( Global(..)
   , GlobalDomain(..)
   , domainSingleton
-  , domainUndefined
   , domainUnbounded
   , asSingleton
   , mkTypeFromGlobals
   , mkTypeFromReprs
-  , mkFreshGlobalBoundVar
-  , mkFreshGlobalFree
+  , mkReprFromGlobals
   , genCond
   ) where
 
@@ -90,10 +88,6 @@ domainSingleton v = DomainSet (Set.singleton v)
 domainUnbounded :: GlobalDomain tp
 domainUnbounded = DomainSpan Nothing Nothing
 
--- | An undefined domain indicates that this global should never be referenced during
--- normal execution. It therefore has an empty set of values that are considered valid.
-domainUndefined :: GlobalDomain tp
-domainUndefined = DomainSet Set.empty
 
 domainSpan :: GlobalDomain tp -> (Maybe (WI.ConcreteVal tp), Maybe (WI.ConcreteVal tp))
 domainSpan dom = case dom of
@@ -167,40 +161,6 @@ mkAnd e1 e2 = case (e1, e2) of
 globalSymbol :: Global tp -> WI.SolverSymbol
 globalSymbol gb = WI.safeSymbol (T.unpack (gbName gb))
 
-mkFreshGlobalBoundVar :: WI.IsSymExprBuilder sym
-                      => sym
-                      -> Global tp
-                      -> IO (WI.BoundVar sym tp)
-mkFreshGlobalBoundVar sym gb = do
-  let symbol = globalSymbol gb
-  WI.freshBoundVar sym symbol (gbType gb)
-
-
-mkFreshGlobalFree :: WI.IsSymExprBuilder sym
-                  => sym
-                  -> Global tp
-                  -> IO (WI.SymExpr sym tp)
-mkFreshGlobalFree sym gb = do
-  case asSingleton (gbDomain gb) of
-    Just v -> case gbType gb of
-      WI.BaseIntegerRepr -> do
-        WI.intLit sym (WI.fromConcreteInteger v)
-      WI.BaseBVRepr nr -> do
-        WI.bvLit sym nr (WI.fromConcreteUnsignedBV v)
-      WI.BaseBoolRepr | WI.fromConcreteBool v -> return $ WI.truePred sym
-      WI.BaseBoolRepr | not (WI.fromConcreteBool v) -> return $ WI.falsePred sym
-    Nothing -> do
-      let span = domainSpan (gbDomain gb)
-      let symbol = globalSymbol gb
-      case gbType gb of
-        WI.BaseIntegerRepr -> do
-          let (lo, hi) = mapSpan WI.fromConcreteInteger span
-          WI.freshBoundedInt sym symbol lo hi
-        WI.BaseBVRepr nr -> do
-          let (lo, hi) = mapSpan WI.fromConcreteUnsignedBV span
-          WI.freshBoundedBV sym symbol nr (fmap naturalFromInteger lo) (fmap naturalFromInteger hi)
-        repr -> WI.freshConstant sym symbol repr
-
 projectGlobals :: forall m ctx
                 . (Monad m, ME.MonadError String m)
                => Map T.Text (Some Global)
@@ -258,6 +218,25 @@ mkTypeFromReprs reprs = case Ctx.viewAssign reprs of
       WI.BaseIntegerRepr -> [t| WI.BaseIntegerType |]
       WI.BaseBVRepr nr -> [t| WI.BaseBVType $(return (TH.LitT (TH.NumTyLit (NR.intValue nr)))) |]
       WI.BaseArrayRepr idx ret -> [t| WI.BaseArrayType $(mkTypeFromReprs idx) $(getty ret) |]
+      WI.BaseStructRepr reprs -> [t| WI.BaseStructType $(mkTypeFromReprs reprs) |]        
+
+mkExprFromReprs :: Ctx.Assignment WI.BaseTypeRepr ctx -> TH.Q TH.Exp
+mkExprFromReprs reprs = case Ctx.viewAssign reprs of
+  Ctx.AssignEmpty -> [e| Ctx.empty |]
+  Ctx.AssignExtend reprs' repr -> [e| $(mkExprFromReprs reprs') Ctx.:> $(gete repr) |]
+  where
+    gete :: WI.BaseTypeRepr tp -> TH.Q TH.Exp
+    gete repr = case repr of
+      WI.BaseBoolRepr -> [e| WI.BaseBoolRepr |]
+      WI.BaseIntegerRepr -> [e| WI.BaseIntegerRepr |]
+      WI.BaseBVRepr nr -> do
+        knownNatE <- [e| NR.knownNat |]
+        [e| WI.BaseBVRepr $(return (TH.AppTypeE knownNatE (TH.LitT (TH.NumTyLit (NR.intValue nr))))) |]
+      WI.BaseArrayRepr idx ret -> [e| WI.BaseArrayRepr $(mkExprFromReprs idx) $(gete ret) |]
+      WI.BaseStructRepr reprs -> [e| WI.BaseStructRepr $(mkExprFromReprs reprs) |]
 
 mkTypeFromGlobals :: Some (Ctx.Assignment Global) -> TH.Q TH.Type
 mkTypeFromGlobals (Some globals) = mkTypeFromReprs $ FC.fmapFC gbType globals
+
+mkReprFromGlobals :: Some (Ctx.Assignment Global) -> TH.Q TH.Exp
+mkReprFromGlobals (Some globals) = mkExprFromReprs $ FC.fmapFC gbType globals

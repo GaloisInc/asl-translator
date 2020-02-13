@@ -1086,7 +1086,9 @@ getDefaultValue repr = case repr of
            MkBaseStruct crucAsn (FC.fmapFC CCG.AtomExpr fields)
   CT.IntegerRepr -> mkUF' "UNDEFINED_integer"
   CT.BoolRepr -> mkUF' "UNDEFINED_boolean"
-  -- CT.SymbolicArrayRepr idx xs -> mkUF "UNDEFINED_Array" repr
+  CT.BoolRepr -> mkUF' "UNDEFINED_boolean"
+  CT.SymbolicArrayRepr (Ctx.Empty Ctx.:> WT.BaseIntegerRepr) (WT.BaseBVRepr _)
+    -> mkUF' "UNDEFINED_IntArray"
   _ -> error $ "Invalid undefined value: " <> show repr
   where
     mkUF' :: T.Text ->  Generator h s arch ret (CCG.Atom s tp)
@@ -1185,8 +1187,12 @@ translateType t = do
        , Just NR.LeqProof <- NR.isPosNat nRepr ->
          return $ Some $ CT.baseToType $
            WT.BaseArrayRepr (Ctx.empty Ctx.:> WT.BaseBVRepr (WT.knownNat @52)) (WT.BaseBVRepr nRepr)
+    AS.TypeArray t'' (AS.IxTypeRange (AS.ExprLitInt _) (AS.ExprLitInt _)) -> do
+      Some ty <- asBaseType <$> translateType t''
+      return $ Some $ CT.SymbolicArrayRepr (Ctx.empty Ctx.:> WT.BaseIntegerRepr) ty    
+    AS.TypeArray _ty _idxTy -> throwTrace $ UnsupportedType t'    
     AS.TypeFun _ _ -> throwTrace $ UnsupportedType t'
-    AS.TypeArray _ty _idxTy -> throwTrace $ UnsupportedType t'
+
     AS.TypeReg _i _flds -> throwTrace $ UnsupportedType t'
     _ -> throwTrace $ UnsupportedType t'
 

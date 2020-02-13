@@ -24,6 +24,9 @@ integer UNDEFINED_integer()
 boolean UNDEFINED_boolean()
     return boolean UNKNOWN;
 
+array [0..0] of bits(N) UNDEFINED_IntArray()
+    return array [0..0] of bits(N) UNKNOWN;
+
 // Defining slicing with primitive bitvector operations
 
 bits(M) truncate(bits(N) bv, integer M);

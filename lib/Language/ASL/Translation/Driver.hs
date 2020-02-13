@@ -195,14 +195,14 @@ runWithFilters' :: HasCallStack
                 -> SigEnv
                 -> SigState
                 -> IO (SigMap arch)
-runWithFilters' opts spec sigEnv sigState = do
+runWithFilters' opts spec env state = do
   let numInstrs = optNumberOfInstructions opts
   let doInstrFilter (daEnc, (instr, enc)) = do
         let test = instrFilter $ optFilters $ opts
         test (instrToIdent daEnc instr enc)
 
   let encodings = filter doInstrFilter $ getEncodingConstraints (aslInstructions spec)
-  execSigMapWithScope opts sigState sigEnv $ do
+  execSigMapWithScope opts state env $ do
     addMemoryUFs
     forM_ (zip [1..] encodings) $ \(i :: Int, (daEnc, (instr, instrEnc))) -> do
       logMsgStr 1 $ "Processing instruction: " ++ DA.encName daEnc ++ " (" ++ DA.encASLIdent daEnc ++ ")"
