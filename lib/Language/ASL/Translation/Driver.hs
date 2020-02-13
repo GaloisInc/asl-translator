@@ -50,6 +50,7 @@ import           Data.Maybe ( catMaybes, mapMaybe )
 import           Data.Monoid
 import           Data.Parameterized.Nonce
 import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.TraversableFC as FC
 import           Data.Bits( (.|.) )
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Text as T
@@ -202,17 +203,24 @@ runWithFilters' opts spec env state = do
         test (instrToIdent daEnc instr enc)
 
   let encodings = filter doInstrFilter $ getEncodingConstraints (aslInstructions spec)
-  execSigMapWithScope opts state env $ do
+  (sigs, sigmap) <- runSigMapWithScope opts state env $ do
     addMemoryUFs
-    forM_ (zip [1..] encodings) $ \(i :: Int, (daEnc, (instr, instrEnc))) -> do
+    forM (zip [1..] encodings) $ \(i :: Int, (daEnc, (instr, instrEnc))) -> do
       logMsgStr 1 $ "Processing instruction: " ++ DA.encName daEnc ++ " (" ++ DA.encASLIdent daEnc ++ ")"
         ++ "\n" ++ show i ++ "/" ++ show (length encodings)
-      runTranslation daEnc instr instrEnc
+      runTranslation daEnc instr instrEnc   
+  IO.withFile "./output/global_sigs.txt" IO.WriteMode $ \handle -> do
+    forM_ (catMaybes sigs) $ \(SomeInstructionSignature sig) -> do
+      hPutStrLn handle $ T.unpack $ funcName sig
+      FC.forFC_ (funcGlobalReadReprs sig) $ \(AC.LabeledValue nm ty) -> do
+        hPutStrLn handle $ "  " ++ T.unpack nm ++ ": " ++ show ty
+  return sigmap
+      
 
 runTranslation :: DA.Encoding
                -> AS.Instruction
                -> AS.InstructionEncoding
-               -> SigMapM arch ()
+               -> SigMapM arch (Maybe SomeInstructionSignature)
 runTranslation daEnc instr instrEnc = do
   let instrIdent = instrToIdent daEnc instr instrEnc
   logMsgStr 2 $ "Computing instruction signature for: " ++ prettyIdent instrIdent
@@ -221,24 +229,29 @@ runTranslation daEnc instr instrEnc = do
   case result of
     Left err -> do
       logMsgStr (-1) $ "Error computing instruction signature: " ++ show err
+      return Nothing
     Right (SomeInstructionSignature iSig, instStmts) -> do
-      liftSigM (KeyInstr instrIdent) getDefinitions >>= \case
-        Left err -> do
-          logMsgStr (-1) $ "Error computing ASL definitions: " ++ show err
-        Right defs -> do
-          logMsgStr 2 $ "Translating instruction: " ++ prettyIdent instrIdent
-          logMsgStr 2 $ (show iSig)
-          minstr <- translateInstruction instrIdent iSig instStmts defs
-          let deps = maybe Set.empty AC.funcDepends minstr
-          MSS.gets (optTranslationDepth . sOptions) >>= \case
-            TranslateRecursive -> do
-              logMsg 2 $ "--------------------------------"
-              logMsg 2 $ "Translating functions: "
-              alldeps <- mapM (translationLoop instrIdent [] defs) (Set.toList deps)
-              let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
-              MSS.modify' $ \s -> s { instrDeps = Map.insert instrIdent alldepsSet (instrDeps s) }
-            TranslateShallow -> return ()
-          maybeSimulateInstruction instrIdent minstr
+      logMsgStr 2 $ "Translating instruction: " ++ prettyIdent instrIdent
+      logMsgStr 2 $ (show iSig)
+      defs <- getDefs
+      minstr <- translateInstruction instrIdent iSig instStmts defs
+      let deps = maybe Set.empty AC.funcDepends minstr
+      MSS.gets (optTranslationDepth . sOptions) >>= \case
+        TranslateRecursive -> do
+          logMsg 2 $ "--------------------------------"
+          logMsg 2 $ "Translating functions: "
+          alldeps <- mapM (translationLoop instrIdent [] defs) (Set.toList deps)
+          let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
+          MSS.modify' $ \s -> s { instrDeps = Map.insert instrIdent alldepsSet (instrDeps s) }
+        TranslateShallow -> return ()
+      maybeSimulateInstruction instrIdent minstr
+      return $ Just $ SomeInstructionSignature iSig
+
+getDefs :: SigMapM arch (Definitions arch)
+getDefs = do
+  env <- MSS.gets sigEnv
+  state <- MSS.gets sigState
+  return $ getDefinitions env state
 
 translationLoop :: InstructionIdent
                 -> [T.Text]
@@ -280,12 +293,12 @@ translationLoop fromInstr callStack defs (fnname, env) = do
             maybeSimulateFunction fromInstr finalName mfunc
             return alldepsSet
 
-execSigMapWithScope :: TranslatorOptions
+runSigMapWithScope :: TranslatorOptions
                     -> SigState
                     -> SigEnv
-                    -> SigMapM arch ()
-                    -> IO (SigMap arch)
-execSigMapWithScope opts sigState sigEnv action = do
+                    -> SigMapM arch a
+                    -> IO (a, SigMap arch)
+runSigMapWithScope opts sigState sigEnv action = do
   handleAllocator <- CFH.newHandleAllocator
   let sigMap =
         SigMap {
@@ -300,7 +313,7 @@ execSigMapWithScope opts sigState sigEnv action = do
           , sHandleAllocator = handleAllocator
           , sFormulaPromises = []
           }
-  execSigMapM action sigMap
+  runSigMapM action sigMap
 
 withOnlineBackend' :: forall arch a
                     . (forall scope. CBO.YicesOnlineBackend scope (B.Flags B.FloatReal) -> IO a)
@@ -804,6 +817,9 @@ instance MonadLog (SigMapM arch) where
 
 execSigMapM :: SigMapM arch a -> SigMap arch -> IO (SigMap arch)
 execSigMapM (SigMapM m) = MSS.execStateT m
+
+runSigMapM :: SigMapM arch a -> SigMap arch -> IO (a, SigMap arch)
+runSigMapM (SigMapM m) = MSS.runStateT m
 
 liftSigM :: ElemKey -> SigM ext f a -> SigMapM arch (Either SigException a)
 liftSigM k f = do

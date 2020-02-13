@@ -98,17 +98,15 @@ data Definitions arch =
               }
 
 -- | Collect the definitions representing the current state
-getDefinitions :: SigM ext f (Definitions arch)
-getDefinitions = do
-  st <- RWS.get
-  env <- RWS.ask
-  return $ Definitions
+getDefinitions :: SigEnv -> SigState -> Definitions arch
+getDefinitions env st =
+  Definitions
     { defSignatures = (\(sig, c, _) -> (sig, callableStmts c)) <$> callableSignatureMap st
     , defTypes = userTypes st
     , defEnums = enums env
     , defConsts = consts env
     , defExtendedTypes = extendedTypeData st
-}
+   }
 
 -- NOTE: This is clagged from types.asl, in
 -- theory we could read this in instead.
