@@ -42,7 +42,7 @@ common shared-properties
                        template-haskell,
                        vector
 
-library asl-translator-lib
+library
   import:              shared-properties
   exposed-modules:     Language.ASL
                        Language.ASL.Crucible
@@ -63,12 +63,12 @@ library asl-translator-lib
   hs-source-dirs:      lib
   ghc-options:         -Wcompat -Wall
 
-executable asl-translator
+executable asl-translator-exec
   main-is:             Main.hs
   build-depends:       base >=4.10.0.0 && < 5,
                        filepath,
                        what4-serialize,
-                       asl-translator-lib
+                       asl-translator
   hs-source-dirs:      exe
   ghc-options:         -Wcompat -Wall -O2 -threaded -rtsopts "-with-rtsopts=-N"
   default-language: Haskell2010

@@ -34,8 +34,8 @@ SOURCE_FILES = $(SPEC_FILES:%.sexpr=${PARSED}/%.sexpr)
 spec: ${SOURCE_FILES}
 
 ./output/formulas.what4: spec ${HS_SOURCES}
-	cabal v2-build asl-translator-lib
-	cabal v2-run asl-translator -- --output-formulas="$@" --asl-spec="${PARSED}/" --parallel
+	cabal v2-build asl-translator
+	cabal v2-run asl-translator-exec -- --output-formulas="$@" --asl-spec="${PARSED}/" --parallel
 
 all: ./output/formulas.what4
 
