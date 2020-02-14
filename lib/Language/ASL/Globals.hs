@@ -1,11 +1,18 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE TypeOperators #-}
+
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Language.ASL.Globals
   ( trackedGlobals
@@ -21,14 +28,23 @@ module Language.ASL.Globals
   , getGlobalsSubMap
   , lookupGlobal
   , Global(..)
+  , GlobalsType
+  , GlobalRef
+  , knownGlobalIndex
+  , knownGlobalRef
+  , globalRefSymbol
+  , globalRefRepr
+  , testGlobalEq
+  , allGlobalRefs
+  , unGR
   )
 
 where
 
+import           GHC.TypeLits
 
 import           Control.Applicative ( Const(..) )
 import           Control.Monad.Identity
-import           Control.Monad.Except ( throwError )
 import qualified Control.Monad.Except as ME
 
 import qualified Data.Text as T
@@ -36,9 +52,7 @@ import           Data.Map ( Map )
 import qualified Data.Map as Map
 import           Data.Maybe ( catMaybes )
 
-import           Data.Parameterized.Context ( EmptyCtx, (::>), Assignment, empty
-                                            , pattern (:>), Index, traverseWithIndex
-                                            , (!) )
+import           Data.Parameterized.Context
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
 import           Data.Parameterized.Classes
@@ -49,7 +63,6 @@ import           Data.Parameterized.Pair
 import qualified What4.Interface as WI
 import qualified What4.Concrete as WI
 
-import qualified Lang.Crucible.CFG.Expr as CCE
 import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.Types as CT
 
@@ -59,6 +72,8 @@ import           Language.ASL.Types
 
 import           Language.ASL.Globals.Types
 import           Language.ASL.Globals.Definitions
+
+import qualified Language.Haskell.TH as TH
 
 type UntrackedGlobalsCtx = $(mkTypeFromGlobals untrackedGlobals')
 type GlobalsCtx = $(mkTypeFromGlobals trackedGlobals')
@@ -72,6 +87,7 @@ trackedGlobalBaseReprs = $(mkReprFromGlobals trackedGlobals')
 untrackedGlobals :: Assignment Global UntrackedGlobalsCtx
 untrackedGlobals = case untrackedGlobals' of
   Some gbs | Just Refl <- testEquality (FC.fmapFC gbType gbs) untrackedGlobalBaseReprs -> gbs
+  _ -> error "template haskell error"
 
 untrackedGlobalReprs :: Assignment (LabeledValue T.Text WI.BaseTypeRepr) UntrackedGlobalsCtx
 untrackedGlobalReprs = FC.fmapFC (\gb -> LabeledValue (gbName gb) (gbType gb)) untrackedGlobals
@@ -79,6 +95,7 @@ untrackedGlobalReprs = FC.fmapFC (\gb -> LabeledValue (gbName gb) (gbType gb)) u
 trackedGlobals :: Assignment Global GlobalsCtx
 trackedGlobals = case trackedGlobals' of
   Some gbs | Just Refl <- testEquality (FC.fmapFC gbType gbs) trackedGlobalBaseReprs -> gbs
+  _ -> error "template haskell error"
 
 trackedGlobalReprs :: Assignment (LabeledValue T.Text WI.BaseTypeRepr) GlobalsCtx
 trackedGlobalReprs = FC.fmapFC (\gb -> LabeledValue (gbName gb) (gbType gb)) trackedGlobals
@@ -89,7 +106,7 @@ getPrecond :: forall ext s reads writes args ret err m
            -> (forall tp. LabeledValue T.Text WI.BaseTypeRepr tp -> m (CCG.Expr ext s (CT.BaseToType tp)))
            -> FunctionSignature reads writes args ret
            -> m [(T.Text, CCG.Expr ext s CT.BoolType)]
-getPrecond mkerr lookup sig = genCond mkerr globalsMap lookup (funcGlobalReadReprs sig)
+getPrecond mkerr lookup' sig = genCond mkerr globalsMap lookup' (funcGlobalReadReprs sig)
 
 getPostcond :: forall ext s reads writes args ret err m
              . (Monad m, ME.MonadError err m)
@@ -97,7 +114,7 @@ getPostcond :: forall ext s reads writes args ret err m
             -> (forall tp. LabeledValue T.Text WI.BaseTypeRepr tp -> m (CCG.Expr ext s (CT.BaseToType tp)))
             -> FunctionSignature reads writes args ret
             -> m [(T.Text, CCG.Expr ext s CT.BoolType)]
-getPostcond mkerr lookup sig = genCond mkerr globalsMap lookup (funcGlobalWriteReprs sig)
+getPostcond mkerr lookup' sig = genCond mkerr globalsMap lookup' (funcGlobalWriteReprs sig)
 
 globalsMap :: Map T.Text (Some Global)
 globalsMap = Map.fromList $
@@ -166,3 +183,63 @@ getGlobalsSubMap reprs = do
       Nothing -> case MapF.lookup lblv untrackedGlobalsMapIndexF of
         Just _ -> return $ Const $ Nothing
         Nothing -> ME.throwError $ "Missing global specification for: " ++ show lblv
+
+$(mkInstDeclsFromGlobals trackedGlobals')
+
+type GlobalSymsCtx = $(mkAllGlobalSymsT trackedGlobals')
+
+globalsSyms :: MapF CT.SymbolRepr (SGlobal GlobalsCtx)
+globalsSyms = MapF.fromList $ ($(mkGlobalsSyms trackedGlobals') globalsMapIndexF)
+
+data GlobalRef (s :: Symbol) where
+  GlobalRef :: IsGlobal s => CT.SymbolRepr s -> Index GlobalsCtx (GlobalsType s) -> GlobalRef s
+
+testGlobalEq :: forall s s'. IsGlobal s => GlobalRef s' -> Maybe (s :~: s')
+testGlobalEq gr = testEquality (knownGlobalRef @s) gr
+
+unGR :: GlobalRef s -> (CT.SymbolRepr s, WI.BaseTypeRepr (GlobalsType s), Index GlobalsCtx (GlobalsType s))
+unGR (GlobalRef repr idx) = (repr, trackedGlobalBaseReprs ! idx, idx)
+
+globalRefSymbol :: GlobalRef s -> CT.SymbolRepr s
+globalRefSymbol gr = case unGR gr of (s, _, _) -> s
+
+globalRefRepr :: GlobalRef s -> WI.BaseTypeRepr (GlobalsType s)
+globalRefRepr gr = case unGR gr of (_, repr, _) -> repr
+
+-- Here we explicitly assume that each symbol represents a unique global ref
+instance TestEquality GlobalRef where
+  testEquality gr1 gr2 = case (unGR gr1, unGR gr2) of
+    ((s1, _, _), (s2, _, _)) -> testEquality s1 s2
+
+instance OrdF GlobalRef where
+  compareF gr1 gr2 = case (unGR gr1, unGR gr2) of
+    ((s1, _, _), (s2, _, _)) -> compareF s1 s2
+
+knownSGlobal :: forall s
+            . IsGlobal s
+           => SGlobal GlobalsCtx s
+knownSGlobal =
+  let repr = CT.knownSymbol :: CT.SymbolRepr s
+  in case MapF.lookup repr globalsSyms of
+    Just (SGlobal r) -> SGlobal r
+    Nothing -> error $ "No corresponding global for: " ++ show repr
+
+knownGlobalIndex :: forall s
+                  . IsGlobal s
+                 => Index GlobalsCtx (GlobalsType s)
+knownGlobalIndex = unSG @GlobalsCtx @s $ knownSGlobal
+
+knownGlobalRef :: forall s
+                . IsGlobal s
+               => GlobalRef s
+knownGlobalRef = case knownSGlobal @s of
+  SGlobal r -> GlobalRef CT.knownSymbol r
+
+-- | This is a little bit gross, since we need to establish IsGlobal for each element.
+allGlobalRefs :: Assignment GlobalRef GlobalSymsCtx
+allGlobalRefs = $(foldGlobals trackedGlobals'
+                  (TH.lamE [return TH.WildP, return TH.WildP] (TH.varE (TH.mkName "knownGlobalRef")))
+                 [e| (:>) |] [| empty |])
+
+_test :: Index GlobalsCtx (GlobalsType "_PC")
+_test = knownGlobalIndex @"_PC"

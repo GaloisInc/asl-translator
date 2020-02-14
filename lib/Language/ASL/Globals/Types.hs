@@ -10,20 +10,30 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+
 
 module Language.ASL.Globals.Types
   ( Global(..)
   , GlobalDomain(..)
+  , SGlobal(..)
+  , GlobalsType
+  , IsGlobal
   , domainSingleton
   , domainUnbounded
   , asSingleton
+  , mkInstDeclsFromGlobals
+  , mkAllGlobalSymsT
+  , mkGlobalsSyms
   , mkTypeFromGlobals
   , mkTypeFromReprs
   , mkReprFromGlobals
+  , foldGlobals
   , genCond
   ) where
 
 import           GHC.Natural ( naturalFromInteger )
+import           GHC.TypeLits
 
 import           Control.Applicative ( Const(..) )
 import           Control.Monad ( forM, foldM )
@@ -37,6 +47,9 @@ import           Data.Parameterized.Context ( EmptyCtx, (::>), Assignment, empty
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
 import qualified Data.Parameterized.TraversableFC as FC
+import           Data.Parameterized.Map ( MapF )
+import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.Pair
 
 import           Data.Maybe ( catMaybes )
 import           Data.List ( intercalate )
@@ -206,34 +219,113 @@ genCond mkerr globalsMap lookup sig = do
       expr <- lookup lblv
       return $ Const $ (projectLabel lblv, domainPred gb expr)
 
+-- Retrieving indexes into the globals based on type-level symbols
+
+type family GlobalsType (s :: Symbol) :: WI.BaseType
+
+class KnownSymbol s => IsGlobal (s:: Symbol) where
+  hasKnownGlobalRepr :: CT.SymbolRepr s -> WI.BaseTypeRepr (GlobalsType s)
+
+data SGlobal ctx (s :: Symbol) where
+  SGlobal :: { unSG :: Ctx.Index ctx (GlobalsType s) } -> SGlobal ctx s
+
+symToSGlobal :: forall s ctx. MapF (LabeledValue T.Text WI.BaseTypeRepr) (Ctx.Index ctx)
+          -> CT.SymbolRepr s
+          -> WI.BaseTypeRepr (GlobalsType s)
+          -> SGlobal ctx s
+symToSGlobal f srepr trepr = case MapF.lookup (LabeledValue (CT.symbolRepr srepr) trepr) f of
+  Just idx -> SGlobal idx
+  Nothing -> error $ "No corresponding global for: " ++ show srepr
+
+
+data ReifiedGlobal = ReifiedGlobal
+   { symbolT :: TH.Type
+   , symbolE :: TH.Exp
+   , typeT :: TH.Type
+   , typeE :: TH.Exp
+   }
+
+mapAllGlobals :: forall a
+               . (ReifiedGlobal -> TH.Q a)
+              -> (a -> a -> TH.Q a)
+              -> TH.Q a
+              -> Some (Ctx.Assignment Global)
+              -> TH.Q a
+mapAllGlobals mkelem comb fin (Some globals) = go globals
+  where
+    go :: Ctx.Assignment Global ctx -> TH.Q a
+    go globals' = case Ctx.viewAssign globals' of
+      Ctx.AssignEmpty -> fin
+      Ctx.AssignExtend asn' gb -> do
+        rest <- go asn'
+        symbolT' <- TH.litT (TH.strTyLit (T.unpack $ gbName gb))
+        symbolE' <- [e| CT.knownSymbol :: CT.SymbolRepr $(return symbolT') |]
+        typeT' <- mkTypeFromRepr (gbType gb)
+        typeE' <- mkExprFromRepr (gbType gb)
+        elem <- mkelem (ReifiedGlobal symbolT' symbolE' typeT' typeE')
+        comb elem rest
+
+
+mkInstDeclsFromGlobals :: Some (Ctx.Assignment Global) -> TH.DecsQ
+mkInstDeclsFromGlobals = mapAllGlobals go (\d1 d2 -> return $ d1 ++ d2) (return [])
+ where
+   go :: ReifiedGlobal -> TH.Q [TH.Dec]
+   go (ReifiedGlobal sT sE tT tE) = [d|
+      type instance GlobalsType $(return sT) = $(return tT)
+      instance IsGlobal $(return sT) where
+        hasKnownGlobalRepr _ = $(return tE)
+      |]
+
+mkAllGlobalSymsT :: Some (Ctx.Assignment Global) -> TH.Q TH.Type
+mkAllGlobalSymsT = mapAllGlobals go (\t1 t2 -> [t| $(return t2) Ctx.::> $(return t1) |]) [t| Ctx.EmptyCtx |]
+  where
+    go :: ReifiedGlobal -> TH.Q TH.Type
+    go (ReifiedGlobal sT sE tT tE) = return sT
+
+foldGlobals :: Some (Ctx.Assignment Global) -> TH.Q TH.Exp -> TH.Q TH.Exp -> TH.Q TH.Exp -> TH.Q TH.Exp
+foldGlobals glbs mkelem combElem init =
+    mapAllGlobals go (\e1 e2 -> [e| $(combElem) $(return e2) $(return e1) |]) [e| $(init) |] glbs
+  where
+    go :: ReifiedGlobal -> TH.Q TH.Exp
+    go (ReifiedGlobal sT sE tT tE) =
+      [e| $(mkelem) $(return sE) $(return tE) |]
+
+mkGlobalsSyms :: Some (Ctx.Assignment Global) -> TH.Q TH.Exp
+mkGlobalsSyms glbs = do
+  vargbl <- TH.newName "varglbs"
+  TH.lamE [TH.varP vargbl] (mapAllGlobals (go (TH.VarE vargbl)) (\e1 e2 -> [e| $(return e1) : $(return e2) |]) [e| [] |] glbs)
+  where
+    go :: TH.Exp -> ReifiedGlobal -> TH.Q TH.Exp
+    go glbsE (ReifiedGlobal sT sE tT tE) =
+      [e| Pair $(return sE) (symToSGlobal $(return glbsE) $(return sE) $(return tE)) |]
+
+mkTypeFromRepr :: WI.BaseTypeRepr tp -> TH.Q TH.Type
+mkTypeFromRepr repr = case repr of
+  WI.BaseBoolRepr -> [t| WI.BaseBoolType |]
+  WI.BaseIntegerRepr -> [t| WI.BaseIntegerType |]
+  WI.BaseBVRepr nr -> [t| WI.BaseBVType $(return (TH.LitT (TH.NumTyLit (NR.intValue nr)))) |]
+  WI.BaseArrayRepr idx ret -> [t| WI.BaseArrayType $(mkTypeFromReprs idx) $(mkTypeFromRepr ret) |]
+  WI.BaseStructRepr reprs -> [t| WI.BaseStructType $(mkTypeFromReprs reprs) |]
 
 mkTypeFromReprs :: Ctx.Assignment WI.BaseTypeRepr ctx -> TH.Q TH.Type
 mkTypeFromReprs reprs = case Ctx.viewAssign reprs of
   Ctx.AssignEmpty -> [t| Ctx.EmptyCtx |]
-  Ctx.AssignExtend reprs' repr -> [t| $(mkTypeFromReprs reprs') Ctx.::> $(getty repr) |]
-  where
-    getty :: WI.BaseTypeRepr tp -> TH.Q TH.Type
-    getty repr = case repr of
-      WI.BaseBoolRepr -> [t| WI.BaseBoolType |]
-      WI.BaseIntegerRepr -> [t| WI.BaseIntegerType |]
-      WI.BaseBVRepr nr -> [t| WI.BaseBVType $(return (TH.LitT (TH.NumTyLit (NR.intValue nr)))) |]
-      WI.BaseArrayRepr idx ret -> [t| WI.BaseArrayType $(mkTypeFromReprs idx) $(getty ret) |]
-      WI.BaseStructRepr reprs -> [t| WI.BaseStructType $(mkTypeFromReprs reprs) |]        
+  Ctx.AssignExtend reprs' repr -> [t| $(mkTypeFromReprs reprs') Ctx.::> $(mkTypeFromRepr repr) |]
+
+mkExprFromRepr :: WI.BaseTypeRepr tp -> TH.Q TH.Exp
+mkExprFromRepr repr = case repr of
+  WI.BaseBoolRepr -> [e| WI.BaseBoolRepr |]
+  WI.BaseIntegerRepr -> [e| WI.BaseIntegerRepr |]
+  WI.BaseBVRepr nr -> do
+    knownNatE <- [e| NR.knownNat |]
+    [e| WI.BaseBVRepr $(return (TH.AppTypeE knownNatE (TH.LitT (TH.NumTyLit (NR.intValue nr))))) |]
+  WI.BaseArrayRepr idx ret -> [e| WI.BaseArrayRepr $(mkExprFromReprs idx) $(mkExprFromRepr ret) |]
+  WI.BaseStructRepr reprs -> [e| WI.BaseStructRepr $(mkExprFromReprs reprs) |]
 
 mkExprFromReprs :: Ctx.Assignment WI.BaseTypeRepr ctx -> TH.Q TH.Exp
 mkExprFromReprs reprs = case Ctx.viewAssign reprs of
   Ctx.AssignEmpty -> [e| Ctx.empty |]
-  Ctx.AssignExtend reprs' repr -> [e| $(mkExprFromReprs reprs') Ctx.:> $(gete repr) |]
-  where
-    gete :: WI.BaseTypeRepr tp -> TH.Q TH.Exp
-    gete repr = case repr of
-      WI.BaseBoolRepr -> [e| WI.BaseBoolRepr |]
-      WI.BaseIntegerRepr -> [e| WI.BaseIntegerRepr |]
-      WI.BaseBVRepr nr -> do
-        knownNatE <- [e| NR.knownNat |]
-        [e| WI.BaseBVRepr $(return (TH.AppTypeE knownNatE (TH.LitT (TH.NumTyLit (NR.intValue nr))))) |]
-      WI.BaseArrayRepr idx ret -> [e| WI.BaseArrayRepr $(mkExprFromReprs idx) $(gete ret) |]
-      WI.BaseStructRepr reprs -> [e| WI.BaseStructRepr $(mkExprFromReprs reprs) |]
+  Ctx.AssignExtend reprs' repr -> [e| $(mkExprFromReprs reprs') Ctx.:> $(mkExprFromRepr repr) |]
 
 mkTypeFromGlobals :: Some (Ctx.Assignment Global) -> TH.Q TH.Type
 mkTypeFromGlobals (Some globals) = mkTypeFromReprs $ FC.fmapFC gbType globals

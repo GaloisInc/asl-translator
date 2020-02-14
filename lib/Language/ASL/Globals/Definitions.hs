@@ -111,8 +111,6 @@ trackedGlobals' = Some $ empty
   :> bv @1 "PSTATE_Z"
   :> bv @1 "PSTATE_nRW"
 
-
-
 def :: T.Text -> WI.BaseTypeRepr tp -> GlobalDomain tp -> Global tp
 def nm repr dom = Global nm repr dom
 
