@@ -12,7 +12,7 @@ main :: IO ()
 main = do
   Log.withLogging "main" (Log.stdErrLogEventConsumer logLvl) $ do
     let opts = defaultTestOptions Log.getLogCfg
-    ASL.SomeSigMap sm <- ASL.runWithFilters opts
+    sm <- ASL.runWithFilters opts
     ASL.serializeFormulas opts sm
 
 logLvl :: Log.LogEvent -> Bool

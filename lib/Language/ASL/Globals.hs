@@ -19,6 +19,7 @@ module Language.ASL.Globals
   , untrackedGlobals
   , untrackedGlobalReprs
   , trackedGlobalReprs
+  , trackedGlobalBaseReprs
   , GlobalsCtx
   , UntrackedGlobalsCtx
   , getPrecond
@@ -30,10 +31,12 @@ module Language.ASL.Globals
   , Global(..)
   , GlobalsType
   , GlobalRef
+  , GlobalSymsCtx
   , knownGlobalIndex
   , knownGlobalRef
   , globalRefSymbol
   , globalRefRepr
+  , globalRefIndex
   , testGlobalEq
   , allGlobalRefs
   , unGR
@@ -205,6 +208,9 @@ globalRefSymbol gr = case unGR gr of (s, _, _) -> s
 
 globalRefRepr :: GlobalRef s -> WI.BaseTypeRepr (GlobalsType s)
 globalRefRepr gr = case unGR gr of (_, repr, _) -> repr
+
+globalRefIndex :: GlobalRef s -> Index GlobalsCtx (GlobalsType s)
+globalRefIndex gr = case unGR gr of (_, _, idx) -> idx
 
 -- Here we explicitly assume that each symbol represents a unique global ref
 instance TestEquality GlobalRef where
