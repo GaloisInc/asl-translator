@@ -2659,10 +2659,11 @@ overrides = Overrides {..}
                 , WT.LeqProof <- WT.leqMulPos (WT.knownNat @8) szRepr -> do
                   Some value <- translateExpr overrides valueExpr 
                   Refl <- assertAtomType valueExpr (CT.BVRepr bvSize) value
+                  let name = "write_mem_" <> (T.pack (show (WT.intValue bvSize)))
                   let ramRepr = CCG.typeOfAtom memAtom
                   case CT.asBaseType ramRepr of
                     CT.AsBaseType btramRepr -> do
-                      let uf = UF ("write_mem_" <> (T.pack $ show sz)) btramRepr
+                      let uf = UF name btramRepr
                             (Ctx.empty
                              Ctx.:> ramRepr
                              Ctx.:> CT.BVRepr (WT.knownNat @32)
@@ -2715,8 +2716,9 @@ overrides = Overrides {..}
                   | Some (BVRepr szRepr) <- intToBVRepr sz
                   , bvSize <- (WT.knownNat @8) `WT.natMultiply` szRepr
                   , WT.LeqProof <- WT.leqMulPos (WT.knownNat @8) szRepr -> do
+                    let name = "read_mem_" <> (T.pack (show (WT.intValue bvSize)))
                     let ramRepr = CCG.typeOfAtom memAtom
-                    let uf = UF ("read_mem_" <> (T.pack $ show sz)) (WT.BaseBVRepr bvSize)
+                    let uf = UF name (WT.BaseBVRepr bvSize)
                           (Ctx.empty
                            Ctx.:> ramRepr
                            Ctx.:> (CT.BVRepr (WT.knownNat @32)))

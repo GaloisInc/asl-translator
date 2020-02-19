@@ -344,10 +344,10 @@ memoryUFSigs = concatMap mkUF [1,2,4,8,16]
       , Just WI.LeqProof <- WI.knownNat @1 `WI.testLeq` szRepr
       , bvSize <- (WI.knownNat @8) `WI.natMultiply` szRepr
       , WI.LeqProof <- WI.leqMulPos (WI.knownNat @8) szRepr =
-        [( "write_mem." <> (T.pack (show sz))
+        [( "write_mem_" <> (T.pack (show (WI.intValue bvSize)))
          , ( Some (Ctx.empty Ctx.:> ramRepr Ctx.:> (WI.BaseBVRepr (WI.knownNat @32)) Ctx.:> WI.BaseBVRepr bvSize)
            , Some ramRepr))
-        ,( "read_mem." <> (T.pack (show sz))
+        ,( "read_mem_" <> (T.pack (show (WI.intValue bvSize)))
          , ( Some (Ctx.empty Ctx.:> ramRepr Ctx.:> (WI.BaseBVRepr (WI.knownNat @32)))
            , Some (WI.BaseBVRepr bvSize)))
         ]
