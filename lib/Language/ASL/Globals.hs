@@ -32,6 +32,7 @@ module Language.ASL.Globals
   , GlobalsType
   , GlobalRef
   , GlobalSymsCtx
+  , lookupGlobalRef
   , knownGlobalIndex
   , knownGlobalRef
   , globalRefSymbol
@@ -195,10 +196,15 @@ globalsSyms :: MapF CT.SymbolRepr (SGlobal GlobalsCtx)
 globalsSyms = MapF.fromList $ ($(mkGlobalsSyms trackedGlobals') globalsMapIndexF)
 
 data GlobalRef (s :: Symbol) where
-  GlobalRef :: IsGlobal s => CT.SymbolRepr s -> Index GlobalsCtx (GlobalsType s) -> GlobalRef s
+  GlobalRef :: CT.SymbolRepr s -> Index GlobalsCtx (GlobalsType s) -> GlobalRef s
 
-testGlobalEq :: forall s s'. IsGlobal s => GlobalRef s' -> Maybe (s :~: s')
-testGlobalEq gr = testEquality (knownGlobalRef @s) gr
+testGlobalEq :: forall s s'
+              . IsGlobal s
+             => GlobalRef s'
+             -> Maybe (s :~: s')
+testGlobalEq gr = do
+  Refl <- testEquality (knownGlobalRef @s) gr
+  return Refl
 
 unGR :: GlobalRef s -> (CT.SymbolRepr s, WI.BaseTypeRepr (GlobalsType s), Index GlobalsCtx (GlobalsType s))
 unGR (GlobalRef repr idx) = (repr, trackedGlobalBaseReprs ! idx, idx)
@@ -229,6 +235,12 @@ knownSGlobal =
   in case MapF.lookup repr globalsSyms of
     Just (SGlobal r) -> SGlobal r
     Nothing -> error $ "No corresponding global for: " ++ show repr
+
+lookupGlobalRef :: String -> Maybe (Some GlobalRef)
+lookupGlobalRef str = case CT.someSymbol (T.pack str) of
+  Some symb -> case MapF.lookup symb globalsSyms of
+    Just (SGlobal idx) -> Just $ Some $ GlobalRef symb idx
+    _ -> Nothing
 
 knownGlobalIndex :: forall s
                   . IsGlobal s

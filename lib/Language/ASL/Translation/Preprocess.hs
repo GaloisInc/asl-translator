@@ -439,7 +439,8 @@ globalFunctions =
   , ("getSlice", 4)
   , ("UNDEFINED_bitvector", 0)
   , ("UNDEFINED_integer", 0)
-  , ("UNDEFINED_boolean", 0)]
+  , ("UNDEFINED_boolean", 0)
+  , ("UNDEFINED_IntArray", 0)]
 
 initializeSigM :: ASLSpec -> SigM ext f ()
 initializeSigM ASLSpec{..} = do
@@ -571,7 +572,7 @@ data SigException = TypeNotFound T.Text
                   | FailedToDetermineStaticEnvironment [T.Text]
                   | FailedToMonomorphizeSignature AS.Type StaticValues
                   | UnexpectedRegisterFieldLength T.Text Integer
-                  | forall tp. MissingOrInvalidGlobal T.Text (WT.BaseTypeRepr tp)
+                  | MissingOrInvalidGlobals [(T.Text, Some WT.BaseTypeRepr)]
                   | MissingGlobals [(T.Text, Some WT.BaseTypeRepr)]
                   | forall tp. InvalidInstructionOperand (T.Text, WT.BaseTypeRepr tp)
                   | InstructionSignatureMismatch [(String, Integer)] [(String, Integer)]
@@ -1028,8 +1029,9 @@ computeFieldType AS.InstructionField{..} = do
 
 
 validateEncoding :: DA.Encoding -> SomeInstructionSignature -> SigM ext f ()
-validateEncoding (DA.encRealOperands -> ops) (SomeInstructionSignature iSig) = do
+validateEncoding daEnc (SomeInstructionSignature iSig) = do
   args <- FC.toListFC (\(Const c) -> c) <$> FC.traverseFC mkSimpleArg (funcArgReprs iSig)
+  let ops = DA.encRealOperands daEnc ++ DA.encPseudoOperands daEnc
   unless (args == ops) $ do
     E.throwError $ InstructionSignatureMismatch args ops
   where
@@ -1067,10 +1069,13 @@ computeInstructionSignature daEnc AS.Instruction{..} enc = do
   globalVars <- globalsOfStmts instStmts
 
   (globalReads, globalWrites) <- return $ unpackGVarRefs globalVars
-  forM_ globalReads $ \(varName, Some varTp) ->
+  missingGlobals <- liftM catMaybes $ forM globalReads $ \(varName, Some varTp) ->
     case G.lookupGlobal (LabeledValue varName varTp) of
-      Just _ -> return ()
-      Nothing -> E.throwError $ MissingOrInvalidGlobal varName varTp
+      Just _ -> return Nothing
+      Nothing -> return $ Just (varName, Some varTp)
+  case missingGlobals of
+    [] -> return ()
+    _ -> E.throwError $ MissingOrInvalidGlobals missingGlobals
 
   labeledReads <- forM globalReads $ \(varName, Some varTp) -> do
     return $ Some (LabeledValue varName varTp)

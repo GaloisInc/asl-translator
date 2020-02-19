@@ -849,8 +849,12 @@ isWriteOnly name = do
   ts <- MS.get
   env <- getStaticEnv
   return $
-       Map.member name (tsArgAtoms ts)
-    || Map.member name (tsEnums ts)
+
+    -- FIXME: In "InstructionDevice" we see a struct that is modified in-place, but returned.
+    -- Violating that args are write-only, but also causing a translation failure since
+    -- we can't assert equality of structs
+    --   Map.member name (tsArgAtoms ts)
+       Map.member name (tsEnums ts)
     || Map.member name (tsConsts ts)
     || isJust (staticEnvValue env name)
 
@@ -1261,6 +1265,10 @@ unifyType aslT constraint = do
                mapStaticVals $ Map.insert ident (StaticInt innerVal)
             _ -> throwTrace $ TypeUnificationFailure aslT constraint (staticEnvMapVals env)
         _ -> throwTrace $ TypeUnificationFailure aslT constraint (staticEnvMapVals env)
+    (AS.TypeArray t (AS.IxTypeRange (AS.ExprLitInt _) (AS.ExprLitInt _)),
+      ConstraintSingle (CT.SymbolicArrayRepr (Ctx.Empty Ctx.:> WT.BaseIntegerRepr) repr)) -> do
+      unifyType t (ConstraintSingle (CT.baseToType repr))
+
     -- it's not clear if this is always safe
 
     -- (AS.TypeFun "bits" _ , ConstraintHint (HintMaxBVSize nr)) -> do
@@ -1285,6 +1293,7 @@ unifyType aslT constraint = do
 dependentVarsOfType :: AS.Type -> [T.Text]
 dependentVarsOfType t = case t of
   AS.TypeFun "bits" e -> TR.varsOfExpr e
+  AS.TypeArray t _ -> dependentVarsOfType t
   _ -> []
 
 
