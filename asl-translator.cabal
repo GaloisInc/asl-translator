@@ -79,7 +79,7 @@ common tests-common
   build-depends:       base >= 4.10.0.0 && < 5,
                        filepath,
                        what4-serialize,
-                       asl-translator-lib
+                       asl-translator
 
 test-suite asl-translator-tests
   type: exitcode-stdio-1.0
@@ -88,7 +88,7 @@ test-suite asl-translator-tests
   build-depends:       base >= 4.10.0.0 && < 5,
                        filepath,
                        what4-serialize,
-                       asl-translator-lib
+                       asl-translator
   main-is: Main.hs
 
 test-suite asl-translator-deserialize-test
@@ -100,5 +100,20 @@ test-suite asl-translator-deserialize-test
                        what4-serialize,
                        what4,
                        parameterized-utils,
-                       asl-translator-lib
+                       asl-translator
   main-is: Main.hs
+
+executable asl-translator-concrete-test
+  main-is: Concrete.hs
+  build-depends:       base >= 4.10.0.0 && < 5,
+                       filepath,
+                       what4-serialize,
+                       what4,
+                       parameterized-utils,
+                       asl-translator,
+                       text,
+                       containers,
+                       random
+  hs-source-dirs: exe
+  ghc-options:         -Wcompat -Wall -O2 -threaded -rtsopts "-with-rtsopts=-N"
+  default-language: Haskell2010
