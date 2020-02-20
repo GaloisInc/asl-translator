@@ -79,6 +79,7 @@ import qualified Language.ASL.SyntaxTraverse as AS  ( pattern VarName )
 import qualified Language.ASL.SyntaxTraverse as TR
 
 import qualified Language.ASL as ASL
+import qualified Language.ASL.Globals as G
 
 import qualified Language.ASL.Crucible as AC
 
@@ -204,7 +205,7 @@ runWithFilters' opts spec env state = do
 
   let encodings = filter doInstrFilter $ getEncodingConstraints (aslInstructions spec)
   (sigs, sigmap) <- runSigMapWithScope opts state env $ do
-    addMemoryUFs
+    addUFS (memoryUFSigs ++ initGlobalSigs)
     forM (zip [1..] encodings) $ \(i :: Int, (daEnc, (instr, instrEnc))) -> do
       logMsgStr 1 $ "Processing instruction: " ++ DA.encName daEnc ++ " (" ++ DA.encASLIdent daEnc ++ ")"
         ++ "\n" ++ show i ++ "/" ++ show (length encodings)
@@ -353,10 +354,14 @@ memoryUFSigs = concatMap mkUF [1,2,4,8,16]
         ]
     mkUF _ = error "unreachable"
 
-addMemoryUFs :: SigMapM arch ()
-addMemoryUFs = do
+initGlobalSigs :: [(T.Text, ((Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr)))]
+initGlobalSigs =
+  FC.toListFC (\gb -> ("INIT_GLOBAL_" <> G.gbName gb, ((Some Ctx.empty, Some (G.gbType gb))))) G.untrackedGlobals
+
+addUFS :: [(T.Text, ((Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr)))] -> SigMapM arch ()
+addUFS sigs = do
   Just ufs <- withOnlineBackend (KeyFun "memory") $ \sym -> do
-    forM memoryUFSigs $ \(name, (Some argTs, Some retT)) -> do
+    forM sigs $ \(name, (Some argTs, Some retT)) -> do
       let symbol = U.makeSymbol (T.unpack name)
       symFn <- WI.freshTotalUninterpFn sym symbol argTs retT
       return $ (name, SomeSymFn symFn)

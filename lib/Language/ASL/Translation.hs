@@ -415,11 +415,21 @@ initializeUndefinedGlobal lbl = do
   case G.lookupGlobal lbl of
     Just (Left gb) -> case Map.lookup (G.gbName gb) (tsGlobals ts) of
       Just (Some gref) | Just Refl <- testEquality (CCG.globalType gref) (CT.baseToType (G.gbType gb)) -> do
-        defaultv <- getDefaultValue (CCG.globalType gref)
+        defaultv <- getInitialGlobal (projectLabel lbl) (projectValue lbl)
         liftGenerator $ CCG.writeGlobal gref (CCG.AtomExpr defaultv)
       _ -> throwTrace $ TranslationError $ "Untracked global missing from registers: " ++ show (G.gbName gb)
     Just (Right _) -> return ()
     Nothing -> throwTrace $ TranslationError $ "No corresponding global with given signature: " ++ show lbl
+
+getInitialGlobal :: forall h s arch ret tp
+                 . T.Text
+                -> WT.BaseTypeRepr tp
+                -> Generator h s arch ret (CCG.Atom s (CT.BaseToType tp))
+getInitialGlobal nm repr = do
+  let uf = UF ("INIT_GLOBAL_" <> nm) repr Ctx.empty Ctx.empty
+  atom <- mkAtom (CCG.App (CCE.ExtensionApp uf))
+  return atom
+
 
 assertExpr :: Overrides arch
            -> AS.Expr
@@ -1081,25 +1091,26 @@ getDefaultValue :: forall h s arch ret tp
                  . CT.TypeRepr tp
                 -> Generator h s arch ret (CCG.Atom s tp)
 getDefaultValue repr = case repr of
-  CT.BVRepr _ -> mkUF' "UNDEFINED_bitvector"
+  CT.BVRepr _ -> mkUF "UNDEFINED_bitvector" repr
   CT.SymbolicStructRepr tps -> do
     let crucAsn = toCrucTypes tps
     if | Refl <- baseCrucProof tps -> do
          fields <- FC.traverseFC getDefaultValue crucAsn
          mkAtom $ CCG.App $ CCE.ExtensionApp $
            MkBaseStruct crucAsn (FC.fmapFC CCG.AtomExpr fields)
-  CT.IntegerRepr -> mkUF' "UNDEFINED_integer"
-  CT.BoolRepr -> mkUF' "UNDEFINED_boolean"
-  CT.BoolRepr -> mkUF' "UNDEFINED_boolean"
+  CT.IntegerRepr -> mkUF "UNDEFINED_integer" repr
+  CT.BoolRepr -> mkUF "UNDEFINED_boolean" repr
+  CT.BoolRepr -> mkUF "UNDEFINED_boolean" repr
   CT.SymbolicArrayRepr (Ctx.Empty Ctx.:> WT.BaseIntegerRepr) (WT.BaseBVRepr _)
-    -> mkUF' "UNDEFINED_IntArray"
+    -> mkUF "UNDEFINED_IntArray" repr
   _ -> error $ "Invalid undefined value: " <> show repr
   where
-    mkUF' :: T.Text ->  Generator h s arch ret (CCG.Atom s tp)
-    mkUF' nm = do
-      Just (Some atom, _) <- translateFunctionCall @Void overrides (AS.VarName nm) [] (ConstraintSingle repr)
-      Refl <- assertAtomType' repr atom
-      return $ atom
+
+mkUF :: T.Text -> CT.TypeRepr tp -> Generator h s arch ret (CCG.Atom s tp)
+mkUF nm repr = do
+  Just (Some atom, _) <- translateFunctionCall @Void overrides (AS.VarName nm) [] (ConstraintSingle repr)
+  Refl <- assertAtomType' repr atom
+  return $ atom
 
 
 -- | Put a new local in scope and initialize it to an undefined value
@@ -2060,11 +2071,11 @@ subOp = BinaryOperatorBundle (mkBVBinOP CCE.BVSub) (mkBinOP CCE.NatSub) (mkBinOP
 -- divOp :: BinaryOperatorBundle ext s 'SameK
 -- divOp = BinaryOperatorBundle (error "BV div not supported") CCE.NatDiv CCE.IntDiv
 
-mkUF :: T.Text
-     -> CCG.Expr (ASLExt arch) s tp
-     -> CCG.Expr (ASLExt arch) s tp
-     -> Generator h s arch ret (CCG.Atom s tp)
-mkUF nm arg1E arg2E = do
+mkBinUF :: T.Text
+        -> CCG.Expr (ASLExt arch) s tp
+        -> CCG.Expr (ASLExt arch) s tp
+        -> Generator h s arch ret (CCG.Atom s tp)
+mkBinUF nm arg1E arg2E = do
   arg1 <- mkAtom arg1E
   arg2 <- mkAtom arg2E
   Just (Some atom, _) <- translateFunctionCall overrides (AS.VarName nm) [Some arg1, Some arg2] ConstraintNone
@@ -2072,13 +2083,13 @@ mkUF nm arg1E arg2E = do
   return atom
 
 mulOp :: BinaryOperatorBundle h s arch ret 'SameK
-mulOp = BinaryOperatorBundle (\_ -> mkUF "BVMul") (mkUF "NatMul") (mkUF "IntMul")
+mulOp = BinaryOperatorBundle (\_ -> mkBinUF "BVMul") (mkBinUF "NatMul") (mkBinUF "IntMul")
 
 modOp :: BinaryOperatorBundle h s arch ret 'SameK
-modOp = BinaryOperatorBundle (error "BV mod not supported") (mkUF "NatMod") (mkUF "IntMod")
+modOp = BinaryOperatorBundle (error "BV mod not supported") (mkBinUF "NatMod") (mkBinUF "IntMod")
 
 divOp :: BinaryOperatorBundle h s arch ret 'SameK
-divOp = BinaryOperatorBundle (error "BV div not supported") (mkUF "NatDiv") (mkUF "IntDiv")
+divOp = BinaryOperatorBundle (error "BV div not supported") (mkBinUF "NatDiv") (mkBinUF "IntDiv")
 
 
 realmulOp :: BinaryOperatorBundle h s arch ret 'SameK
