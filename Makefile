@@ -4,7 +4,7 @@ default: all
 ASL_PARSER = ./submodules/arm-asl-parser
 PARSED = ./data/Parsed
 
-HS_SOURCES := $(shell find ./lib ./exe -name '*.hs' -not -path '*/\.*') $(shell find . -name '*.cabal') cabal.project
+HS_SOURCES := $(shell find ./lib ./exe -name '*.hs' -not -path '*/\.*') $(shell find . -name '*.cabal')
 
 cabal.project: cabal.project.newbuild
 	cp $< $@
@@ -37,7 +37,13 @@ spec: ${SOURCE_FILES}
 	cabal v2-build asl-translator
 	cabal v2-run asl-translator-exec -- --output-formulas="$@" --asl-spec="${PARSED}/" --parallel
 
+./output/testformula.what4: spec ${HS_SOURCES}
+	cabal v2-build asl-translator
+	cabal v2-run asl-translator-exec -- --output-formulas="$@" --asl-spec="${PARSED}/" --parallel --translation-mode=aarch32_ADC_i_A/aarch32_ADC_i_A1_A
+
 all: ./output/formulas.what4
+
+test: ./output/testformula.what4
 
 clean:
 	rm -f ./output/formulas.what4

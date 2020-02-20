@@ -244,6 +244,14 @@ MemO[bits(32) address, integer size] = bits(8*size) value
     Mem_Internal_Set(address, size, value);
     return;
 
+bits(size*8) AArch32.MemSingle[bits(32) address, integer size, AccType acctype, boolean wasaligned]
+    return Mem_Internal_Get(address, size);
+
+AArch32.MemSingle[bits(32) address, integer size, AccType acctype, boolean wasaligned] = bits(size*8) value
+    Mem_Internal_Set(address, size, value);
+    return;
+
+
 // Since IsExclusiveGlobal is stubbed to be FALSE, this will always be FALSE
 boolean AArch32.ExclusiveMonitorsPass(bits(32) address, integer size)
     return FALSE;

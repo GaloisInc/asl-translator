@@ -415,11 +415,21 @@ initializeUndefinedGlobal lbl = do
   case G.lookupGlobal lbl of
     Just (Left gb) -> case Map.lookup (G.gbName gb) (tsGlobals ts) of
       Just (Some gref) | Just Refl <- testEquality (CCG.globalType gref) (CT.baseToType (G.gbType gb)) -> do
-        defaultv <- getDefaultValue (CCG.globalType gref)
+        defaultv <- getInitialGlobal (projectLabel lbl) (projectValue lbl)
         liftGenerator $ CCG.writeGlobal gref (CCG.AtomExpr defaultv)
       _ -> throwTrace $ TranslationError $ "Untracked global missing from registers: " ++ show (G.gbName gb)
     Just (Right _) -> return ()
     Nothing -> throwTrace $ TranslationError $ "No corresponding global with given signature: " ++ show lbl
+
+getInitialGlobal :: forall h s arch ret tp
+                 . T.Text
+                -> WT.BaseTypeRepr tp
+                -> Generator h s arch ret (CCG.Atom s (CT.BaseToType tp))
+getInitialGlobal nm repr = do
+  let uf = UF ("INIT_GLOBAL_" <> nm) repr Ctx.empty Ctx.empty
+  atom <- mkAtom (CCG.App (CCE.ExtensionApp uf))
+  return atom
+
 
 assertExpr :: Overrides arch
            -> AS.Expr
@@ -849,8 +859,12 @@ isWriteOnly name = do
   ts <- MS.get
   env <- getStaticEnv
   return $
-       Map.member name (tsArgAtoms ts)
-    || Map.member name (tsEnums ts)
+
+    -- FIXME: In "InstructionDevice" we see a struct that is modified in-place, but returned.
+    -- Violating that args are write-only, but also causing a translation failure since
+    -- we can't assert equality of structs
+    --   Map.member name (tsArgAtoms ts)
+       Map.member name (tsEnums ts)
     || Map.member name (tsConsts ts)
     || isJust (staticEnvValue env name)
 
@@ -1077,25 +1091,26 @@ getDefaultValue :: forall h s arch ret tp
                  . CT.TypeRepr tp
                 -> Generator h s arch ret (CCG.Atom s tp)
 getDefaultValue repr = case repr of
-  CT.BVRepr _ -> mkUF' "UNDEFINED_bitvector"
+  CT.BVRepr _ -> mkUF "UNDEFINED_bitvector" repr
   CT.SymbolicStructRepr tps -> do
     let crucAsn = toCrucTypes tps
     if | Refl <- baseCrucProof tps -> do
          fields <- FC.traverseFC getDefaultValue crucAsn
          mkAtom $ CCG.App $ CCE.ExtensionApp $
            MkBaseStruct crucAsn (FC.fmapFC CCG.AtomExpr fields)
-  CT.IntegerRepr -> mkUF' "UNDEFINED_integer"
-  CT.BoolRepr -> mkUF' "UNDEFINED_boolean"
-  CT.BoolRepr -> mkUF' "UNDEFINED_boolean"
+  CT.IntegerRepr -> mkUF "UNDEFINED_integer" repr
+  CT.BoolRepr -> mkUF "UNDEFINED_boolean" repr
+  CT.BoolRepr -> mkUF "UNDEFINED_boolean" repr
   CT.SymbolicArrayRepr (Ctx.Empty Ctx.:> WT.BaseIntegerRepr) (WT.BaseBVRepr _)
-    -> mkUF' "UNDEFINED_IntArray"
+    -> mkUF "UNDEFINED_IntArray" repr
   _ -> error $ "Invalid undefined value: " <> show repr
   where
-    mkUF' :: T.Text ->  Generator h s arch ret (CCG.Atom s tp)
-    mkUF' nm = do
-      Just (Some atom, _) <- translateFunctionCall @Void overrides (AS.VarName nm) [] (ConstraintSingle repr)
-      Refl <- assertAtomType' repr atom
-      return $ atom
+
+mkUF :: T.Text -> CT.TypeRepr tp -> Generator h s arch ret (CCG.Atom s tp)
+mkUF nm repr = do
+  Just (Some atom, _) <- translateFunctionCall @Void overrides (AS.VarName nm) [] (ConstraintSingle repr)
+  Refl <- assertAtomType' repr atom
+  return $ atom
 
 
 -- | Put a new local in scope and initialize it to an undefined value
@@ -1261,6 +1276,10 @@ unifyType aslT constraint = do
                mapStaticVals $ Map.insert ident (StaticInt innerVal)
             _ -> throwTrace $ TypeUnificationFailure aslT constraint (staticEnvMapVals env)
         _ -> throwTrace $ TypeUnificationFailure aslT constraint (staticEnvMapVals env)
+    (AS.TypeArray t (AS.IxTypeRange (AS.ExprLitInt _) (AS.ExprLitInt _)),
+      ConstraintSingle (CT.SymbolicArrayRepr (Ctx.Empty Ctx.:> WT.BaseIntegerRepr) repr)) -> do
+      unifyType t (ConstraintSingle (CT.baseToType repr))
+
     -- it's not clear if this is always safe
 
     -- (AS.TypeFun "bits" _ , ConstraintHint (HintMaxBVSize nr)) -> do
@@ -1285,6 +1304,7 @@ unifyType aslT constraint = do
 dependentVarsOfType :: AS.Type -> [T.Text]
 dependentVarsOfType t = case t of
   AS.TypeFun "bits" e -> TR.varsOfExpr e
+  AS.TypeArray t _ -> dependentVarsOfType t
   _ -> []
 
 
@@ -2051,11 +2071,11 @@ subOp = BinaryOperatorBundle (mkBVBinOP CCE.BVSub) (mkBinOP CCE.NatSub) (mkBinOP
 -- divOp :: BinaryOperatorBundle ext s 'SameK
 -- divOp = BinaryOperatorBundle (error "BV div not supported") CCE.NatDiv CCE.IntDiv
 
-mkUF :: T.Text
-     -> CCG.Expr (ASLExt arch) s tp
-     -> CCG.Expr (ASLExt arch) s tp
-     -> Generator h s arch ret (CCG.Atom s tp)
-mkUF nm arg1E arg2E = do
+mkBinUF :: T.Text
+        -> CCG.Expr (ASLExt arch) s tp
+        -> CCG.Expr (ASLExt arch) s tp
+        -> Generator h s arch ret (CCG.Atom s tp)
+mkBinUF nm arg1E arg2E = do
   arg1 <- mkAtom arg1E
   arg2 <- mkAtom arg2E
   Just (Some atom, _) <- translateFunctionCall overrides (AS.VarName nm) [Some arg1, Some arg2] ConstraintNone
@@ -2063,13 +2083,13 @@ mkUF nm arg1E arg2E = do
   return atom
 
 mulOp :: BinaryOperatorBundle h s arch ret 'SameK
-mulOp = BinaryOperatorBundle (\_ -> mkUF "BVMul") (mkUF "NatMul") (mkUF "IntMul")
+mulOp = BinaryOperatorBundle (\_ -> mkBinUF "BVMul") (mkBinUF "NatMul") (mkBinUF "IntMul")
 
 modOp :: BinaryOperatorBundle h s arch ret 'SameK
-modOp = BinaryOperatorBundle (error "BV mod not supported") (mkUF "NatMod") (mkUF "IntMod")
+modOp = BinaryOperatorBundle (error "BV mod not supported") (mkBinUF "NatMod") (mkBinUF "IntMod")
 
 divOp :: BinaryOperatorBundle h s arch ret 'SameK
-divOp = BinaryOperatorBundle (error "BV div not supported") (mkUF "NatDiv") (mkUF "IntDiv")
+divOp = BinaryOperatorBundle (error "BV div not supported") (mkBinUF "NatDiv") (mkBinUF "IntDiv")
 
 
 realmulOp :: BinaryOperatorBundle h s arch ret 'SameK
@@ -2650,10 +2670,11 @@ overrides = Overrides {..}
                 , WT.LeqProof <- WT.leqMulPos (WT.knownNat @8) szRepr -> do
                   Some value <- translateExpr overrides valueExpr 
                   Refl <- assertAtomType valueExpr (CT.BVRepr bvSize) value
+                  let name = "write_mem_" <> (T.pack (show (WT.intValue bvSize)))
                   let ramRepr = CCG.typeOfAtom memAtom
                   case CT.asBaseType ramRepr of
                     CT.AsBaseType btramRepr -> do
-                      let uf = UF ("write_mem_" <> (T.pack $ show sz)) btramRepr
+                      let uf = UF name btramRepr
                             (Ctx.empty
                              Ctx.:> ramRepr
                              Ctx.:> CT.BVRepr (WT.knownNat @32)
@@ -2706,8 +2727,9 @@ overrides = Overrides {..}
                   | Some (BVRepr szRepr) <- intToBVRepr sz
                   , bvSize <- (WT.knownNat @8) `WT.natMultiply` szRepr
                   , WT.LeqProof <- WT.leqMulPos (WT.knownNat @8) szRepr -> do
+                    let name = "read_mem_" <> (T.pack (show (WT.intValue bvSize)))
                     let ramRepr = CCG.typeOfAtom memAtom
-                    let uf = UF ("read_mem_" <> (T.pack $ show sz)) (WT.BaseBVRepr bvSize)
+                    let uf = UF name (WT.BaseBVRepr bvSize)
                           (Ctx.empty
                            Ctx.:> ramRepr
                            Ctx.:> (CT.BVRepr (WT.knownNat @32)))

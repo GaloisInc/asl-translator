@@ -19,6 +19,7 @@ module Language.ASL.Globals
   , untrackedGlobals
   , untrackedGlobalReprs
   , trackedGlobalReprs
+  , trackedGlobalBaseReprs
   , GlobalsCtx
   , UntrackedGlobalsCtx
   , getPrecond
@@ -30,10 +31,13 @@ module Language.ASL.Globals
   , Global(..)
   , GlobalsType
   , GlobalRef
+  , GlobalSymsCtx
+  , lookupGlobalRef
   , knownGlobalIndex
   , knownGlobalRef
   , globalRefSymbol
   , globalRefRepr
+  , globalRefIndex
   , testGlobalEq
   , allGlobalRefs
   , unGR
@@ -192,10 +196,15 @@ globalsSyms :: MapF CT.SymbolRepr (SGlobal GlobalsCtx)
 globalsSyms = MapF.fromList $ ($(mkGlobalsSyms trackedGlobals') globalsMapIndexF)
 
 data GlobalRef (s :: Symbol) where
-  GlobalRef :: IsGlobal s => CT.SymbolRepr s -> Index GlobalsCtx (GlobalsType s) -> GlobalRef s
+  GlobalRef :: CT.SymbolRepr s -> Index GlobalsCtx (GlobalsType s) -> GlobalRef s
 
-testGlobalEq :: forall s s'. IsGlobal s => GlobalRef s' -> Maybe (s :~: s')
-testGlobalEq gr = testEquality (knownGlobalRef @s) gr
+testGlobalEq :: forall s s'
+              . IsGlobal s
+             => GlobalRef s'
+             -> Maybe (s :~: s')
+testGlobalEq gr = do
+  Refl <- testEquality (knownGlobalRef @s) gr
+  return Refl
 
 unGR :: GlobalRef s -> (CT.SymbolRepr s, WI.BaseTypeRepr (GlobalsType s), Index GlobalsCtx (GlobalsType s))
 unGR (GlobalRef repr idx) = (repr, trackedGlobalBaseReprs ! idx, idx)
@@ -205,6 +214,9 @@ globalRefSymbol gr = case unGR gr of (s, _, _) -> s
 
 globalRefRepr :: GlobalRef s -> WI.BaseTypeRepr (GlobalsType s)
 globalRefRepr gr = case unGR gr of (_, repr, _) -> repr
+
+globalRefIndex :: GlobalRef s -> Index GlobalsCtx (GlobalsType s)
+globalRefIndex gr = case unGR gr of (_, _, idx) -> idx
 
 -- Here we explicitly assume that each symbol represents a unique global ref
 instance TestEquality GlobalRef where
@@ -223,6 +235,12 @@ knownSGlobal =
   in case MapF.lookup repr globalsSyms of
     Just (SGlobal r) -> SGlobal r
     Nothing -> error $ "No corresponding global for: " ++ show repr
+
+lookupGlobalRef :: String -> Maybe (Some GlobalRef)
+lookupGlobalRef str = case CT.someSymbol (T.pack str) of
+  Some symb -> case MapF.lookup symb globalsSyms of
+    Just (SGlobal idx) -> Just $ Some $ GlobalRef symb idx
+    _ -> Nothing
 
 knownGlobalIndex :: forall s
                   . IsGlobal s

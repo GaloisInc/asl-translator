@@ -10,6 +10,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
@@ -48,7 +49,8 @@ module Language.ASL.Translation.Preprocess
   ) where
 
 
-import           Control.Applicative ( (<|>) )
+
+import           Control.Applicative ( (<|>), Const(..) )
 import qualified Control.Monad.Fail as F
 import           Control.Monad (void)
 import           Control.Monad.Identity
@@ -437,7 +439,8 @@ globalFunctions =
   , ("getSlice", 4)
   , ("UNDEFINED_bitvector", 0)
   , ("UNDEFINED_integer", 0)
-  , ("UNDEFINED_boolean", 0)]
+  , ("UNDEFINED_boolean", 0)
+  , ("UNDEFINED_IntArray", 0)]
 
 initializeSigM :: ASLSpec -> SigM ext f ()
 initializeSigM ASLSpec{..} = do
@@ -569,8 +572,11 @@ data SigException = TypeNotFound T.Text
                   | FailedToDetermineStaticEnvironment [T.Text]
                   | FailedToMonomorphizeSignature AS.Type StaticValues
                   | UnexpectedRegisterFieldLength T.Text Integer
-                  | forall tp. MissingOrInvalidGlobal T.Text (WT.BaseTypeRepr tp)
+                  | MissingOrInvalidGlobals [(T.Text, Some WT.BaseTypeRepr)]
                   | MissingGlobals [(T.Text, Some WT.BaseTypeRepr)]
+                  | forall tp. InvalidInstructionOperand (T.Text, WT.BaseTypeRepr tp)
+                  | InstructionSignatureMismatch [(String, Integer)] [(String, Integer)]
+                  | MissingInstructionOperand String
 
 deriving instance Show SigException
 
@@ -1022,6 +1028,18 @@ computeFieldType AS.InstructionField{..} = do
       Just WT.LeqProof -> return $ (Some (WT.BaseBVRepr repr), AS.TypeFun "bin" (AS.ExprLitInt (WT.intValue repr)))
 
 
+validateEncoding :: DA.Encoding -> SomeInstructionSignature -> SigM ext f ()
+validateEncoding daEnc (SomeInstructionSignature iSig) = do
+  args <- FC.toListFC (\(Const c) -> c) <$> FC.traverseFC mkSimpleArg (funcArgReprs iSig)
+  let ops = DA.encRealOperands daEnc ++ DA.encPseudoOperands daEnc
+  unless (args == ops) $ do
+    E.throwError $ InstructionSignatureMismatch args ops
+  where
+    mkSimpleArg :: LabeledValue FunctionArg WT.BaseTypeRepr tp -> SigM ext f (Const (String, Integer) tp)
+    mkSimpleArg (LabeledValue (FunctionArg nm _ _) tr) = case tr of
+      WT.BaseBVRepr nr -> return $ Const $ (T.unpack nm, NR.intValue nr)
+      _ -> E.throwError $ InvalidInstructionOperand (nm, tr)
+
 
 -- | Convert an ASL instruction-encoding pair into a function, where the instruction
 -- operands are the natural arguments if the resulting function
@@ -1031,6 +1049,7 @@ computeInstructionSignature :: DA.Encoding -- ^ the named constraints that ident
                             -> SigM ext f (SomeInstructionSignature, [AS.Stmt])
 computeInstructionSignature daEnc AS.Instruction{..} enc = do
   logMsg 2 $ T.pack $ "computeInstructionSignature: " ++ DA.encName daEnc
+
   let
     name = T.pack $ DA.encName daEnc
     iset = AS.encInstrSet enc
@@ -1044,16 +1063,19 @@ computeInstructionSignature daEnc AS.Instruction{..} enc = do
       ++ instPostDecode
       ++ liftedStmts
     staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
-  labeledArgs <- getFunctionArgSig enc
+  labeledArgs <- getFunctionArgSig enc daEnc
 
   computeSignatures instStmts
   globalVars <- globalsOfStmts instStmts
 
   (globalReads, globalWrites) <- return $ unpackGVarRefs globalVars
-  forM_ globalReads $ \(varName, Some varTp) ->
+  missingGlobals <- liftM catMaybes $ forM globalReads $ \(varName, Some varTp) ->
     case G.lookupGlobal (LabeledValue varName varTp) of
-      Just _ -> return ()
-      Nothing -> E.throwError $ MissingOrInvalidGlobal varName varTp
+      Just _ -> return Nothing
+      Nothing -> return $ Just (varName, Some varTp)
+  case missingGlobals of
+    [] -> return ()
+    _ -> E.throwError $ MissingOrInvalidGlobals missingGlobals
 
   labeledReads <- forM globalReads $ \(varName, Some varTp) -> do
     return $ Some (LabeledValue varName varTp)
@@ -1062,7 +1084,7 @@ computeInstructionSignature daEnc AS.Instruction{..} enc = do
   Some globalReadReprs <- return $ Ctx.fromList labeledReads
   Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
   Some argReprs <- return $ Ctx.fromList labeledArgs
-  let pSig = FunctionSignature { funcName = name
+  let sig = SomeInstructionSignature $ FunctionSignature { funcName = name
                                , funcArgReprs = argReprs
                                , funcRetRepr = Ctx.empty
                                , funcGlobalReadReprs = globalReadReprs
@@ -1070,7 +1092,8 @@ computeInstructionSignature daEnc AS.Instruction{..} enc = do
                                , funcStaticVals = staticEnvMapVals staticEnv
                                , funcIsInstruction = True
                                }
-  return (SomeInstructionSignature pSig, instStmts)
+  validateEncoding daEnc sig
+  return (sig, instStmts)
 
 bitMaskToASL :: BM.SomeBitMask BM.QuasiBit -> Either AS.Mask AS.BitVector
 bitMaskToASL (BM.SomeBitMask mask) =
@@ -1108,13 +1131,29 @@ initializeEncoding daEnc =
         AS.StmtAssert (AS.ExprBinOp AS.BinOpNEQ (AS.ExprVarRef (nameOf fc)) (AS.ExprLitBin bv))
 
 
+getFieldsInOrder :: AS.InstructionEncoding -> DA.Encoding -> SigM ext f [AS.InstructionField]
+getFieldsInOrder (AS.encFields -> fields) (DA.encRealOperands -> ops) = do
+  forM ops $ \(nm, _) -> do
+    case find (\field -> AS.instFieldName field == T.pack nm) fields of
+      Just field -> return field
+      Nothing -> E.throwError $ MissingInstructionOperand nm
+
 getFunctionArgSig :: AS.InstructionEncoding
-                     -> SigM ext f [Some (LabeledValue FunctionArg CT.BaseTypeRepr)]
-getFunctionArgSig enc =
-  forM (AS.encFields enc) $ \field -> do
+                  -> DA.Encoding
+                  -> SigM ext f [Some (LabeledValue FunctionArg CT.BaseTypeRepr)]
+getFunctionArgSig enc daEnc = do
+  fields <- getFieldsInOrder enc daEnc
+  realops <- forM fields $ \field -> do
     (Some tp, ty) <- computeFieldType field
     let funarg = FunctionArg (AS.instFieldName field) ty Nothing
     return (Some (LabeledValue funarg tp))
+  pseudoops <- forM (DA.encPseudoOperands daEnc) $ \(nm, w) -> do
+    Just (Some nr) <- return $ NR.someNat w
+    Just NR.LeqProof <- return $ NR.testLeq (NR.knownNat @1) nr
+    let ty = AS.TypeFun "bits" (AS.ExprLitInt w)
+    let funarg = FunctionArg (T.pack nm) ty Nothing
+    return (Some (LabeledValue funarg (WT.BaseBVRepr nr)))
+  return $ realops ++ pseudoops
 
 -- | According to the 'dependentVariableHints', lift the given instruction body
 -- over all possible assignments to the given variables in the "decode" section

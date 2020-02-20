@@ -1364,6 +1364,95 @@
               (ExprVarRef
                 (QualifiedIdentifier Any value))))
           (StmtReturn Nothing)))))
+  (DefGetter
+    (QualifiedIdentifier AArch32 MemSingle)
+    (Just
+      (list
+        (SymDecl
+          address
+          (TypeFun
+            bits
+            (ExprLitNat 32)))
+        (SymDecl
+          size
+          (TypeRef
+            (QualifiedIdentifier Any integer)))
+        (SymDecl
+          acctype
+          (TypeRef
+            (QualifiedIdentifier Any AccType)))
+        (SymDecl
+          wasaligned
+          (TypeRef
+            (QualifiedIdentifier Any boolean)))))
+    (ReturnType
+      (list
+        (TypeFun
+          bits
+          (ExprBinOp
+            "*"
+            (ExprVarRef
+              (QualifiedIdentifier Any size))
+            (ExprLitNat 8)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprCall
+                (QualifiedIdentifier Any Mem_Internal_Get)
+                (list
+                  (ExprVarRef
+                    (QualifiedIdentifier Any address))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any size))))))))))
+  (DefSetter
+    (QualifiedIdentifier AArch32 MemSingle)
+    (Just
+      (list
+        (SetterArg
+          address
+          (TypeFun
+            bits
+            (ExprLitNat 32))
+          Value)
+        (SetterArg
+          size
+          (TypeRef
+            (QualifiedIdentifier Any integer))
+          Value)
+        (SetterArg
+          acctype
+          (TypeRef
+            (QualifiedIdentifier Any AccType))
+          Value)
+        (SetterArg
+          wasaligned
+          (TypeRef
+            (QualifiedIdentifier Any boolean))
+          Value)))
+    (SymDecl
+      value
+      (TypeFun
+        bits
+        (ExprBinOp
+          "*"
+          (ExprVarRef
+            (QualifiedIdentifier Any size))
+          (ExprLitNat 8))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtCall
+            (QualifiedIdentifier Any Mem_Internal_Set)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any address))
+              (ExprVarRef
+                (QualifiedIdentifier Any size))
+              (ExprVarRef
+                (QualifiedIdentifier Any value))))
+          (StmtReturn Nothing)))))
   (DefCallable
     (QualifiedIdentifier AArch32 ExclusiveMonitorsPass)
     (list

@@ -79,6 +79,7 @@ import qualified Language.ASL.SyntaxTraverse as AS  ( pattern VarName )
 import qualified Language.ASL.SyntaxTraverse as TR
 
 import qualified Language.ASL as ASL
+import qualified Language.ASL.Globals as G
 
 import qualified Language.ASL.Crucible as AC
 
@@ -204,7 +205,7 @@ runWithFilters' opts spec env state = do
 
   let encodings = filter doInstrFilter $ getEncodingConstraints (aslInstructions spec)
   (sigs, sigmap) <- runSigMapWithScope opts state env $ do
-    addMemoryUFs
+    addUFS (memoryUFSigs ++ initGlobalSigs)
     forM (zip [1..] encodings) $ \(i :: Int, (daEnc, (instr, instrEnc))) -> do
       logMsgStr 1 $ "Processing instruction: " ++ DA.encName daEnc ++ " (" ++ DA.encASLIdent daEnc ++ ")"
         ++ "\n" ++ show i ++ "/" ++ show (length encodings)
@@ -231,6 +232,7 @@ runTranslation daEnc instr instrEnc = do
       logMsgStr (-1) $ "Error computing instruction signature: " ++ show err
       return Nothing
     Right (SomeInstructionSignature iSig, instStmts) -> do
+
       logMsgStr 2 $ "Translating instruction: " ++ prettyIdent instrIdent
       logMsgStr 2 $ (show iSig)
       defs <- getDefs
@@ -343,19 +345,23 @@ memoryUFSigs = concatMap mkUF [1,2,4,8,16]
       , Just WI.LeqProof <- WI.knownNat @1 `WI.testLeq` szRepr
       , bvSize <- (WI.knownNat @8) `WI.natMultiply` szRepr
       , WI.LeqProof <- WI.leqMulPos (WI.knownNat @8) szRepr =
-        [( "write_mem_" <> (T.pack (show sz))
+        [( "write_mem_" <> (T.pack (show (WI.intValue bvSize)))
          , ( Some (Ctx.empty Ctx.:> ramRepr Ctx.:> (WI.BaseBVRepr (WI.knownNat @32)) Ctx.:> WI.BaseBVRepr bvSize)
            , Some ramRepr))
-        ,( "read_mem_" <> (T.pack (show sz))
+        ,( "read_mem_" <> (T.pack (show (WI.intValue bvSize)))
          , ( Some (Ctx.empty Ctx.:> ramRepr Ctx.:> (WI.BaseBVRepr (WI.knownNat @32)))
            , Some (WI.BaseBVRepr bvSize)))
         ]
     mkUF _ = error "unreachable"
 
-addMemoryUFs :: SigMapM arch ()
-addMemoryUFs = do
+initGlobalSigs :: [(T.Text, ((Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr)))]
+initGlobalSigs =
+  FC.toListFC (\gb -> ("INIT_GLOBAL_" <> G.gbName gb, ((Some Ctx.empty, Some (G.gbType gb))))) G.untrackedGlobals
+
+addUFS :: [(T.Text, ((Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr)))] -> SigMapM arch ()
+addUFS sigs = do
   Just ufs <- withOnlineBackend (KeyFun "memory") $ \sym -> do
-    forM memoryUFSigs $ \(name, (Some argTs, Some retT)) -> do
+    forM sigs $ \(name, (Some argTs, Some retT)) -> do
       let symbol = U.makeSymbol (T.unpack name)
       symFn <- WI.freshTotalUninterpFn sym symbol argTs retT
       return $ (name, SomeSymFn symFn)
@@ -402,7 +408,7 @@ maybeSimulateFunction :: InstructionIdent
 maybeSimulateFunction _ _ Nothing = return ()
 maybeSimulateFunction fromInstr name (Just func) =
  isKeySimFilteredOut fromInstr (KeyFun name) >>= \case
-   False -> simulateGenFunction (KeyFun name) (\cfg -> U.SomeSome <$> ASL.simulateFunction cfg func)
+   False -> simulateGenFunction ("uf." <> name) (\cfg -> U.SomeSome <$> ASL.simulateFunction cfg func)
    True -> mkUninterpretedFun (KeyFun name) (AC.funcSig func)
 
 maybeSimulateInstruction :: InstructionIdent
@@ -411,7 +417,7 @@ maybeSimulateInstruction :: InstructionIdent
 maybeSimulateInstruction _ Nothing = return ()
 maybeSimulateInstruction ident (Just instr) =
  isKeySimFilteredOut ident (KeyInstr ident) >>= \case
-   False -> simulateGenFunction (KeyInstr ident) (\cfg -> U.SomeSome <$> ASL.simulateInstruction cfg instr)
+   False -> simulateGenFunction (T.pack $ iOpName ident) (\cfg -> U.SomeSome <$> ASL.simulateInstruction cfg instr)
    True -> mkUninterpretedFun (KeyInstr ident) (AC.funcSig instr)
 
 
@@ -482,10 +488,10 @@ mkParserConfig sym fenv =
 
 doSimulation :: TranslatorOptions
              -> CFH.HandleAllocator
-             -> ElemKey
+             -> T.Text
              -> (forall scope. ASL.SimulatorConfig scope -> IO (U.SomeSome (B.ExprSymFn scope)))
              -> IO (T.Text)
-doSimulation opts handleAllocator key p = do
+doSimulation opts handleAllocator name p = do
   let
     trySimulation :: forall scope
                    . ASL.SimulatorConfig scope
@@ -505,7 +511,7 @@ doSimulation opts handleAllocator key p = do
                                   , simSym = backend
                                   }
     when isCheck $ B.startCaching backend
-    logMsgIO opts 2 $ "Simulating: " ++ (prettyKey key)
+    logMsgIO opts 2 $ "Simulating: " ++ show name
     U.SomeSome symFn <- trySimulation cfg
     (serializedSymFn, fenv) <- return $ WP.printSymFn' symFn
     logMsgIO opts 2 $ "Serialized formula size: " ++ show (T.length serializedSymFn)
@@ -525,15 +531,15 @@ doSimulation opts handleAllocator key p = do
 
 -- | Simulate the given crucible CFG, and if it is a function add it to
 -- the formula map.
-simulateGenFunction :: ElemKey
+simulateGenFunction :: T.Text
                     -> (forall scope. ASL.SimulatorConfig scope -> IO (U.SomeSome (B.ExprSymFn scope)))
                     -> SigMapM arch ()
-simulateGenFunction key p = do
+simulateGenFunction name p = do
   opts <- MSS.gets sOptions
   halloc <- MSS.gets sHandleAllocator
  
-  let name = T.pack $ "uf." ++ prettyKey key
-  let doSim = doSimulation opts halloc key p
+
+  let doSim = doSimulation opts halloc name p
   getresult <- case optParallel opts of
     True -> forkedResult doSim
     False -> (return . Right) <$> liftIO doSim
@@ -543,14 +549,10 @@ simulateGenFunction key p = do
                  -> SigMapM arch (IO (Either SimulationException T.Text))
     forkedResult f = do
       opts <- MSS.gets sOptions
-      exf <- getExceptionFilter
       liftIO $ do
         mvar <- newEmptyMVar
         tid <- IO.myThreadId
         void $ IO.forkFinally f $ \case
-          Left ex
-            | Just (e :: SimulationException) <- X.fromException ex
-            , exf key (SimExcept key e) -> putMVar mvar (Left e)
           Left ex -> do
             logMsgIO opts (-1) $ show ex
             IO.throwTo tid ex
@@ -909,8 +911,8 @@ translateNoArch64 f =
 
 translateArch32 :: Filters -> Filters
 translateArch32 f =
-  f { funFilter = (\(InstructionIdent _ _ iset _) -> \_ -> iset `elem` [AS.A32, AS.T32] )
-    , instrFilter = (\(InstructionIdent _ _ iset _) -> iset `elem` [AS.A32, AS.T32])
+  f { funFilter = (\(InstructionIdent _ _ iset _) -> \_ -> iset `elem` [AS.A32, AS.T32, AS.T16] )
+    , instrFilter = (\(InstructionIdent _ _ iset _) -> iset `elem` [AS.A32, AS.T32, AS.T16])
     }
 
 simulateAll :: Filters -> Filters
