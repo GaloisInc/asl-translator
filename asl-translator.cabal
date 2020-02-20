@@ -42,7 +42,7 @@ common shared-properties
                        template-haskell,
                        vector
 
-library
+library                asl-translator-lib
   import:              shared-properties
   exposed-modules:     Language.ASL
                        Language.ASL.Crucible
@@ -63,35 +63,48 @@ library
   hs-source-dirs:      lib
   ghc-options:         -Wcompat -Wall
 
+library
+  import:              shared-properties
+  exposed-modules:     Language.ASL.Globals
+                       Language.ASL.Formulas
+
+  other-modules:       Language.ASL.Globals.Types
+                       Language.ASL.Globals.Definitions
+                       Language.ASL.StaticExpr
+                       Language.ASL.Signature
+                       Language.ASL.SyntaxTraverse
+                       Language.ASL.Types
+                       Language.ASL.Formulas.Attach
+                       Util.Log
+  build-depends:       asl-translator-lib,
+                       bytestring,
+                       zlib
+
+  hs-source-dirs:      lib
+  ghc-options:         -Wcompat -Wall
+
 executable asl-translator-exec
   main-is:             Main.hs
   build-depends:       base >=4.10.0.0 && < 5,
                        filepath,
                        what4-serialize,
-                       asl-translator
+                       asl-translator-lib
   hs-source-dirs:      exe
   ghc-options:         -Wcompat -Wall -O2 -threaded -rtsopts "-with-rtsopts=-N"
   default-language: Haskell2010
 
-common tests-common
-  hs-source-dirs: tests
-  default-language: Haskell2010
-  build-depends:       base >= 4.10.0.0 && < 5,
-                       filepath,
-                       what4-serialize,
-                       asl-translator
 
-test-suite asl-translator-tests
+test-suite asl-translator-genarm-test
   type: exitcode-stdio-1.0
   hs-source-dirs: tests/Translation
   default-language: Haskell2010
   build-depends:       base >= 4.10.0.0 && < 5,
                        filepath,
                        what4-serialize,
-                       asl-translator
+                       asl-translator-lib
   main-is: Main.hs
 
-test-suite asl-translator-deserialize-test
+test-suite asl-translator-formula-test
   type: exitcode-stdio-1.0
   hs-source-dirs: tests/Deserialize
   default-language: Haskell2010
@@ -110,7 +123,7 @@ executable asl-translator-concrete-test
                        what4-serialize,
                        what4,
                        parameterized-utils,
-                       asl-translator,
+                       asl-translator-lib,
                        text,
                        containers,
                        random
