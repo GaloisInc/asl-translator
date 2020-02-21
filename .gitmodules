@@ -1,13 +1,14 @@
 [submodule "submodules/crucible"]
 	path = submodules/crucible
-	url = git@github.com:GaloisInc/crucible
+    url = https://github.com/GaloisInc/crucible.git
+    branch = feature/what4-serialize
 [submodule "submodules/parameterized-utils"]
 	path = submodules/parameterized-utils
-	url = git@github.com:GaloisInc/parameterized-utils.git
+    url = https://github.com/GaloisInc/parameterized-utils.git
 [submodule "submodules/arm-asl-parser"]
 	path = submodules/arm-asl-parser
-	url = git@github.com:GaloisInc/arm-asl-parser.git
+    url = https://github.com/GaloisInc/arm-asl-parser.git
 [submodule "submodules/dismantle"]
 	path = submodules/dismantle
-	url = git@github.com:travitch/dismantle.git
+	url = https://github.com/travitch/dismantle.git
 	branch = feature/asl
