@@ -235,7 +235,7 @@ in    { language =
                   
                   in  doLint "curl -sSL ${hlintURL} | sh -s -- hlint ${pkgs}"
                 , noLint
-                  "cabal v2-test asl-translator-tests -j --disable-optimization \$BUILD_ARG"
+                  "make tests"
                 ]
           ] : Optional (List Text)
       }

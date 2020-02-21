@@ -1,4 +1,4 @@
-.PHONY: default genarm unzip archive all clean realclean deepclean
+.PHONY: default genarm unzip archive all tests clean realclean deepclean
 default: all
 
 ASL_PARSER = ./submodules/arm-asl-parser
@@ -53,7 +53,11 @@ archive: ./archived/formulas.what4.gz
 all:
 	cabal v2-build asl-translator
 
-test: ./output/testformula.what4
+tests:
+	rm -f ./archived/formulas.what4.gz
+	rm -f ./output/formulas.what4
+	cabal v2-test asl-translator-genarm-test
+	cabal v2-test asl-translator-formula-test
 
 clean:
 	rm -f ./output/*.what4
