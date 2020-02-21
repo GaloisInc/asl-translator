@@ -72,7 +72,7 @@ import qualified What4.Utils.StringLiteral as WT
 
 import qualified Language.ASL.Syntax as AS
 
-import           Language.ASL.Crucible.Extension ( ASLExt, ASLApp(..), ASLStmt(..) )
+import           Language.ASL.Crucible.Extension ( ASLExt, ASLApp(..), ASLStmt(..), UFFreshness(..) )
 import           Language.ASL.Translation.Exceptions ( TranslationException(..) )
 import           Language.ASL.Signature
 import           Language.ASL.Types
@@ -426,7 +426,7 @@ getInitialGlobal :: forall h s arch ret tp
                 -> WT.BaseTypeRepr tp
                 -> Generator h s arch ret (CCG.Atom s (CT.BaseToType tp))
 getInitialGlobal nm repr = do
-  let uf = UF ("INIT_GLOBAL_" <> nm) repr Ctx.empty Ctx.empty
+  let uf = UF ("INIT_GLOBAL_" <> nm) UFFresh repr Ctx.empty Ctx.empty
   atom <- mkAtom (CCG.App (CCE.ExtensionApp uf))
   return atom
 
@@ -593,7 +593,7 @@ translateFunctionCall ov qIdent args ty = do
             let vals = FC.fmapFC CCG.AtomExpr argAssign
             let ufGlobalRep = WT.BaseStructRepr (FC.fmapFC projectValue (sfuncGlobalWriteReprs sig))
             let ufCtx = (Ctx.empty Ctx.:> ufGlobalRep Ctx.:> retT)
-            let uf = UF finalIdent (WT.BaseStructRepr ufCtx) (atomTypes Ctx.:> globalsType) (vals Ctx.:> globalsSnapshot)
+            let uf = UF finalIdent UFCached (WT.BaseStructRepr ufCtx) (atomTypes Ctx.:> globalsType) (vals Ctx.:> globalsSnapshot)
             atom <- mkAtom (CCG.App (CCE.ExtensionApp uf))
             let globalResult = GetBaseStruct (CT.SymbolicStructRepr ufCtx) Ctx.i1of2 (CCG.AtomExpr atom)
             withGlobals (sfuncGlobalWriteReprs sig) $ \_ thisGlobals -> liftGenerator $ do
@@ -1091,7 +1091,7 @@ getDefaultValue :: forall h s arch ret tp
                  . CT.TypeRepr tp
                 -> Generator h s arch ret (CCG.Atom s tp)
 getDefaultValue repr = case repr of
-  CT.BVRepr _ -> mkUF "UNDEFINED_bitvector" repr
+  CT.BVRepr nr -> mkUF ("UNDEFINED_bitvector_" <> T.pack (show (WT.intValue nr))) repr
   CT.SymbolicStructRepr tps -> do
     let crucAsn = toCrucTypes tps
     if | Refl <- baseCrucProof tps -> do
@@ -1100,18 +1100,17 @@ getDefaultValue repr = case repr of
            MkBaseStruct crucAsn (FC.fmapFC CCG.AtomExpr fields)
   CT.IntegerRepr -> mkUF "UNDEFINED_integer" repr
   CT.BoolRepr -> mkUF "UNDEFINED_boolean" repr
-  CT.BoolRepr -> mkUF "UNDEFINED_boolean" repr
-  CT.SymbolicArrayRepr (Ctx.Empty Ctx.:> WT.BaseIntegerRepr) (WT.BaseBVRepr _)
-    -> mkUF "UNDEFINED_IntArray" repr
+  -- CT.SymbolicArrayRepr (Ctx.Empty Ctx.:> WT.BaseIntegerRepr) (WT.BaseBVRepr _)
+  --  -> mkUF "UNDEFINED_IntArray" repr
   _ -> error $ "Invalid undefined value: " <> show repr
   where
 
 mkUF :: T.Text -> CT.TypeRepr tp -> Generator h s arch ret (CCG.Atom s tp)
-mkUF nm repr = do
-  Just (Some atom, _) <- translateFunctionCall @Void overrides (AS.VarName nm) [] (ConstraintSingle repr)
-  Refl <- assertAtomType' repr atom
-  return $ atom
-
+mkUF nm repr' = do
+  let repr = asBaseType' repr'
+  Just Refl <- return $ toFromBaseProof repr'
+  let uf = UF nm UFFresh repr Ctx.empty Ctx.empty
+  mkAtom (CCG.App (CCE.ExtensionApp uf))
 
 -- | Put a new local in scope and initialize it to an undefined value
 declareUndefinedVar :: AS.Type
@@ -1377,6 +1376,11 @@ instance InputArgument s Void where
 asBaseType :: Some CT.TypeRepr -> Some WT.BaseTypeRepr
 asBaseType (Some t) = case CT.asBaseType t of
   CT.AsBaseType bt -> Some bt
+  CT.NotBaseType -> error $ "Expected base type: " <> show t
+
+asBaseType' :: CT.TypeRepr tp -> WT.BaseTypeRepr (ToBaseType tp)
+asBaseType' t = case CT.asBaseType t of
+  CT.AsBaseType bt -> bt
   CT.NotBaseType -> error $ "Expected base type: " <> show t
 
 
@@ -2674,7 +2678,7 @@ overrides = Overrides {..}
                   let ramRepr = CCG.typeOfAtom memAtom
                   case CT.asBaseType ramRepr of
                     CT.AsBaseType btramRepr -> do
-                      let uf = UF name btramRepr
+                      let uf = UF name UFCached btramRepr
                             (Ctx.empty
                              Ctx.:> ramRepr
                              Ctx.:> CT.BVRepr (WT.knownNat @32)
@@ -2729,7 +2733,7 @@ overrides = Overrides {..}
                   , WT.LeqProof <- WT.leqMulPos (WT.knownNat @8) szRepr -> do
                     let name = "read_mem_" <> (T.pack (show (WT.intValue bvSize)))
                     let ramRepr = CCG.typeOfAtom memAtom
-                    let uf = UF name (WT.BaseBVRepr bvSize)
+                    let uf = UF name UFCached (WT.BaseBVRepr bvSize)
                           (Ctx.empty
                            Ctx.:> ramRepr
                            Ctx.:> (CT.BVRepr (WT.knownNat @32)))

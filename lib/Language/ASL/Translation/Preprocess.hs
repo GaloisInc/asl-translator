@@ -437,10 +437,7 @@ globalFunctions =
   , ("IntDiv", 2)
   , ("setSlice", 4)
   , ("getSlice", 4)
-  , ("UNDEFINED_bitvector", 0)
-  , ("UNDEFINED_integer", 0)
-  , ("UNDEFINED_boolean", 0)
-  , ("UNDEFINED_IntArray", 0)]
+  ]
 
 initializeSigM :: ASLSpec -> SigM ext f ()
 initializeSigM ASLSpec{..} = do

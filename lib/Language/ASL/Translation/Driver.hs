@@ -205,7 +205,7 @@ runWithFilters' opts spec env state = do
 
   let encodings = filter doInstrFilter $ getEncodingConstraints (aslInstructions spec)
   (sigs, sigmap) <- runSigMapWithScope opts state env $ do
-    addUFS (memoryUFSigs ++ initGlobalSigs)
+    addUFS (memoryUFSigs ++ initGlobalSigs ++ initUndefFuns)
     forM (zip [1..] encodings) $ \(i :: Int, (daEnc, (instr, instrEnc))) -> do
       logMsgStr 1 $ "Processing instruction: " ++ DA.encName daEnc ++ " (" ++ DA.encASLIdent daEnc ++ ")"
         ++ "\n" ++ show i ++ "/" ++ show (length encodings)
@@ -357,6 +357,21 @@ memoryUFSigs = concatMap mkUF [1,2,4,8,16]
 initGlobalSigs :: [(T.Text, ((Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr)))]
 initGlobalSigs =
   FC.toListFC (\gb -> ("INIT_GLOBAL_" <> G.gbName gb, ((Some Ctx.empty, Some (G.gbType gb))))) G.untrackedGlobals
+
+initUndefFuns :: [(T.Text, ((Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr)))]
+initUndefFuns =
+  [ ("UNDEFINED_integer", (Some Ctx.empty, Some WI.BaseIntegerRepr))
+  , ("UNDEFINED_boolean", (Some Ctx.empty, Some WI.BaseBoolRepr))
+  ] ++ (mkUndefBVUF <$> [1..32] ++ [40,48,52,64,128,160,256])
+
+mkUndefBVUF :: Integer
+            -> (T.Text, ((Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr)))
+mkUndefBVUF n
+  | Just (Some nr) <- WI.someNat n
+  , Just WI.LeqProof <- (WI.knownNat @1) `WI.testLeq` nr
+  = ("UNDEFINED_bitvector_" <> T.pack (show n), (Some Ctx.empty, Some (WI.BaseBVRepr nr)))
+
+
 
 addUFS :: [(T.Text, ((Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr)))] -> SigMapM arch ()
 addUFS sigs = do

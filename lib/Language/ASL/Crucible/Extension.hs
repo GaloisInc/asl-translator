@@ -15,6 +15,7 @@ module Language.ASL.Crucible.Extension (
   , ASLStmt(..)
   , SymFnWrapper(..)
   , SymFnEnv
+  , UFFreshness(..)
   , aslExtImpl
   ) where
 
@@ -22,6 +23,7 @@ import qualified Control.Exception as X
 import           Control.Lens ( (^.), (&), (.~) )
 import           Control.Monad ( guard )
 import           Data.IORef
+import           Data.Maybe ( isNothing )
 import           Data.Map ( Map )
 import qualified Data.Map as Map
 import           Data.Parameterized.Classes
@@ -62,8 +64,12 @@ import           Language.ASL.Types
 -- uninterpreted functions into UFs directly in What4.
 data ASLExt arch
 
+data UFFreshness = UFFresh | UFCached
+  deriving (Show, Eq, Ord)
+
 data ASLApp f tp where
   UF :: T.Text
+     -> UFFreshness
      -> WT.BaseTypeRepr rtp
      -> Ctx.Assignment CT.TypeRepr tps
      -> Ctx.Assignment f tps
@@ -101,9 +107,6 @@ data SymFnWrapper sym where
 type SymFnEnv sym = Map T.Text (SymFnWrapper sym)
 
 -- | The ASLExt app evaluator
---
--- NOTE: Right now, this generates a fresh uninterpreted function for each call.  That should be
--- fine, as we don't need to test for equality between the results of any calls.
 aslAppEvalFunc :: forall sym arch proxy
                 . (CB.IsSymInterface sym)
                => proxy arch
@@ -114,7 +117,7 @@ aslAppEvalFunc :: forall sym arch proxy
                -> CSE.EvalAppFunc sym ASLApp
 aslAppEvalFunc _ funsref sym _ _ = \evalApp app ->
   case app of
-    UF name trep argTps args -> do
+    UF name fresh trep argTps args -> do
       case WS.userSymbol (T.unpack name) of
         Left _err -> X.throw (InvalidFunctionName name)
         Right funcSymbol -> do
@@ -124,9 +127,10 @@ aslAppEvalFunc _ funsref sym _ _ = \evalApp app ->
           symFn <- case Map.lookup name funmap of
             Just (SymFnWrapper symFn baseTps' trep')
               | Just Refl <- testEquality baseTps baseTps'
-              , Just Refl <- testEquality trep trep' -> do
+              , Just Refl <- testEquality trep trep'
+              , UFCached <- fresh -> do
                 return symFn
-            Nothing -> do
+            x | isNothing x || fresh == UFFresh -> do
               symFn <- WI.freshTotalUninterpFn sym funcSymbol baseTps trep
               modifyIORef funsref (Map.insert name (SymFnWrapper symFn baseTps trep))
               return symFn
@@ -257,36 +261,37 @@ instance CCES.HasStructuredAssertions (ASLExt arch) where
 instance FC.FunctorFC ASLApp where
   fmapFC f a =
     case a of
-      UF name trep argReps vals -> UF name trep argReps (FC.fmapFC f vals)
+      UF name fresh trep argReps vals -> UF name fresh trep argReps (FC.fmapFC f vals)
       GetBaseStruct rep i t -> GetBaseStruct rep i (f t)
       MkBaseStruct rep mems -> MkBaseStruct rep (FC.fmapFC f mems)
 
 instance FC.FoldableFC ASLApp where
   foldrFC f seed a =
     case a of
-      UF _ _ _ vals -> FC.foldrFC f seed vals
+      UF _ _ _ _ vals -> FC.foldrFC f seed vals
       GetBaseStruct _ _ t -> f t seed
       MkBaseStruct _ mems -> FC.foldrFC f seed mems
 
 instance FC.TraversableFC ASLApp where
   traverseFC f a =
     case a of
-      UF name trep argReps vals -> UF name trep argReps <$> FC.traverseFC f vals
+      UF name fresh trep argReps vals -> UF name fresh trep argReps <$> FC.traverseFC f vals
       GetBaseStruct rep i t -> GetBaseStruct rep i <$> f t
       MkBaseStruct rep mems -> MkBaseStruct rep <$> FC.traverseFC f mems
 
 instance CCExt.TypeApp ASLApp where
   appType a =
     case a of
-      UF _ trep _ _ -> CT.baseToType trep
+      UF _ _ trep _ _ -> CT.baseToType trep
       GetBaseStruct (CT.SymbolicStructRepr reprs) i _ -> CT.baseToType (reprs Ctx.! i)
       MkBaseStruct reprs _ -> CT.SymbolicStructRepr (toBaseTypes reprs)
 
 instance CCExt.PrettyApp ASLApp where
   ppApp pp a =
     case a of
-      UF name trep argReps vals ->
+      UF name fresh trep argReps vals ->
         PP.hsep [ PP.text (T.unpack name)
+               , PP.text (show fresh)
                , PP.text (show trep)
                , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.text . showF) argReps)))
                , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC pp vals)))
@@ -304,8 +309,8 @@ instance CCExt.PrettyApp ASLApp where
 instance FC.TestEqualityFC ASLApp where
   testEqualityFC testFC a1 a2 =
     case (a1, a2) of
-      (UF n1 r1 rs1 vs1, UF n2 r2 rs2 vs2) -> do
-        guard (n1 == n2)
+      (UF n1 f1 r1 rs1 vs1, UF n2 f2 r2 rs2 vs2) -> do
+        guard (n1 == n2 && f1 == f2)
         Refl <- testEquality r1 r2
         Refl <- testEquality rs1 rs2
         Refl <- FC.testEqualityFC testFC vs1 vs2
@@ -324,20 +329,23 @@ instance FC.TestEqualityFC ASLApp where
 instance FC.OrdFC ASLApp where
   compareFC compareTerm a1 a2 =
     case (a1, a2) of
-      (UF n1 r1 rs1 vs1, UF n2 r2 rs2 vs2) ->
+      (UF n1 f1 r1 rs1 vs1, UF n2 f2 r2 rs2 vs2) ->
         case compare n1 n2 of
           LT -> LTF
           GT -> GTF
-          EQ -> case compareF r1 r2 of
-            LTF -> LTF
-            GTF -> GTF
-            EQF -> case compareF rs1 rs2 of
+          EQ -> case compare f1 f2 of
+            LT -> LTF
+            GT -> GTF
+            EQ -> case compareF r1 r2 of
               LTF -> LTF
               GTF -> GTF
-              EQF -> case FC.compareFC compareTerm vs1 vs2 of
+              EQF -> case compareF rs1 rs2 of
                 LTF -> LTF
                 GTF -> GTF
-                EQF -> EQF
+                EQF -> case FC.compareFC compareTerm vs1 vs2 of
+                  LTF -> LTF
+                  GTF -> GTF
+                  EQF -> EQF
       (GetBaseStruct r1 i1 t1, GetBaseStruct r2 i2 t2) ->
         case compareF r1 r2 of
           LTF -> LTF

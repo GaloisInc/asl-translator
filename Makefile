@@ -39,12 +39,12 @@ SOURCE_FILES = $(SPEC_FILES:%.sexpr=${PARSED}/%.sexpr)
 	cabal v2-build asl-translator-lib
 	cabal v2-run asl-translator-exec -- --output-formulas="$@" --asl-spec="${PARSED}/" --parallel --translation-mode=aarch32_ADC_i_A/aarch32_ADC_i_A1_A
 
-unzip: ./archived/formulas.what4.gz
+unzip:
 	gzip --uncompress --stdout $< > ./output/formulas.what4
 	touch $@
 
-./archived/formulas.what4.gz:
-	gzip --best --stdout ./output/formulas.what4 > $@
+./archived/formulas.what4.gz: ./output/formulas.what4
+	gzip --best --stdout $< > $@
 
 genarm: ./output/formulas.what4
 
