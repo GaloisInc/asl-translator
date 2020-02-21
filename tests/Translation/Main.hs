@@ -22,7 +22,7 @@ logLvl le = case Log.leLevel le of
 
 defaultFilePaths :: FilePathConfig
 defaultFilePaths = FilePathConfig
-  { fpDataRoot = "./data/Parsed/"
+  { fpDataRoot = "./data/parsed/"
   , fpDefs = "arm_defs.sexpr"
   , fpInsts = "arm_instrs.sexpr"
   , fpRegs = "arm_regs.sexpr"
@@ -34,7 +34,6 @@ defaultFilePaths = FilePathConfig
 defaultTestOptions :: Log.LogCfg -> TranslatorOptions
 defaultTestOptions logCfg = TranslatorOptions
   { optVerbosity = 1
-  , optStartIndex = 0
   , optNumberOfInstructions = Nothing
   , optFilters = (fromJust $ ASL.getTranslationMode "Arch32") ASL.noFilter
   , optCollectAllExceptions = False
@@ -43,4 +42,5 @@ defaultTestOptions logCfg = TranslatorOptions
   , optCheckSerialization = True
   , optFilePaths = defaultFilePaths
   , optLogCfg = logCfg
+  , optParallel = False
   }

@@ -84,7 +84,7 @@ usage = do
 
 defaultFilePaths :: FilePathConfig
 defaultFilePaths = FilePathConfig
-  { fpDataRoot = "./data/Parsed/"
+  { fpDataRoot = "./data/parsed/"
   , fpDefs = "arm_defs.sexpr"
   , fpInsts = "arm_instrs.sexpr"
   , fpRegs = "arm_regs.sexpr"
