@@ -20,6 +20,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Unsafe as UBS
 import qualified System.IO.Unsafe as IO
+import qualified System.Directory as D
 import qualified Codec.Compression.GZip as GZ
 
 import qualified Language.Haskell.TH as TH
@@ -34,11 +35,21 @@ loadFormulasSrc fs = do
 decodeSrc :: BS.ByteString -> T.Text
 decodeSrc bs = T.decodeUtf8 $ LBS.toStrict $ GZ.decompress $ LBS.fromStrict bs
 
-attachFormulasSrc :: FilePath -> TH.ExpQ
-attachFormulasSrc fp = do
-  TH.qAddDependentFile fp
-  t <- TH.runIO $ loadFormulasSrc fp
-  embedByteString t
+
+-- | If the first file exists, assume it is plaintext - so read it in and gzip it.
+-- If it does not exist, use the backup (assumed to already be gzipped)
+attachFormulasSrc :: FilePath -> FilePath -> TH.ExpQ
+attachFormulasSrc fp fallbackfp = do
+  useprimary <- TH.runIO $ D.doesFileExist fp
+  bs <- case useprimary of
+    True -> do
+      TH.qAddDependentFile fp
+      t <- TH.runIO $ T.readFile fp
+      return $ LBS.toStrict $ GZ.compress $ LBS.fromStrict $ T.encodeUtf8 t
+    False -> do
+      TH.qAddDependentFile fallbackfp
+      TH.runIO $ BS.readFile fallbackfp
+  embedByteString bs
 
 embedByteString :: BS.ByteString -> TH.ExpQ
 embedByteString bs =

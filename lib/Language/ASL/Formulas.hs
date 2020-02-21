@@ -19,8 +19,7 @@ import           What4.Utils.Util ( SomeSome(..) )
 import           Language.ASL.Formulas.Attach
 
 formulas :: T.Text
-formulas = decodeSrc $(attachFormulasSrc "./output/formulas.what4")
-
+formulas = decodeSrc $(attachFormulasSrc "./output/formulas.what4" "./archived/formulas.what4.gz")
 
 getFormulas :: (WI.IsSymExprBuilder sym,
                 WI.IsExprBuilder sym,

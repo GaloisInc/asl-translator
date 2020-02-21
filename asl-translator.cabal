@@ -77,6 +77,7 @@ library
                        Language.ASL.Formulas.Attach
                        Util.Log
   build-depends:       asl-translator-lib,
+                       directory,
                        bytestring,
                        zlib
 
