@@ -1,7 +1,6 @@
 [submodule "submodules/crucible"]
 	path = submodules/crucible
     url = https://github.com/GaloisInc/crucible.git
-    branch = feature/what4-serialize
 [submodule "submodules/parameterized-utils"]
 	path = submodules/parameterized-utils
     url = https://github.com/GaloisInc/parameterized-utils.git
@@ -11,4 +10,3 @@
 [submodule "submodules/dismantle"]
 	path = submodules/dismantle
 	url = https://github.com/travitch/dismantle.git
-	branch = feature/asl
