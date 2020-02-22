@@ -19,4 +19,4 @@ addons:
       - yices2
 
 script:
-  - make tests
+  - ./scripts/test.sh
