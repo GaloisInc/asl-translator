@@ -2,8 +2,7 @@
 
 set -euo pipefail
 
-export STACK_YAML=stack-ghc-8.0.2.yaml
-export PATH=/opt/cabal/bin:$PATH
+export PATH=/opt/ghc/bin:/opt/cabal/bin:$PATH
 cabal v2-update
 
 rm -f ./archived/formulas.what4.gz
