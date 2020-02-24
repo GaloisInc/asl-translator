@@ -3,6 +3,7 @@
 set -euo pipefail
 
 export PATH=/opt/ghc/bin:/opt/cabal/bin:$PATH
+cp ./cabal.project.newbuild ./cabal.project
 cabal v2-update
 
 rm -f ./archived/formulas.what4.gz
