@@ -609,14 +609,12 @@ translateFunctionCall ov qIdent args ty = do
                 let returnResult' = GetBaseStruct retTC (Ctx.baseIndex) (CCG.AtomExpr result)
                 unboxedResult <- mkAtom (CCG.App $ CCE.ExtensionApp returnResult')
                 return $ Just $ (Some unboxedResult, ext)
+              WT.BaseStructRepr Ctx.Empty -> return Nothing
               WT.BaseStructRepr _ -> do
                 exts <- mapM mkExtendedTypeData (sfuncRet sig)
                 return $ Just $ (Some result, TypeTuple exts)
-              -- FIXME: all true return values are wrapped in a tuple. A non-tuple result
-              -- indicates no return value. This is a workaround for empty tuples not being
-              -- completely supported by crucible/what4
-              _ -> return Nothing
-  where
+              _ -> throwTrace $ BadASLFunctionCall
+
     -- At the cost of adding significant complexity to the CFG, we *could* attempt to terminate early
     -- whenever undefined or unpredictable behavior is encountered from a called function.
     -- This seems excessive, since we can always check these flags at the toplevel.

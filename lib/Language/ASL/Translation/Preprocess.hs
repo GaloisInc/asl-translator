@@ -989,9 +989,8 @@ reachableVarDeps deps var = reachableVarDeps' deps Set.empty (Set.singleton var)
 -- FIXME: workaround for the fact that empty tuples are not supported by crucible/what4
 
 mkBaseStructRepr :: [Some WT.BaseTypeRepr] -> Some WT.BaseTypeRepr
-mkBaseStructRepr ts = case ts of
-  [] -> Some WT.BaseBoolRepr
-  _ | Some assignment <- Ctx.fromList ts -> Some (WT.BaseStructRepr assignment)
+mkBaseStructRepr ts = case Ctx.fromList ts of
+  Some assignment -> Some (WT.BaseStructRepr assignment)
 
 mkSignature :: StaticValues -> SomeSimpleFunctionSignature -> SigM ext f (Some (SomeFunctionSignature))
 mkSignature env sig =

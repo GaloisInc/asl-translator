@@ -17,6 +17,7 @@ import qualified What4.Utils.Log as U
 import           What4.Utils.Util ( SomeSome(..) )
 
 import           Language.ASL.Formulas.Attach
+import qualified Language.ASL.Formulas.Serialize as FS
 
 formulas :: T.Text
 formulas = decodeSrc $(attachFormulasSrc "./output/formulas.what4" "./archived/formulas.what4.gz")
@@ -24,11 +25,7 @@ formulas = decodeSrc $(attachFormulasSrc "./output/formulas.what4" "./archived/f
 getFormulas :: (WI.IsSymExprBuilder sym,
                 WI.IsExprBuilder sym,
                 ShowF (WI.SymExpr sym))
-             => sym -> WP.SymFnEnv sym -> IO [(T.Text, SomeSome (WI.SymFn sym))]
+             => sym -> FS.NamedSymFnEnv sym -> IO [(T.Text, SomeSome (WI.SymFn sym))]
 getFormulas sym env = do
-  let pcfg = (WP.defaultParserConfig sym) {WP.pSymFnEnv = env}
-  U.withLogging "asl-translator"
-    (U.stdErrLogEventConsumer (\le -> U.leLevel le >= U.Warn)) $
-      WP.readSymFnList pcfg formulas >>= \case
-        Left err -> fail err
-        Right env' -> return env'
+  sexpr <- FS.parseSExpr formulas
+  FS.deserializeSymFnEnv sym env (FS.uninterpFunctionMaker sym) sexpr

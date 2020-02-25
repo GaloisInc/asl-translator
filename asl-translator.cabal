@@ -36,6 +36,8 @@ common shared-properties
                        what4,
                        asl-parser,
                        what4-serialize,
+                       s-cargot,
+                       ordered-containers,
                        split,
                        time,
                        panic >= 0.3,
@@ -55,6 +57,7 @@ library                asl-translator-lib
                        Language.ASL.Translation.Exceptions
                        Language.ASL.SyntaxTraverse
                        Language.ASL.Types
+                       Language.ASL.Formulas.Serialize
                        Language.ASL.StaticExpr
                        Language.ASL.Globals
                        Language.ASL.Globals.Types

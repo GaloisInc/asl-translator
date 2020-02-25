@@ -72,7 +72,7 @@ import           Dismantle.ARM.ASL ( encodingIdentifier )
 
 import qualified System.IO as IO
 import           System.IO (hPutStrLn, stderr)
-import           Panic hiding (panic)
+-- import           Panic hiding (panic)
 import           Lang.Crucible.Panic ( Crucible )
 
 import qualified Language.ASL.SyntaxTraverse as AS  ( pattern VarName )
@@ -80,6 +80,7 @@ import qualified Language.ASL.SyntaxTraverse as TR
 
 import qualified Language.ASL as ASL
 import qualified Language.ASL.Globals as G
+import qualified Language.ASL.Formulas.Serialize as FS
 
 import qualified Language.ASL.Crucible as AC
 
@@ -95,8 +96,6 @@ import qualified What4.Solver.Yices as Yices
 import qualified What4.Config as WC
 import           What4.ProblemFeatures
 
-import qualified What4.Serialize.Printer as WP
-import qualified What4.Serialize.Parser as WP
 import qualified What4.Serialize.Normalize as WN
 
 import qualified Text.PrettyPrint.HughesPJClass as PP
@@ -105,6 +104,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as LPP
 -- FIXME: this should be moved somewhere general
 import           What4.Utils.Log ( HasLogCfg, LogLevel(..), LogCfg, withLogCfg )
 import qualified What4.Utils.Log as Log
+import           What4.Utils.Util ( SomeSome(..) )
 import qualified What4.Utils.Util as U
 import           Util.Log ( MonadLog(..), logIntToLvl, logMsgStr )
 
@@ -159,23 +159,20 @@ data BuilderData t = NoBuilderData
 optFormulaOutputFilePath :: TranslatorOptions -> FilePath
 optFormulaOutputFilePath opts = fpOutput (optFilePaths opts)
 
-
--- FIXME: manually shaping an s-expression to fit the form that
--- the current what4 deserializer is expecting. This needs to be done
--- correctly once the new printer/parser is in place.
 serializeFormulas :: TranslatorOptions -> SigMap arch -> IO ()
 serializeFormulas opts (sFormulaPromises -> promises) = do
   formulas <- mapM getFormula promises
   let out = optFormulaOutputFilePath opts
-  logMsgIO opts 0 $ "Writing formulas to: " ++  out
-  T.writeFile out (T.unlines $ (["(symfnenv ("] ++ reverse formulas ++ ["))"]))
+  logMsgIO opts 0 $ "Writing formulas to: " ++ out
+  txt <- return $ FS.printSExpr $ FS.assembleSymFnEnv (reverse formulas)
+  T.writeFile out txt
   logMsgIO opts 0 $ "Serialization successful."
   when (optCheckSerialization opts) $ checkSerialization opts
   where
-    getFormula :: (T.Text, IO (Either SimulationException T.Text)) -> IO T.Text
+    getFormula :: (T.Text, IO (Either SimulationException FS.SExpr)) -> IO FS.SExpr
     getFormula (name, getresult) = getresult >>= \case
       Left err -> X.throw err
-      Right result -> return $ T.concat ["(\"", name, "\" ", result, ")"]
+      Right result -> return result
 
 checkSerialization :: TranslatorOptions -> IO ()
 checkSerialization opts = do
@@ -183,13 +180,18 @@ checkSerialization opts = do
   logMsgIO opts 0 $ "Deserializing formulas from: " ++ out
   Some r <- liftIO $ newIONonceGenerator
   sym <- liftIO $ B.newExprBuilder B.FloatRealRepr NoBuilderData r
-  let logCfg = optLogCfg opts
-  Log.withLogCfg logCfg $
-    WP.readSymFnEnvFromFile (WP.defaultParserConfig sym) (optFormulaOutputFilePath opts) >>= \case
-      Left err -> X.throw $ SimulationDeserializationFailure err ""
-      Right _ -> do
-        logMsgIO opts 0 $ "Deserializing successful."
-        return ()
+  sexpr <- T.readFile (optFormulaOutputFilePath opts) >>= FS.parseSExpr
+  _ <- FS.deserializeSymFnEnv sym Map.empty (FS.filteredFunctionMaker sym validUninterpFunction) sexpr
+  logMsgIO opts 0 $ "Deserializing successful."
+  return ()
+
+
+validUninterpFunction :: T.Text -> Bool
+validUninterpFunction nm =
+     "UNDEFINED_" `T.isPrefixOf` nm
+  || "INIT_GLOBAL_" `T.isPrefixOf` nm
+  || "read_mem" `T.isPrefixOf` nm
+  || "write_mem" `T.isPrefixOf` nm
 
 runWithFilters' :: HasCallStack
                 => TranslatorOptions
@@ -205,7 +207,7 @@ runWithFilters' opts spec env state = do
 
   let encodings = filter doInstrFilter $ getEncodingConstraints (aslInstructions spec)
   (sigs, sigmap) <- runSigMapWithScope opts state env $ do
-    addUFS (memoryUFSigs ++ initGlobalSigs ++ initUndefFuns)
+    -- addUFS (memoryUFSigs ++ initGlobalSigs ++ initUndefFuns)
     forM (zip [1..] encodings) $ \(i :: Int, (daEnc, (instr, instrEnc))) -> do
       logMsgStr 1 $ "Processing instruction: " ++ DA.encName daEnc ++ " (" ++ DA.encASLIdent daEnc ++ ")"
         ++ "\n" ++ show i ++ "/" ++ show (length encodings)
@@ -423,7 +425,7 @@ maybeSimulateFunction :: InstructionIdent
 maybeSimulateFunction _ _ Nothing = return ()
 maybeSimulateFunction fromInstr name (Just func) =
  isKeySimFilteredOut fromInstr (KeyFun name) >>= \case
-   False -> simulateGenFunction ("uf." <> name) (\cfg -> U.SomeSome <$> ASL.simulateFunction cfg func)
+   False -> simulateGenFunction name (\cfg -> U.SomeSome <$> ASL.simulateFunction cfg func)
    True -> mkUninterpretedFun (KeyFun name) (AC.funcSig func)
 
 maybeSimulateInstruction :: InstructionIdent
@@ -451,17 +453,17 @@ data SomeSymFn where
 addFormula :: T.Text -> B.ExprSymFn scope args ret -> SigMapM arch ()
 addFormula name' symFn = do
   let name = "uf." <> name'
-  let (serializedSymFn, _) = WP.printSymFn' symFn
+  let serializedSymFn = FS.serializeSymFn symFn
   let result = return (Right serializedSymFn)
   MSS.modify $ \st -> st { sFormulaPromises = (name, result) : (sFormulaPromises st) }
 
 data SimulationException where
   SimulationDeserializationFailure :: String -> T.Text -> SimulationException
-  SimulationDeserializationMismatch :: forall t ret ret'
+  SimulationDeserializationMismatch :: forall t args args' ret ret'
                                      . T.Text
-                                    -> (B.Expr t ret)
-                                    -> (B.Expr t ret')
-                                    -> [(Some (B.Expr t), Some (B.Expr t))]
+                                    -> (B.ExprSymFn t args ret)
+                                    -> (B.ExprSymFn t args' ret')
+                                   -- -> [(SomeSome (WI.SymFn sym), SomeSome (WI.SymFn sym))]
                                     -> SimulationException
   SimulationFailure :: T.Text -> SimulationException
 
@@ -469,13 +471,36 @@ instance Show SimulationException where
   show se = case se of
     SimulationDeserializationFailure err formula ->
       "SimulationDeserializationFailure:\n" ++ err ++ "\n" ++ T.unpack formula
-    SimulationDeserializationMismatch _sexpr expr1 expr2 env ->
+    SimulationDeserializationMismatch _sexpr symFn symFn' ->
      PP.render $ PP.vcat $
-      [ PP.text "SimulationDeserializationMismatch" ]
-      ++ showExprPair (Some expr1, Some expr2)
-      ++ showExprContext 3 env
+      [ PP.text "SimulationDeserializationMismatch"
+      , PP.text "Expected:"
+      , prettySymFn symFn
+      , prettySymFnBody symFn
+      , PP.text "Got: "
+      , prettySymFn symFn'
+      , prettySymFnBody symFn'
+      ]
+     -- ++ showExprPair (Some expr1, Some expr2)
+     -- ++ showExprContext 3 env
     SimulationFailure msg -> "SimulationFailure:" ++ T.unpack msg
 instance X.Exception SimulationException
+
+prettySymFn :: B.ExprSymFn t args ret -> PP.Doc
+prettySymFn symFn =
+  PP.hcat $ [
+      PP.text (show $ B.symFnName symFn)
+    , PP.text " ("
+    , PP.text (show $ WI.fnArgTypes symFn)
+    , PP.text ") -> "
+    , PP.text (show $ WI.fnReturnType symFn)
+    ]
+
+prettySymFnBody :: B.ExprSymFn t args ret -> PP.Doc
+prettySymFnBody symFn = case B.symFnInfo symFn of
+  B.DefinedFnInfo _ fnexpr _ -> showExpr fnexpr
+  _ -> PP.text "[[uninterpreted]]"
+
 
 showExprPair :: (Some (B.Expr t), Some (B.Expr t)) -> [PP.Doc]
 showExprPair (Some expr1, Some expr2) =
@@ -488,24 +513,11 @@ showExprContext count env = [PP.text "With context:"] ++ concat (map showExprPai
 showExpr :: B.Expr t ret -> PP.Doc
 showExpr e = PP.text (LPP.displayS (LPP.renderPretty 0.4 80 (WI.printSymExpr e)) "")
 
-
-mkParserConfig :: forall sym scope
-                . sym ~ CBO.YicesOnlineBackend scope (B.Flags B.FloatReal)
-               => sym
-               -> WP.SymFnEnv sym
-               -> WP.ParserConfig sym
-mkParserConfig sym fenv =
-  WP.ParserConfig { pSymFnEnv = fenv
-                  , pGlobalLookup = \_ -> return Nothing
-                  , pOverrides = \_ -> Nothing
-                  , pSym = sym
-                  }
-
 doSimulation :: TranslatorOptions
              -> CFH.HandleAllocator
              -> T.Text
              -> (forall scope. ASL.SimulatorConfig scope -> IO (U.SomeSome (B.ExprSymFn scope)))
-             -> IO (T.Text)
+             -> IO FS.SExpr
 doSimulation opts handleAllocator name p = do
   let
     trySimulation :: forall scope
@@ -528,20 +540,17 @@ doSimulation opts handleAllocator name p = do
     when isCheck $ B.startCaching backend
     logMsgIO opts 2 $ "Simulating: " ++ show name
     U.SomeSome symFn <- trySimulation cfg
-    (serializedSymFn, fenv) <- return $ WP.printSymFn' symFn
-    logMsgIO opts 2 $ "Serialized formula size: " ++ show (T.length serializedSymFn)
+    (symFnSExpr, fenv) <- return $ FS.serializeSymFn' symFn
 
-    when isCheck $ Log.withLogCfg logCfg $ void $ do
-      WP.readSymFn (mkParserConfig backend fenv) serializedSymFn >>= \case
-        Left err -> X.throw $ SimulationDeserializationFailure (show err) serializedSymFn
-        Right (U.SomeSome symFn') -> do
-          logMsgIO opts 2 $ "Serialization/Deserialization succeeded."
-          WN.testEquivSymFn backend symFn symFn' >>= \case
-            WN.ExprUnequal e1 e2 env ->
-              X.throw $ SimulationDeserializationMismatch serializedSymFn e1 e2 env
-            _ -> do
-              logMsgIO opts 2 $ "Deserialized function matches."
-    return $! serializedSymFn
+    when isCheck $ do
+      serializedSymFn <- return $ FS.printSExpr symFnSExpr
+      symFnSExpr' <- FS.parseSExpr serializedSymFn
+      SomeSome symFn' <- FS.deserializeSymFn backend fenv symFnSExpr'
+      WN.testEquivSymFn backend symFn symFn' >>= \case
+        WN.ExprUnequal ->
+          X.throw $ SimulationDeserializationMismatch serializedSymFn symFn  symFn'
+        _ -> logMsgIO opts 2 $ "Deserialized function matches."
+    return $! FS.mkSymFnEnvEntry name symFnSExpr
 
 
 -- | Simulate the given crucible CFG, and if it is a function add it to
@@ -560,8 +569,8 @@ simulateGenFunction name p = do
     False -> (return . Right) <$> liftIO doSim
   MSS.modify $ \st -> st { sFormulaPromises = (name, getresult) : (sFormulaPromises st) }
   where
-    forkedResult :: IO T.Text
-                 -> SigMapM arch (IO (Either SimulationException T.Text))
+    forkedResult :: IO FS.SExpr
+                 -> SigMapM arch (IO (Either SimulationException FS.SExpr))
     forkedResult f = do
       opts <- MSS.gets sOptions
       liftIO $ do
@@ -643,16 +652,16 @@ expectedExceptions k ex = case ex of
   TExcept _ (CannotStaticallyEvaluateType (AS.TypeFun "bits" (AS.ExprCall (AS.VarName fnm) _)) _)
     | fnm `elem` ["BAREGETTER_PL", "BAREGETTER_VL"] ->
       Just $ BVLengthFromGlobalState
-  SomeExcept e
-    | Just (Panic (_ :: Crucible) _ _ _) <- X.fromException e
-    , KeyInstr (InstructionIdent nm _ _ _) <- k
-    , nm `elem` ["aarch32_WFE_A", "aarch32_WFI_A", "aarch32_VTBL_A", "aarch32_VTST_A"] ->
-      Just $ CruciblePanic
-  SomeExcept e
-    | Just (Panic (_ :: Crucible) _ _ _) <- X.fromException e
-    , KeyFun nm <- k
-    , nm `elem` ["AArch32_ExclusiveMonitorsPass_2"] ->
-      Just $ CruciblePanic
+  -- SomeExcept e
+  --   | Just (Panic (_ :: Crucible) _ _ _) <- X.fromException e
+  --   , KeyInstr (InstructionIdent nm _ _ _) <- k
+  --   , nm `elem` ["aarch32_WFE_A", "aarch32_WFI_A", "aarch32_VTBL_A", "aarch32_VTST_A"] ->
+  --     Just $ CruciblePanic
+  -- SomeExcept e
+  --   | Just (Panic (_ :: Crucible) _ _ _) <- X.fromException e
+  --   , KeyFun nm <- k
+  --   , nm `elem` ["AArch32_ExclusiveMonitorsPass_2"] ->
+  --     Just $ CruciblePanic
   SomeExcept e
     | Just (ASL.SimulationAbort _ _) <- X.fromException e
     , KeyInstr (InstructionIdent nm _ _ _) <- k
@@ -799,7 +808,7 @@ data SigMap arch where
             , funDeps :: Map.Map T.Text (Set.Set T.Text)
             , sOptions :: TranslatorOptions
             , sHandleAllocator :: CFH.HandleAllocator
-            , sFormulaPromises :: [(T.Text, IO (Either SimulationException T.Text))]
+            , sFormulaPromises :: [(T.Text, IO (Either SimulationException FS.SExpr))]
             } -> SigMap arch
 
 getInstructionMap :: [AS.Instruction] -> Map.Map String (AS.Instruction, AS.InstructionEncoding)
