@@ -12,4 +12,4 @@
 	url = https://github.com/travitch/dismantle.git
 [submodule "submodules/what4-serialize"]
 	path = submodules/what4-serialize
-	url = git@github.com:GaloisInc/what4-serialize.git
+	url = https://github.com/GaloisInc/what4-serialize.git
