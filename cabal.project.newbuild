@@ -1,8 +1,8 @@
 packages: *.cabal
           submodules/parameterized-utils/
           submodules/arm-asl-parser/
+          submodules/what4-serialize/
           submodules/dismantle/dismantle-tablegen/
           submodules/dismantle/dismantle-arm-xml/
           submodules/crucible/crucible
           submodules/crucible/what4/
-          submodules/crucible/what4-serialize/
