@@ -10,6 +10,11 @@ fi
 
 cabal v2-update
 
+# First check that we can parse in the archived 
+# formulas
+cabal v2-test asl-translator-formula-test
+cabal v2-clean
+
 # For the sake of making CI work, we
 # reduce the set of instructions here
 ./submodules/dismantle/scripts/minify-asl.sh
