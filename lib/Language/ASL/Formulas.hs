@@ -4,6 +4,7 @@
 
 module Language.ASL.Formulas
     ( getFormulas
+    , FS.NamedSymFnEnv
     ) where
 
 import qualified Data.Text as T
