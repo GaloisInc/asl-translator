@@ -1,5 +1,15 @@
 sudo: false
-language: c
+language: haskell
+
+cabal: "2.4"
+
+cache:
+  directories:
+  - "$HOME/.cabal/store"
+
+matrix:
+  include:
+  - ghc: 8.6.5
 
 # Handle submodules manually, since we don't want a recursive checkouts
 git:
@@ -8,14 +18,19 @@ git:
 before_install:
 - git submodule update --init
 
+install:
+  - ghc --version
+  - cabal --version
+  - git submodule update --init
+  - ln -s cabal.project.newbuild cabal.project
+  - cabal v2-configure
+  - ./submodules/dismantle/scripts/minify-asl.sh
+
 addons:
   apt:
     sources:
-      - hvr-ghc
       - sourceline: 'ppa:sri-csl/formal-methods'
     packages:
-      - ghc-8.6.5
-      - cabal-install-2.4
       - yices2
 
 script:
