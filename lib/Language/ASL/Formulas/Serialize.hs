@@ -286,7 +286,7 @@ deserializeSymFnEnv sym env mkuninterp sexpr = case sexpr of
   S.L [ S.A (AId "SymFnEnv")
       , S.L symFnSExprs ] -> do
     (_, symFns) <- foldM go (env, []) symFnSExprs
-    return $ symFns
+    return $ reverse $ symFns
   where
     mkFun :: NamedSymFnEnv sym -> FunctionMaker m sym
     mkFun env' formalName sig = lookupFnSig sym env' sig >>= \case
