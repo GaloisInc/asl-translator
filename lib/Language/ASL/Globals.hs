@@ -11,6 +11,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE CPP #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -30,11 +31,15 @@ module Language.ASL.Globals
   , lookupGlobal
   , Global(..)
   , GlobalsType
+  , IndexedSymbol
   , GlobalRef
   , GlobalSymsCtx
   , lookupGlobalRef
   , knownGlobalIndex
+  , knownIndexedGlobalRef
   , knownGlobalRef
+  , knownGPRRef
+  , knownSIMDRef
   , globalRefSymbol
   , globalRefRepr
   , globalRefIndex
@@ -60,6 +65,7 @@ import           Data.Parameterized.Context
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Map ( MapF )
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair
@@ -78,6 +84,10 @@ import           Language.ASL.Globals.Types
 import           Language.ASL.Globals.Definitions
 
 import qualified Language.Haskell.TH as TH
+
+#ifdef UNSAFE_OPS
+import           Unsafe.Coerce
+#endif
 
 type UntrackedGlobalsCtx = $(mkTypeFromGlobals untrackedGlobals')
 type GlobalsCtx = $(mkTypeFromGlobals trackedGlobals')
@@ -241,6 +251,42 @@ lookupGlobalRef str = case CT.someSymbol (T.pack str) of
   Some symb -> case MapF.lookup symb globalsSyms of
     Just (SGlobal idx) -> Just $ Some $ GlobalRef symb idx
     _ -> Nothing
+
+knownIndexedGlobalRef :: forall s n. IsGlobal (IndexedSymbol s n) => GlobalRef (IndexedSymbol s n)
+knownIndexedGlobalRef = knownGlobalRef
+
+-- It isn't clear how to efficiently turn a range constraint (n <= 14) into
+-- a known symbol-equivalent. The 'forNats' function here simply explodes out
+-- all possibilities for the given NatRepr, which ends up doing n case analyses.
+
+knownGPRRef' :: forall n. n <= 14 => NR.NatRepr n -> GlobalRef (IndexedSymbol "_R" n)
+knownGPRRef' = $(forNats 14 [e| knownGlobalRef |])
+
+knownSIMDRef' :: forall n. n <= 31 => NR.NatRepr n -> GlobalRef (IndexedSymbol "_V" n)
+knownSIMDRef' = $(forNats 31 [e| knownGlobalRef |])
+
+
+-- For the unsafe equivalent, we can simply do a value-level string append and
+-- assert that the result is expected. We typecheck the safe implementation regardless
+-- to add some guard rails to this.
+
+#ifdef UNSAFE_OPS
+knownGPRRef :: forall n. n <= 14 => NR.NatRepr n -> GlobalRef (IndexedSymbol "_R" n)
+knownGPRRef nr = case lookupGlobalRef ("_R" ++ show (NR.intValue nr)) of
+  Just (Some gr) -> unsafeCoerce gr
+  Nothing -> error "knownGPRRef: unsafe lookup failed"
+
+knownSIMDRef :: forall n. n <= 31 => NR.NatRepr n -> GlobalRef (IndexedSymbol "_V" n)
+knownSIMDRef nr = case lookupGlobalRef ("_V"  ++ show (NR.intValue nr)) of
+  Just (Some gr) -> unsafeCoerce gr
+  Nothing -> error "knownSIMDRef: unsafe lookup failed"
+#else
+knownGPRRef :: forall n. n <= 14 => NR.NatRepr n -> GlobalRef (IndexedSymbol "_R" n)
+knownGPRRef = knownGPRRef'
+
+knownSIMDRef :: forall n. n <= 31 => NR.NatRepr n -> GlobalRef (IndexedSymbol "_V" n)
+knownSIMDRef = knownSIMDRef'
+#endif
 
 knownGlobalIndex :: forall s
                   . IsGlobal s

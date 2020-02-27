@@ -13,6 +13,9 @@ copyright:           (c) Galois, Inc 2014-2020
 
 extra-source-files:  CHANGELOG.md
 
+flag unsafe-operations
+  Description: Use unsafe operations (e.g. coercions) to improve performance
+  Default: True
 
 common shared-properties
   default-language:    Haskell2010
@@ -43,6 +46,9 @@ common shared-properties
                        panic >= 0.3,
                        template-haskell,
                        vector
+
+  if flag(unsafe-operations)
+    cpp-options: -DUNSAFE_OPS
 
 library                asl-translator-lib
   import:              shared-properties
@@ -78,7 +84,9 @@ library
                        Language.ASL.SyntaxTraverse
                        Language.ASL.Types
                        Language.ASL.Formulas.Attach
+                       Language.ASL.Formulas.Serialize
                        Util.Log
+
   build-depends:       asl-translator-lib,
                        directory,
                        bytestring,

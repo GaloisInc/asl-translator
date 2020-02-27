@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -24,9 +25,9 @@ import           Control.Monad.Except ( throwError )
 import qualified Control.Monad.Except as ME
 
 import           GHC.TypeNats ( KnownNat )
-import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Some ( Some(..), viewSome )
 import           Data.Parameterized.Ctx ( type (<+>) )
-import           Data.Parameterized.Context ( EmptyCtx, (::>), Assignment, empty, pattern (:>) )
+import           Data.Parameterized.Context ( EmptyCtx, (::>), Assignment, empty, pattern (:>), (<++>) )
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
 import qualified Data.Parameterized.TraversableFC as FC
@@ -55,8 +56,16 @@ import           Language.ASL.StaticExpr ( bitsToInteger )
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as TH
 
+forSome :: Some f -> (forall tp . f tp -> r) -> r
+forSome (Some x) f = f x
+
 trackedGlobals' :: Some (Assignment Global)
-trackedGlobals' = Some $ empty
+trackedGlobals' =
+  forSome gprGlobals $ \gprGlobals' ->
+  forSome simdGlobals $ \simdGlobals' ->
+  Some $
+  -- the registers
+  gprGlobals' <++> simdGlobals'
   -- meta-state indicating abnormal execution status
   :> bool "__AssertionFailure"
   :> bool "__UndefinedBehavior"
@@ -75,13 +84,6 @@ trackedGlobals' = Some $ empty
   :> bool "__conditionPassed"
   :> bv @4 "__currentCond"   
   :> bv @32 "_PC"
-  -- the register state, represented as an array indexed by 4-bit bitvectors with 32-bit values
-  :> def "_Rbv" (WI.BaseArrayRepr (empty :> WI.BaseBVRepr (WI.knownNat @4))
-                  (WI.BaseBVRepr (WI.knownNat @32))) domainUnbounded
-  -- vector registers
-  :> intarraybv @64 "_Dclone"
-  :> intarraybv @128 "_V"
-  
   -- the underlying memory state as a 32-bit indexed array of bytes
   :> def "__Memory" (WI.BaseArrayRepr (empty :> WI.BaseBVRepr (WI.knownNat @32))
                   (WI.BaseBVRepr (WI.knownNat @8))) domainUnbounded  
@@ -111,8 +113,21 @@ trackedGlobals' = Some $ empty
   :> bv @1 "PSTATE_Z"
   :> bv @1 "PSTATE_nRW"
 
+
+gprGlobals :: Some (Assignment Global)
+gprGlobals = Ctx.fromList $ map mkReg [0..14]
+  where
+    mkReg :: Integer -> Some (Global)
+    mkReg i = Some $ Global ("_R" <> T.pack (show i)) (WI.BaseBVRepr (NR.knownNat @32)) domainUnbounded (Just ("_R", i))
+
+simdGlobals :: Some (Assignment Global)
+simdGlobals = Ctx.fromList $ map mkReg [0..31]
+  where
+    mkReg :: Integer -> Some (Global)
+    mkReg i = Some $ Global ("_V" <> T.pack (show i)) (WI.BaseBVRepr (NR.knownNat @128)) domainUnbounded (Just ("_V", i))
+
 def :: T.Text -> WI.BaseTypeRepr tp -> GlobalDomain tp -> Global tp
-def nm repr dom = Global nm repr dom
+def nm repr dom = Global nm repr dom Nothing
 
 noval :: T.Text -> Global (WI.BaseStructType EmptyCtx)
 noval nm = def nm WI.knownRepr domainUnbounded
@@ -161,6 +176,8 @@ untrackedGlobals' = Some $ empty
   :> noflag "__ExclusiveLocal"
   -- this flag is set but never read
   :> noflag "ShouldAdvanceIT"
+  -- this is initialized before it is read, so we don't need to track it
+  :> intarraybv @64 "_Dclone"
   -- system registers
   :> bv @32 "CPACR"
   :> bv @32 "CPACR_EL1"

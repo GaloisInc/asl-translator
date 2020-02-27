@@ -11,13 +11,14 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
-
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Language.ASL.Globals.Types
   ( Global(..)
   , GlobalDomain(..)
   , SGlobal(..)
   , GlobalsType
+  , IndexedSymbol
   , IsGlobal
   , domainSingleton
   , domainUnbounded
@@ -29,6 +30,7 @@ module Language.ASL.Globals.Types
   , mkTypeFromReprs
   , mkReprFromGlobals
   , foldGlobals
+  , forNats
   , genCond
   ) where
 
@@ -82,9 +84,10 @@ data Global tp =
     , gbType :: WI.BaseTypeRepr tp
     -- ^ The translated base type of this global variable
     , gbDomain :: GlobalDomain tp
-    -- ^ The known domain of this global variable.
-    --
+    -- ^ The known domain of this global variable
     -- Every update to this value needs to check that this domain has been respected.
+    , gbIndexed :: Maybe (T.Text, Integer)
+    -- ^ Register globals are "indexed" and can also be referenced by a name and an index
     }
 
 data GlobalDomain tp =
@@ -222,9 +225,13 @@ genCond mkerr globalsMap lookup sig = do
 -- Retrieving indexes into the globals based on type-level symbols
 
 type family GlobalsType (s :: Symbol) :: WI.BaseType
+type family IndexedSymbol (s :: Symbol) (n :: Nat) :: Symbol
 
 class KnownSymbol s => IsGlobal (s:: Symbol) where
   hasKnownGlobalRepr :: CT.SymbolRepr s -> WI.BaseTypeRepr (GlobalsType s)
+
+--class (KnownSymbol s, KnownNat n) => IsIndexedSymbol (s :: Symbol) (n :: Nat) where
+--  hasKnownIndexedSymbol :: CT.SymbolRepr s -> NR.NatRepr n -> CT.SymbolRepr (IndexedSymbol s n)
 
 data SGlobal ctx (s :: Symbol) where
   SGlobal :: { unSG :: Ctx.Index ctx (GlobalsType s) } -> SGlobal ctx s
@@ -243,6 +250,7 @@ data ReifiedGlobal = ReifiedGlobal
    , symbolE :: TH.Exp
    , typeT :: TH.Type
    , typeE :: TH.Exp
+   , indexedT :: Maybe ((TH.Type, TH.Exp), (TH.Type, TH.Exp))
    }
 
 mapAllGlobals :: forall a
@@ -262,7 +270,16 @@ mapAllGlobals mkelem comb fin (Some globals) = go globals
         symbolE' <- [e| CT.knownSymbol :: CT.SymbolRepr $(return symbolT') |]
         typeT' <- mkTypeFromRepr (gbType gb)
         typeE' <- mkExprFromRepr (gbType gb)
-        elem <- mkelem (ReifiedGlobal symbolT' symbolE' typeT' typeE')
+        indexedTEs <- case gbIndexed gb of
+          Just (idxNm, idx) -> do
+            idxNmT <- TH.litT (TH.strTyLit (T.unpack $ idxNm))
+            idxNmE <- [e| CT.knownSymbol :: CT.SymbolRepr $(return idxNmT) |]
+            idxT <- TH.litT (TH.numTyLit idx)
+            idxE <- [e| NR.knownNat :: NR.NatRepr $(return idxT) |]
+            return $ Just $ ((idxNmT, idxNmE), (idxT, idxE))
+          Nothing -> return Nothing
+
+        elem <- mkelem (ReifiedGlobal symbolT' symbolE' typeT' typeE' indexedTEs)
         comb elem rest
 
 
@@ -270,24 +287,47 @@ mkInstDeclsFromGlobals :: Some (Ctx.Assignment Global) -> TH.DecsQ
 mkInstDeclsFromGlobals = mapAllGlobals go (\d1 d2 -> return $ d1 ++ d2) (return [])
  where
    go :: ReifiedGlobal -> TH.Q [TH.Dec]
-   go (ReifiedGlobal sT sE tT tE) = [d|
+   go (ReifiedGlobal sT sE tT tE idx) = do
+     decls <- [d|
       type instance GlobalsType $(return sT) = $(return tT)
       instance IsGlobal $(return sT) where
         hasKnownGlobalRepr _ = $(return tE)
       |]
+     decls' <- case idx of
+       Just ((idxNmT, idxNmE), (idxT, idxE)) ->
+         [d|
+           type instance IndexedSymbol $(return idxNmT) $(return idxT) = $(return sT)
+           -- instance IsIndexedSymbol $(return idxNmT) $(return idxT) where
+           --  hasKnownIndexedSymbol _ _ = $(return idxNmE) $(return idxE)
+         |]
+       Nothing -> return []
+     return $ decls ++ decls'
+
+forNats :: Integer -> TH.Q TH.Exp-> TH.Q TH.Exp
+forNats maxnr f = do
+  varnr <- TH.newName "nr"
+  TH.lamE [TH.varP varnr] (go (TH.VarE varnr) maxnr)
+  where
+    go :: TH.Exp -> Integer -> TH.Q TH.Exp
+    go nrE i | i < 0 = [e| error "Unexpected nat value" |]
+    go nrE i = do
+      maxnrE <- [e| NR.knownNat :: NR.NatRepr $(TH.litT (TH.numTyLit i)) |]
+      [e| case testEquality $(return nrE) $(return maxnrE) of
+            Just Refl -> $(f)
+            Nothing -> $(go nrE (i -1)) |]
 
 mkAllGlobalSymsT :: Some (Ctx.Assignment Global) -> TH.Q TH.Type
 mkAllGlobalSymsT = mapAllGlobals go (\t1 t2 -> [t| $(return t2) Ctx.::> $(return t1) |]) [t| Ctx.EmptyCtx |]
   where
     go :: ReifiedGlobal -> TH.Q TH.Type
-    go (ReifiedGlobal sT sE tT tE) = return sT
+    go rg = return (symbolT rg)
 
 foldGlobals :: Some (Ctx.Assignment Global) -> TH.Q TH.Exp -> TH.Q TH.Exp -> TH.Q TH.Exp -> TH.Q TH.Exp
 foldGlobals glbs mkelem combElem init =
     mapAllGlobals go (\e1 e2 -> [e| $(combElem) $(return e2) $(return e1) |]) [e| $(init) |] glbs
   where
     go :: ReifiedGlobal -> TH.Q TH.Exp
-    go (ReifiedGlobal sT sE tT tE) =
+    go (ReifiedGlobal sT sE tT tE _idx) =
       [e| $(mkelem) $(return sE) $(return tE) |]
 
 mkGlobalsSyms :: Some (Ctx.Assignment Global) -> TH.Q TH.Exp
@@ -296,7 +336,7 @@ mkGlobalsSyms glbs = do
   TH.lamE [TH.varP vargbl] (mapAllGlobals (go (TH.VarE vargbl)) (\e1 e2 -> [e| $(return e1) : $(return e2) |]) [e| [] |] glbs)
   where
     go :: TH.Exp -> ReifiedGlobal -> TH.Q TH.Exp
-    go glbsE (ReifiedGlobal sT sE tT tE) =
+    go glbsE (ReifiedGlobal sT sE tT tE _idx) =
       [e| Pair $(return sE) (symToSGlobal $(return glbsE) $(return sE) $(return tE)) |]
 
 mkTypeFromRepr :: WI.BaseTypeRepr tp -> TH.Q TH.Type

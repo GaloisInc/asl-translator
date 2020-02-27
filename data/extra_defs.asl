@@ -103,24 +103,280 @@ boolean __EndOfInstruction;
 boolean __UndefinedBehavior;
 boolean __UnpredictableBehavior;
 
-// A re-abstraction of _R which matches a real aarch32 model of 15 32-bit registers.
-type regidx = bits(4);
 
-array bits(32) _Rbv[regidx];
+// de-muxing the general registers into distinct globals
+bits(32) _R0;
+bits(32) _R1;
+bits(32) _R2;
+bits(32) _R3;
+bits(32) _R4;
+bits(32) _R5;
+bits(32) _R6;
+bits(32) _R7;
+bits(32) _R8;
+bits(32) _R9;
+bits(32) _R10;
+bits(32) _R11;
+bits(32) _R12;
+bits(32) _R13;
+bits(32) _R14;
+
+demuxRSet(integer n, bits(32) value)
+    case n of
+        when 0
+            _R0 = value;
+        when 1
+            _R1 = value;
+        when 2
+            _R2 = value;
+        when 3
+            _R3 = value;
+        when 4
+            _R4 = value;
+        when 5
+            _R5 = value;
+        when 6
+            _R6 = value;
+        when 7
+            _R7 = value;
+        when 8
+            _R8 = value;
+        when 9
+            _R9 = value;
+        when 10
+            _R10 = value;
+        when 11
+            _R11 = value;
+        when 12
+            _R12 = value;
+        when 13
+            _R13 = value;
+        when 14
+            _R14 = value;
+    return;
+
+bits(32) demuxRGet(integer n)
+    case n of
+        when 0
+            return _R0;
+        when 1
+            return _R1;
+        when 2
+            return _R2;
+        when 3
+            return _R3;
+        when 4
+            return _R4;
+        when 5
+            return _R5;
+        when 6
+            return _R6;
+        when 7
+            return _R7;
+        when 8
+            return _R8;
+        when 9
+            return _R9;
+        when 10
+            return _R10;
+        when 11
+            return _R11;
+        when 12
+            return _R12;
+        when 13
+            return _R13;
+        when 14
+            return _R14;
 
 _R[integer n] = bits(32) value
     assert n >= 0 && n <= 14;
-    bits(4) idx = '0000';
-    idx = idx + n;
-    _Rbv[idx] = value;
+    demuxRSet(n, value);
 
 bits(32) _R[integer n]
     assert n >= 0 && n <= 14;
-    bits(4) idx = '0000';
-    idx = idx + n;
-    return _Rbv[idx];
+    return demuxRGet(n);
 
-array bits(32) _R[0..14];
+// de-muxing the vector registers into distinct globals
+bits(128) _V0;
+bits(128) _V1;
+bits(128) _V2;
+bits(128) _V3;
+bits(128) _V4;
+bits(128) _V5;
+bits(128) _V6;
+bits(128) _V7;
+bits(128) _V8;
+bits(128) _V9;
+bits(128) _V10;
+bits(128) _V11;
+bits(128) _V12;
+bits(128) _V13;
+bits(128) _V14;
+bits(128) _V15;
+bits(128) _V16;
+bits(128) _V17;
+bits(128) _V18;
+bits(128) _V19;
+bits(128) _V20;
+bits(128) _V21;
+bits(128) _V22;
+bits(128) _V23;
+bits(128) _V24;
+bits(128) _V25;
+bits(128) _V26;
+bits(128) _V27;
+bits(128) _V28;
+bits(128) _V29;
+bits(128) _V30;
+bits(128) _V31;
+
+demuxVSet(integer n, bits(128) value)
+    case n of
+        when 0
+            _V0 = value;
+        when 1
+            _V1 = value;
+        when 2
+            _V2 = value;
+        when 3
+            _V3 = value;
+        when 4
+            _V4 = value;
+        when 5
+            _V5 = value;
+        when 6
+            _V6 = value;
+        when 7
+            _V7 = value;
+        when 8
+            _V8 = value;
+        when 9
+            _V9 = value;
+        when 10
+            _V10 = value;
+        when 11
+            _V11 = value;
+        when 12
+            _V12 = value;
+        when 13
+            _V13 = value;
+        when 14
+            _V14 = value;
+        when 15
+            _V15 = value;
+        when 16
+            _V16 = value;
+        when 17
+            _V17 = value;
+        when 18
+            _V18 = value;
+        when 19
+            _V19 = value;
+        when 20
+            _V20 = value;
+        when 21
+            _V21 = value;
+        when 22
+            _V22 = value;
+        when 23
+            _V23 = value;
+        when 24
+            _V24 = value;
+        when 25
+            _V25 = value;
+        when 26
+            _V26 = value;
+        when 27
+            _V27 = value;
+        when 28
+            _V28 = value;
+        when 29
+            _V29 = value;
+        when 30
+            _V30 = value;
+        when 31
+            _V31 = value;
+        when 32
+            _V32 = value;
+    return;
+
+
+bits(128) demuxVGet(integer n)
+    case n of
+        when 0
+            return _V0;
+        when 1
+            return _V1;
+        when 2
+            return _V2;
+        when 3
+            return _V3;
+        when 4
+            return _V4;
+        when 5
+            return _V5;
+        when 6
+            return _V6;
+        when 7
+            return _V7;
+        when 8
+            return _V8;
+        when 9
+            return _V9;
+        when 10
+            return _V10;
+        when 11
+            return _V11;
+        when 12
+            return _V12;
+        when 13
+            return _V13;
+        when 14
+            return _V14;
+        when 15
+            return _V15;
+        when 16
+            return _V16;
+        when 17
+            return _V17;
+        when 18
+            return _V18;
+        when 19
+            return _V19;
+        when 20
+            return _V20;
+        when 21
+            return _V21;
+        when 22
+            return _V22;
+        when 23
+            return _V23;
+        when 24
+            return _V24;
+        when 25
+            return _V25;
+        when 26
+            return _V26;
+        when 27
+            return _V27;
+        when 28
+            return _V28;
+        when 29
+            return _V29;
+        when 30
+            return _V30;
+        when 31
+            return _V31;
+
+_V[integer n] = bits(128) value
+    assert n >= 0 && n <= 31;
+    demuxVSet(n, value);
+
+bits(128) _V[integer n]
+    assert n >= 0 && n <= 31;
+    return demuxVGet(n);
+
+
 bits(32) _PC;
 
 PC[] = bits(32) value

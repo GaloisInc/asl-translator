@@ -546,17 +546,437 @@
     (QualifiedIdentifier Any __UnpredictableBehavior)
     (TypeRef
       (QualifiedIdentifier Any boolean)))
-  (DefTypeAlias
-    regidx
+  (DefVariable
+    (QualifiedIdentifier Any _R0)
     (TypeFun
       bits
-      (ExprLitNat 4)))
-  (DefArray
-    _Rbv
+      (ExprLitNat 32)))
+  (DefVariable
+    (QualifiedIdentifier Any _R1)
     (TypeFun
       bits
-      (ExprLitNat 32))
-    (IxTypeRef regidx))
+      (ExprLitNat 32)))
+  (DefVariable
+    (QualifiedIdentifier Any _R2)
+    (TypeFun
+      bits
+      (ExprLitNat 32)))
+  (DefVariable
+    (QualifiedIdentifier Any _R3)
+    (TypeFun
+      bits
+      (ExprLitNat 32)))
+  (DefVariable
+    (QualifiedIdentifier Any _R4)
+    (TypeFun
+      bits
+      (ExprLitNat 32)))
+  (DefVariable
+    (QualifiedIdentifier Any _R5)
+    (TypeFun
+      bits
+      (ExprLitNat 32)))
+  (DefVariable
+    (QualifiedIdentifier Any _R6)
+    (TypeFun
+      bits
+      (ExprLitNat 32)))
+  (DefVariable
+    (QualifiedIdentifier Any _R7)
+    (TypeFun
+      bits
+      (ExprLitNat 32)))
+  (DefVariable
+    (QualifiedIdentifier Any _R8)
+    (TypeFun
+      bits
+      (ExprLitNat 32)))
+  (DefVariable
+    (QualifiedIdentifier Any _R9)
+    (TypeFun
+      bits
+      (ExprLitNat 32)))
+  (DefVariable
+    (QualifiedIdentifier Any _R10)
+    (TypeFun
+      bits
+      (ExprLitNat 32)))
+  (DefVariable
+    (QualifiedIdentifier Any _R11)
+    (TypeFun
+      bits
+      (ExprLitNat 32)))
+  (DefVariable
+    (QualifiedIdentifier Any _R12)
+    (TypeFun
+      bits
+      (ExprLitNat 32)))
+  (DefVariable
+    (QualifiedIdentifier Any _R13)
+    (TypeFun
+      bits
+      (ExprLitNat 32)))
+  (DefVariable
+    (QualifiedIdentifier Any _R14)
+    (TypeFun
+      bits
+      (ExprLitNat 32)))
+  (DefCallable
+    (QualifiedIdentifier Any demuxRSet)
+    (list
+      (SymDecl
+        n
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        value
+        (TypeFun
+          bits
+          (ExprLitNat 32))))
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtCase
+            (ExprVarRef
+              (QualifiedIdentifier Any n))
+            (list
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 0))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R0))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 1))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R1))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 2))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R2))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 3))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R3))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 4))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R4))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 5))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R5))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 6))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R6))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 7))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R7))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 8))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R8))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 9))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R9))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 10))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R10))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 11))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R11))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 12))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R12))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 13))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R13))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 14))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R14))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))))
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any demuxRGet)
+    (list
+      (SymDecl
+        n
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprLitNat 32)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtCase
+            (ExprVarRef
+              (QualifiedIdentifier Any n))
+            (list
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 0))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R0)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 1))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R1)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 2))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R2)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 3))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R3)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 4))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R4)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 5))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R5)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 6))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R6)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 7))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R7)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 8))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R8)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 9))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R9)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 10))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R10)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 11))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R11)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 12))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R12)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 13))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R13)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 14))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R14)))))))))))))
   (DefSetter
     (QualifiedIdentifier Any _R)
     (Just
@@ -587,32 +1007,13 @@
                 (ExprVarRef
                   (QualifiedIdentifier Any n))
                 (ExprLitNat 14))))
-          (StmtVarDeclInit
-            (SymDecl
-              idx
-              (TypeFun
-                bits
-                (ExprLitNat 4)))
-            (ExprLitBin '0000'))
-          (StmtAssign
-            (LValVarRef
-              (QualifiedIdentifier Any idx))
-            (ExprBinOp
-              "+"
+          (StmtCall
+            (QualifiedIdentifier Any demuxRSet)
+            (list
               (ExprVarRef
-                (QualifiedIdentifier Any idx))
+                (QualifiedIdentifier Any n))
               (ExprVarRef
-                (QualifiedIdentifier Any n))))
-          (StmtAssign
-            (LValArrayIndex
-              (LValVarRef
-                (QualifiedIdentifier Any _Rbv))
-              (list
-                (SliceSingle
-                  (ExprVarRef
-                    (QualifiedIdentifier Any idx)))))
-            (ExprVarRef
-              (QualifiedIdentifier Any value)))))))
+                (QualifiedIdentifier Any value))))))))
   (DefGetter
     (QualifiedIdentifier Any _R)
     (Just
@@ -642,39 +1043,970 @@
                 (ExprVarRef
                   (QualifiedIdentifier Any n))
                 (ExprLitNat 14))))
-          (StmtVarDeclInit
-            (SymDecl
-              idx
-              (TypeFun
-                bits
-                (ExprLitNat 4)))
-            (ExprLitBin '0000'))
-          (StmtAssign
-            (LValVarRef
-              (QualifiedIdentifier Any idx))
-            (ExprBinOp
-              "+"
-              (ExprVarRef
-                (QualifiedIdentifier Any idx))
-              (ExprVarRef
-                (QualifiedIdentifier Any n))))
           (StmtReturn
             (Just
-              (ExprIndex
-                (ExprVarRef
-                  (QualifiedIdentifier Any _Rbv))
+              (ExprCall
+                (QualifiedIdentifier Any demuxRGet)
                 (list
-                  (SliceSingle
-                    (ExprVarRef
-                      (QualifiedIdentifier Any idx)))))))))))
-  (DefArray
-    _R
+                  (ExprVarRef
+                    (QualifiedIdentifier Any n))))))))))
+  (DefVariable
+    (QualifiedIdentifier Any _V0)
     (TypeFun
       bits
-      (ExprLitNat 32))
-    (IxTypeRange
-      (ExprLitNat 0)
-      (ExprLitNat 14)))
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V1)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V2)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V3)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V4)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V5)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V6)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V7)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V8)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V9)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V10)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V11)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V12)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V13)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V14)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V15)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V16)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V17)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V18)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V19)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V20)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V21)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V22)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V23)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V24)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V25)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V26)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V27)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V28)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V29)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V30)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefVariable
+    (QualifiedIdentifier Any _V31)
+    (TypeFun
+      bits
+      (ExprLitNat 128)))
+  (DefCallable
+    (QualifiedIdentifier Any demuxVSet)
+    (list
+      (SymDecl
+        n
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        value
+        (TypeFun
+          bits
+          (ExprLitNat 128))))
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtCase
+            (ExprVarRef
+              (QualifiedIdentifier Any n))
+            (list
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 0))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V0))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 1))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V1))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 2))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V2))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 3))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V3))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 4))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V4))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 5))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V5))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 6))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V6))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 7))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V7))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 8))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V8))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 9))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V9))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 10))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V10))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 11))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V11))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 12))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V12))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 13))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V13))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 14))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V14))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 15))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V15))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 16))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V16))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 17))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V17))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 18))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V18))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 19))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V19))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 20))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V20))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 21))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V21))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 22))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V22))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 23))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V23))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 24))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V24))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 25))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V25))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 26))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V26))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 27))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V27))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 28))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V28))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 29))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V29))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 30))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V30))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 31))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V31))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 32))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any _V32))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any value))))))))
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any demuxVGet)
+    (list
+      (SymDecl
+        n
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprLitNat 128)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtCase
+            (ExprVarRef
+              (QualifiedIdentifier Any n))
+            (list
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 0))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V0)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 1))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V1)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 2))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V2)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 3))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V3)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 4))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V4)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 5))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V5)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 6))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V6)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 7))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V7)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 8))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V8)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 9))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V9)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 10))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V10)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 11))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V11)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 12))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V12)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 13))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V13)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 14))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V14)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 15))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V15)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 16))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V16)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 17))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V17)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 18))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V18)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 19))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V19)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 20))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V20)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 21))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V21)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 22))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V22)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 23))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V23)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 24))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V24)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 25))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V25)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 26))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V26)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 27))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V27)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 28))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V28)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 29))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V29)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 30))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V30)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 31))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _V31)))))))))))))
+  (DefSetter
+    (QualifiedIdentifier Any _V)
+    (Just
+      (list
+        (SetterArg
+          n
+          (TypeRef
+            (QualifiedIdentifier Any integer))
+          Value)))
+    (SymDecl
+      value
+      (TypeFun
+        bits
+        (ExprLitNat 128)))
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssert
+            (ExprBinOp
+              "&&"
+              (ExprBinOp
+                ">="
+                (ExprVarRef
+                  (QualifiedIdentifier Any n))
+                (ExprLitNat 0))
+              (ExprBinOp
+                "<="
+                (ExprVarRef
+                  (QualifiedIdentifier Any n))
+                (ExprLitNat 31))))
+          (StmtCall
+            (QualifiedIdentifier Any demuxVSet)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any n))
+              (ExprVarRef
+                (QualifiedIdentifier Any value))))))))
+  (DefGetter
+    (QualifiedIdentifier Any _V)
+    (Just
+      (list
+        (SymDecl
+          n
+          (TypeRef
+            (QualifiedIdentifier Any integer)))))
+    (ReturnType
+      (list
+        (TypeFun
+          bits
+          (ExprLitNat 128))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssert
+            (ExprBinOp
+              "&&"
+              (ExprBinOp
+                ">="
+                (ExprVarRef
+                  (QualifiedIdentifier Any n))
+                (ExprLitNat 0))
+              (ExprBinOp
+                "<="
+                (ExprVarRef
+                  (QualifiedIdentifier Any n))
+                (ExprLitNat 31))))
+          (StmtReturn
+            (Just
+              (ExprCall
+                (QualifiedIdentifier Any demuxVGet)
+                (list
+                  (ExprVarRef
+                    (QualifiedIdentifier Any n))))))))))
   (DefVariable
     (QualifiedIdentifier Any _PC)
     (TypeFun
