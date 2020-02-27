@@ -134,7 +134,7 @@ executable asl-translator-concrete-test
                        what4-serialize,
                        what4,
                        parameterized-utils,
-                       asl-translator-lib,
+                       asl-translator,
                        text,
                        containers,
                        random

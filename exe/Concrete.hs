@@ -15,7 +15,6 @@ import qualified Data.Ratio as R
 import qualified Data.Text as T
 import qualified What4.Interface as WI
 import qualified What4.Expr.Builder as B
-import qualified What4.Serialize.Parser as WP
 import qualified What4.Utils.Complex as U
 import qualified What4.Utils.Log as U
 import qualified What4.Utils.Util as U
@@ -24,8 +23,7 @@ import           Control.Monad.IO.Class
 import           System.Exit
 import           System.Random (randomIO)
 
-formulasFile :: FilePath
-formulasFile = "./output/formulas.what4"
+import qualified Language.ASL.Formulas as FS
 
 formulaName :: String
 formulaName = "uf.HaveBTIExt_0"
@@ -34,35 +32,24 @@ main :: IO ()
 main = do
   Some r <- liftIO $ newIONonceGenerator
   sym <- liftIO $ B.newExprBuilder B.FloatRealRepr NoBuilderData r
-  lcfg <- U.mkLogCfg "concrete evaluation"
-  U.withLogCfg lcfg $ do
-    putStrLn $ "Reading formulas..."
-    env <- readFormulas sym formulasFile
-    putStrLn $ "Testing " <> formulaName <> " ..."
-    case M.lookup (T.pack formulaName) env of
-      Nothing -> do
-        putStrLn $ "Could not find formula " <> formulaName <> "."
-        exitFailure
-      Just (U.SomeSome symFn) -> do
-        let argTps = WI.fnArgTypes symFn
-        args <- traverseFC (randomSymExpr sym) argTps
-        putStrLn $ "Calling " <> formulaName <> " with args:"
-        print args
-        putStrLn "Result:"
-        res <- WI.applySymFn sym symFn args
-        print res
+  putStrLn $ "Reading formulas..."
+  env <- M.fromList <$> FS.getFormulas sym M.empty
+  putStrLn $ "Testing " <> formulaName <> " ..."
+  case M.lookup (T.pack formulaName) env of
+    Nothing -> do
+      putStrLn $ "Could not find formula " <> formulaName <> "."
+      exitFailure
+    Just (U.SomeSome symFn) -> do
+      let argTps = WI.fnArgTypes symFn
+      args <- traverseFC (randomSymExpr sym) argTps
+      putStrLn $ "Calling " <> formulaName <> " with args:"
+      print args
+      putStrLn "Result:"
+      res <- WI.applySymFn sym symFn args
+      print res
 
 data BuilderData t = NoBuilderData
 
-readFormulas :: (U.HasLogCfg,
-                 WI.IsSymExprBuilder sym,
-                 WI.IsExprBuilder sym,
-                 ShowF (WI.SymExpr sym))
-             => sym -> FilePath -> IO (WP.SymFnEnv sym)
-readFormulas sym path = do
-  WP.readSymFnEnvFromFile (WP.defaultParserConfig sym) path >>= \case
-    Left err -> fail err
-    Right env -> return env
 
 -- FIXME: There is probably a better way to handle 0 denominators, but
 -- this works for now.
