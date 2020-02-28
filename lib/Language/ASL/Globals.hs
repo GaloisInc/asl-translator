@@ -267,6 +267,7 @@ knownSIMDRef' :: forall n. n <= 31 => NR.NatRepr n -> GlobalRef (IndexedSymbol "
 knownSIMDRef' = $(forNats 31 [e| knownGlobalRef |])
 
 
+
 -- For the unsafe equivalent, we can simply do a value-level string append and
 -- assert that the result is expected. We typecheck the safe implementation regardless
 -- to add some guard rails to this.
@@ -305,9 +306,7 @@ instance TH.Lift (GlobalRef s) where
 
 -- | This is a little bit gross, since we need to establish IsGlobal for each element.
 allGlobalRefs :: Assignment GlobalRef GlobalSymsCtx
-allGlobalRefs = $(foldGlobals trackedGlobals'
-                  (TH.lamE [return TH.WildP, return TH.WildP] (TH.varE (TH.mkName "knownGlobalRef")))
-                 [e| (:>) |] [| empty |])
+allGlobalRefs = $(foldGlobals trackedGlobals' [e| \_ _ -> knownGlobalRef |] [e| (:>) |] [| empty |])
 
 _test :: Index GlobalsCtx (GlobalsType "_PC")
 _test = knownGlobalIndex @"_PC"
