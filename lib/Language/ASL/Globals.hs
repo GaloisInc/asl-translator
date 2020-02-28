@@ -312,5 +312,5 @@ allGlobalRefs = $(foldGlobals trackedGlobals'
 _test :: Index GlobalsCtx (GlobalsType "_PC")
 _test = knownGlobalIndex @"_PC"
 
-_testLift :: GlobalRef s -> TH.Q TH.Exp
-_testLift gr = [e| gr |]
+_testLift :: GlobalRef "_PC"
+_testLift = $([e| knownGlobalRef @"_PC" |])
