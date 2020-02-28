@@ -84,6 +84,7 @@ import           Language.ASL.Globals.Types
 import           Language.ASL.Globals.Definitions
 
 import qualified Language.Haskell.TH as TH
+import qualified Language.Haskell.TH.Syntax as TH
 
 #ifdef UNSAFE_OPS
 import           Unsafe.Coerce
@@ -299,6 +300,9 @@ knownGlobalRef :: forall s
 knownGlobalRef = case knownSGlobal @s of
   SGlobal r -> GlobalRef CT.knownSymbol r
 
+instance TH.Lift (GlobalRef s) where
+  lift gr = [e| knownGlobalRef :: GlobalRef $(TH.litT (TH.strTyLit (T.unpack $ CT.symbolRepr $ globalRefSymbol gr))) |]
+
 -- | This is a little bit gross, since we need to establish IsGlobal for each element.
 allGlobalRefs :: Assignment GlobalRef GlobalSymsCtx
 allGlobalRefs = $(foldGlobals trackedGlobals'
@@ -307,3 +311,6 @@ allGlobalRefs = $(foldGlobals trackedGlobals'
 
 _test :: Index GlobalsCtx (GlobalsType "_PC")
 _test = knownGlobalIndex @"_PC"
+
+_testLift :: GlobalRef s -> TH.Q TH.Exp
+_testLift gr = [e| gr |]
