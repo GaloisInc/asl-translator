@@ -546,81 +546,88 @@
     (QualifiedIdentifier Any __UnpredictableBehavior)
     (TypeRef
       (QualifiedIdentifier Any boolean)))
+  (DefTypeStruct
+    (QualifiedIdentifier Any GPRStruct)
+    (list
+      (SymDecl
+        R0
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        R1
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        R2
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        R3
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        R4
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        R5
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        R6
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        R7
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        R8
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        R9
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        R10
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        R11
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        R12
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        R13
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        R14
+        (TypeFun
+          bits
+          (ExprLitNat 32)))))
   (DefVariable
-    (QualifiedIdentifier Any _R0)
-    (TypeFun
-      bits
-      (ExprLitNat 32)))
-  (DefVariable
-    (QualifiedIdentifier Any _R1)
-    (TypeFun
-      bits
-      (ExprLitNat 32)))
-  (DefVariable
-    (QualifiedIdentifier Any _R2)
-    (TypeFun
-      bits
-      (ExprLitNat 32)))
-  (DefVariable
-    (QualifiedIdentifier Any _R3)
-    (TypeFun
-      bits
-      (ExprLitNat 32)))
-  (DefVariable
-    (QualifiedIdentifier Any _R4)
-    (TypeFun
-      bits
-      (ExprLitNat 32)))
-  (DefVariable
-    (QualifiedIdentifier Any _R5)
-    (TypeFun
-      bits
-      (ExprLitNat 32)))
-  (DefVariable
-    (QualifiedIdentifier Any _R6)
-    (TypeFun
-      bits
-      (ExprLitNat 32)))
-  (DefVariable
-    (QualifiedIdentifier Any _R7)
-    (TypeFun
-      bits
-      (ExprLitNat 32)))
-  (DefVariable
-    (QualifiedIdentifier Any _R8)
-    (TypeFun
-      bits
-      (ExprLitNat 32)))
-  (DefVariable
-    (QualifiedIdentifier Any _R9)
-    (TypeFun
-      bits
-      (ExprLitNat 32)))
-  (DefVariable
-    (QualifiedIdentifier Any _R10)
-    (TypeFun
-      bits
-      (ExprLitNat 32)))
-  (DefVariable
-    (QualifiedIdentifier Any _R11)
-    (TypeFun
-      bits
-      (ExprLitNat 32)))
-  (DefVariable
-    (QualifiedIdentifier Any _R12)
-    (TypeFun
-      bits
-      (ExprLitNat 32)))
-  (DefVariable
-    (QualifiedIdentifier Any _R13)
-    (TypeFun
-      bits
-      (ExprLitNat 32)))
-  (DefVariable
-    (QualifiedIdentifier Any _R14)
-    (TypeFun
-      bits
-      (ExprLitNat 32)))
+    (QualifiedIdentifier Any GPRS)
+    (TypeRef
+      (QualifiedIdentifier Any GPRStruct)))
   (DefCallable
     (QualifiedIdentifier Any demuxRSet)
     (list
@@ -648,8 +655,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _R0))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any GPRS))
+                        R0)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -659,8 +668,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _R1))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any GPRS))
+                        R1)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -670,8 +681,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _R2))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any GPRS))
+                        R2)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -681,8 +694,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _R3))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any GPRS))
+                        R3)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -692,8 +707,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _R4))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any GPRS))
+                        R4)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -703,8 +720,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _R5))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any GPRS))
+                        R5)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -714,8 +733,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _R6))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any GPRS))
+                        R6)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -725,8 +746,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _R7))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any GPRS))
+                        R7)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -736,8 +759,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _R8))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any GPRS))
+                        R8)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -747,8 +772,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _R9))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any GPRS))
+                        R9)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -758,8 +785,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _R10))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any GPRS))
+                        R10)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -769,8 +798,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _R11))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any GPRS))
+                        R11)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -780,8 +811,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _R12))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any GPRS))
+                        R12)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -791,8 +824,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _R13))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any GPRS))
+                        R13)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -802,8 +837,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _R14))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any GPRS))
+                        R14)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))))
           (StmtReturn Nothing)))))
@@ -835,8 +872,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _R0)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any GPRS))
+                          R0))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 1))
@@ -845,8 +884,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _R1)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any GPRS))
+                          R1))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 2))
@@ -855,8 +896,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _R2)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any GPRS))
+                          R2))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 3))
@@ -865,8 +908,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _R3)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any GPRS))
+                          R3))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 4))
@@ -875,8 +920,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _R4)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any GPRS))
+                          R4))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 5))
@@ -885,8 +932,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _R5)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any GPRS))
+                          R5))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 6))
@@ -895,8 +944,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _R6)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any GPRS))
+                          R6))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 7))
@@ -905,8 +956,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _R7)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any GPRS))
+                          R7))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 8))
@@ -915,8 +968,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _R8)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any GPRS))
+                          R8))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 9))
@@ -925,8 +980,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _R9)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any GPRS))
+                          R9))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 10))
@@ -935,8 +992,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _R10)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any GPRS))
+                          R10))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 11))
@@ -945,8 +1004,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _R11)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any GPRS))
+                          R11))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 12))
@@ -955,8 +1016,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _R12)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any GPRS))
+                          R12))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 13))
@@ -965,8 +1028,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _R13)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any GPRS))
+                          R13))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 14))
@@ -975,8 +1040,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _R14)))))))))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any GPRS))
+                          R14))))))))))))
   (DefSetter
     (QualifiedIdentifier Any _R)
     (Just
@@ -1050,166 +1117,173 @@
                 (list
                   (ExprVarRef
                     (QualifiedIdentifier Any n))))))))))
+  (DefTypeStruct
+    (QualifiedIdentifier Any SIMDStruct)
+    (list
+      (SymDecl
+        V0
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V1
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V2
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V3
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V4
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V5
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V6
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V7
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V8
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V9
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V10
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V11
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V12
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V13
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V14
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V15
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V16
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V17
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V18
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V19
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V20
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V21
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V22
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V23
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V24
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V25
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V26
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V27
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V28
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V29
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V30
+        (TypeFun
+          bits
+          (ExprLitNat 128)))
+      (SymDecl
+        V31
+        (TypeFun
+          bits
+          (ExprLitNat 128)))))
   (DefVariable
-    (QualifiedIdentifier Any _V0)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V1)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V2)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V3)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V4)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V5)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V6)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V7)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V8)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V9)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V10)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V11)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V12)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V13)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V14)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V15)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V16)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V17)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V18)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V19)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V20)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V21)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V22)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V23)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V24)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V25)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V26)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V27)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V28)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V29)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V30)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
-  (DefVariable
-    (QualifiedIdentifier Any _V31)
-    (TypeFun
-      bits
-      (ExprLitNat 128)))
+    (QualifiedIdentifier Any SIMD)
+    (TypeRef
+      (QualifiedIdentifier Any SIMDStruct)))
   (DefCallable
     (QualifiedIdentifier Any demuxVSet)
     (list
@@ -1237,8 +1311,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V0))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V0)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1248,8 +1324,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V1))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V1)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1259,8 +1337,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V2))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V2)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1270,8 +1350,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V3))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V3)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1281,8 +1363,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V4))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V4)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1292,8 +1376,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V5))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V5)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1303,8 +1389,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V6))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V6)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1314,8 +1402,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V7))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V7)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1325,8 +1415,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V8))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V8)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1336,8 +1428,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V9))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V9)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1347,8 +1441,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V10))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V10)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1358,8 +1454,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V11))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V11)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1369,8 +1467,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V12))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V12)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1380,8 +1480,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V13))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V13)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1391,8 +1493,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V14))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V14)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1402,8 +1506,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V15))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V15)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1413,8 +1519,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V16))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V16)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1424,8 +1532,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V17))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V17)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1435,8 +1545,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V18))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V18)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1446,8 +1558,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V19))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V19)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1457,8 +1571,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V20))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V20)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1468,8 +1584,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V21))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V21)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1479,8 +1597,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V22))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V22)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1490,8 +1610,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V23))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V23)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1501,8 +1623,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V24))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V24)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1512,8 +1636,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V25))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V25)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1523,8 +1649,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V26))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V26)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1534,8 +1662,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V27))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V27)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1545,8 +1675,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V28))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V28)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1556,8 +1688,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V29))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V29)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1567,8 +1701,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V30))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V30)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))
               (CaseAltWhen
@@ -1578,19 +1714,10 @@
                 (StmtBlock
                   (list
                     (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V31))
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 32))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValVarRef
-                        (QualifiedIdentifier Any _V32))
+                      (LValMember
+                        (LValVarRef
+                          (QualifiedIdentifier Any SIMD))
+                        V31)
                       (ExprVarRef
                         (QualifiedIdentifier Any value))))))))
           (StmtReturn Nothing)))))
@@ -1622,8 +1749,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V0)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V0))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 1))
@@ -1632,8 +1761,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V1)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V1))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 2))
@@ -1642,8 +1773,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V2)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V2))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 3))
@@ -1652,8 +1785,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V3)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V3))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 4))
@@ -1662,8 +1797,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V4)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V4))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 5))
@@ -1672,8 +1809,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V5)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V5))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 6))
@@ -1682,8 +1821,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V6)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V6))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 7))
@@ -1692,8 +1833,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V7)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V7))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 8))
@@ -1702,8 +1845,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V8)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V8))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 9))
@@ -1712,8 +1857,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V9)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V9))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 10))
@@ -1722,8 +1869,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V10)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V10))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 11))
@@ -1732,8 +1881,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V11)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V11))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 12))
@@ -1742,8 +1893,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V12)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V12))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 13))
@@ -1752,8 +1905,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V13)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V13))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 14))
@@ -1762,8 +1917,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V14)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V14))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 15))
@@ -1772,8 +1929,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V15)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V15))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 16))
@@ -1782,8 +1941,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V16)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V16))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 17))
@@ -1792,8 +1953,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V17)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V17))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 18))
@@ -1802,8 +1965,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V18)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V18))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 19))
@@ -1812,8 +1977,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V19)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V19))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 20))
@@ -1822,8 +1989,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V20)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V20))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 21))
@@ -1832,8 +2001,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V21)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V21))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 22))
@@ -1842,8 +2013,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V22)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V22))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 23))
@@ -1852,8 +2025,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V23)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V23))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 24))
@@ -1862,8 +2037,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V24)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V24))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 25))
@@ -1872,8 +2049,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V25)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V25))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 26))
@@ -1882,8 +2061,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V26)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V26))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 27))
@@ -1892,8 +2073,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V27)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V27))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 28))
@@ -1902,8 +2085,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V28)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V28))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 29))
@@ -1912,8 +2097,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V29)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V29))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 30))
@@ -1922,8 +2109,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V30)))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V30))))))
               (CaseAltWhen
                 (list
                   (CasePatternNat 31))
@@ -1932,8 +2121,10 @@
                   (list
                     (StmtReturn
                       (Just
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _V31)))))))))))))
+                        (ExprMember
+                          (ExprVarRef
+                            (QualifiedIdentifier Any SIMD))
+                          V31))))))))))))
   (DefSetter
     (QualifiedIdentifier Any _V)
     (Just

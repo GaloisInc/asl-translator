@@ -105,88 +105,93 @@ boolean __UnpredictableBehavior;
 
 
 // de-muxing the general registers into distinct globals
-bits(32) _R0;
-bits(32) _R1;
-bits(32) _R2;
-bits(32) _R3;
-bits(32) _R4;
-bits(32) _R5;
-bits(32) _R6;
-bits(32) _R7;
-bits(32) _R8;
-bits(32) _R9;
-bits(32) _R10;
-bits(32) _R11;
-bits(32) _R12;
-bits(32) _R13;
-bits(32) _R14;
+
+type GPRStruct is (
+  bits(32) R0,
+  bits(32) R1,
+  bits(32) R2,
+  bits(32) R3,
+  bits(32) R4,
+  bits(32) R5,
+  bits(32) R6,
+  bits(32) R7,
+  bits(32) R8,
+  bits(32) R9,
+  bits(32) R10,
+  bits(32) R11,
+  bits(32) R12,
+  bits(32) R13,
+  bits(32) R14
+)
+
+GPRStruct GPRS;
 
 demuxRSet(integer n, bits(32) value)
     case n of
         when 0
-            _R0 = value;
+            GPRS.R0 = value;
         when 1
-            _R1 = value;
+            GPRS.R1 = value;
         when 2
-            _R2 = value;
+            GPRS.R2 = value;
         when 3
-            _R3 = value;
+            GPRS.R3 = value;
         when 4
-            _R4 = value;
+            GPRS.R4 = value;
         when 5
-            _R5 = value;
+            GPRS.R5 = value;
         when 6
-            _R6 = value;
+            GPRS.R6 = value;
         when 7
-            _R7 = value;
+            GPRS.R7 = value;
         when 8
-            _R8 = value;
+            GPRS.R8 = value;
         when 9
-            _R9 = value;
+            GPRS.R9 = value;
         when 10
-            _R10 = value;
+            GPRS.R10 = value;
         when 11
-            _R11 = value;
+            GPRS.R11 = value;
         when 12
-            _R12 = value;
+            GPRS.R12 = value;
         when 13
-            _R13 = value;
+            GPRS.R13 = value;
         when 14
-            _R14 = value;
+            GPRS.R14 = value;
     return;
 
 bits(32) demuxRGet(integer n)
     case n of
         when 0
-            return _R0;
+            return GPRS.R0;
         when 1
-            return _R1;
+            return GPRS.R1;
         when 2
-            return _R2;
+            return GPRS.R2;
         when 3
-            return _R3;
+            return GPRS.R3;
         when 4
-            return _R4;
+            return GPRS.R4;
         when 5
-            return _R5;
+            return GPRS.R5;
         when 6
-            return _R6;
+            return GPRS.R6;
         when 7
-            return _R7;
+            return GPRS.R7;
         when 8
-            return _R8;
+            return GPRS.R8;
         when 9
-            return _R9;
+            return GPRS.R9;
         when 10
-            return _R10;
+            return GPRS.R10;
         when 11
-            return _R11;
+            return GPRS.R11;
         when 12
-            return _R12;
+            return GPRS.R12;
         when 13
-            return _R13;
+            return GPRS.R13;
         when 14
-            return _R14;
+            return GPRS.R14;
 
 _R[integer n] = bits(32) value
     assert n >= 0 && n <= 14;
@@ -197,176 +202,179 @@ bits(32) _R[integer n]
     return demuxRGet(n);
 
 // de-muxing the vector registers into distinct globals
-bits(128) _V0;
-bits(128) _V1;
-bits(128) _V2;
-bits(128) _V3;
-bits(128) _V4;
-bits(128) _V5;
-bits(128) _V6;
-bits(128) _V7;
-bits(128) _V8;
-bits(128) _V9;
-bits(128) _V10;
-bits(128) _V11;
-bits(128) _V12;
-bits(128) _V13;
-bits(128) _V14;
-bits(128) _V15;
-bits(128) _V16;
-bits(128) _V17;
-bits(128) _V18;
-bits(128) _V19;
-bits(128) _V20;
-bits(128) _V21;
-bits(128) _V22;
-bits(128) _V23;
-bits(128) _V24;
-bits(128) _V25;
-bits(128) _V26;
-bits(128) _V27;
-bits(128) _V28;
-bits(128) _V29;
-bits(128) _V30;
-bits(128) _V31;
+
+type SIMDStruct is (
+  bits(128) V0,
+  bits(128) V1,
+  bits(128) V2,
+  bits(128) V3,
+  bits(128) V4,
+  bits(128) V5,
+  bits(128) V6,
+  bits(128) V7,
+  bits(128) V8,
+  bits(128) V9,
+  bits(128) V10,
+  bits(128) V11,
+  bits(128) V12,
+  bits(128) V13,
+  bits(128) V14,
+  bits(128) V15,
+  bits(128) V16,
+  bits(128) V17,
+  bits(128) V18,
+  bits(128) V19,
+  bits(128) V20,
+  bits(128) V21,
+  bits(128) V22,
+  bits(128) V23,
+  bits(128) V24,
+  bits(128) V25,
+  bits(128) V26,
+  bits(128) V27,
+  bits(128) V28,
+  bits(128) V29,
+  bits(128) V30,
+  bits(128) V31
+)
+
+SIMDStruct SIMD;
 
 demuxVSet(integer n, bits(128) value)
     case n of
         when 0
-            _V0 = value;
+            SIMD.V0 = value;
         when 1
-            _V1 = value;
+            SIMD.V1 = value;
         when 2
-            _V2 = value;
+            SIMD.V2 = value;
         when 3
-            _V3 = value;
+            SIMD.V3 = value;
         when 4
-            _V4 = value;
+            SIMD.V4 = value;
         when 5
-            _V5 = value;
+            SIMD.V5 = value;
         when 6
-            _V6 = value;
+            SIMD.V6 = value;
         when 7
-            _V7 = value;
+            SIMD.V7 = value;
         when 8
-            _V8 = value;
+            SIMD.V8 = value;
         when 9
-            _V9 = value;
+            SIMD.V9 = value;
         when 10
-            _V10 = value;
+            SIMD.V10 = value;
         when 11
-            _V11 = value;
+            SIMD.V11 = value;
         when 12
-            _V12 = value;
+            SIMD.V12 = value;
         when 13
-            _V13 = value;
+            SIMD.V13 = value;
         when 14
-            _V14 = value;
+            SIMD.V14 = value;
         when 15
-            _V15 = value;
+            SIMD.V15 = value;
         when 16
-            _V16 = value;
+            SIMD.V16 = value;
         when 17
-            _V17 = value;
+            SIMD.V17 = value;
         when 18
-            _V18 = value;
+            SIMD.V18 = value;
         when 19
-            _V19 = value;
+            SIMD.V19 = value;
         when 20
-            _V20 = value;
+            SIMD.V20 = value;
         when 21
-            _V21 = value;
+            SIMD.V21 = value;
         when 22
-            _V22 = value;
+            SIMD.V22 = value;
         when 23
-            _V23 = value;
+            SIMD.V23 = value;
         when 24
-            _V24 = value;
+            SIMD.V24 = value;
         when 25
-            _V25 = value;
+            SIMD.V25 = value;
         when 26
-            _V26 = value;
+            SIMD.V26 = value;
         when 27
-            _V27 = value;
+            SIMD.V27 = value;
         when 28
-            _V28 = value;
+            SIMD.V28 = value;
         when 29
-            _V29 = value;
+            SIMD.V29 = value;
         when 30
-            _V30 = value;
+            SIMD.V30 = value;
         when 31
-            _V31 = value;
-        when 32
-            _V32 = value;
+            SIMD.V31 = value;
     return;
 
 
 bits(128) demuxVGet(integer n)
     case n of
         when 0
-            return _V0;
+            return SIMD.V0;
         when 1
-            return _V1;
+            return SIMD.V1;
         when 2
-            return _V2;
+            return SIMD.V2;
         when 3
-            return _V3;
+            return SIMD.V3;
         when 4
-            return _V4;
+            return SIMD.V4;
         when 5
-            return _V5;
+            return SIMD.V5;
         when 6
-            return _V6;
+            return SIMD.V6;
         when 7
-            return _V7;
+            return SIMD.V7;
         when 8
-            return _V8;
+            return SIMD.V8;
         when 9
-            return _V9;
+            return SIMD.V9;
         when 10
-            return _V10;
+            return SIMD.V10;
         when 11
-            return _V11;
+            return SIMD.V11;
         when 12
-            return _V12;
+            return SIMD.V12;
         when 13
-            return _V13;
+            return SIMD.V13;
         when 14
-            return _V14;
+            return SIMD.V14;
         when 15
-            return _V15;
+            return SIMD.V15;
         when 16
-            return _V16;
+            return SIMD.V16;
         when 17
-            return _V17;
+            return SIMD.V17;
         when 18
-            return _V18;
+            return SIMD.V18;
         when 19
-            return _V19;
+            return SIMD.V19;
         when 20
-            return _V20;
+            return SIMD.V20;
         when 21
-            return _V21;
+            return SIMD.V21;
         when 22
-            return _V22;
+            return SIMD.V22;
         when 23
-            return _V23;
+            return SIMD.V23;
         when 24
-            return _V24;
+            return SIMD.V24;
         when 25
-            return _V25;
+            return SIMD.V25;
         when 26
-            return _V26;
+            return SIMD.V26;
         when 27
-            return _V27;
+            return SIMD.V27;
         when 28
-            return _V28;
+            return SIMD.V28;
         when 29
-            return _V29;
+            return SIMD.V29;
         when 30
-            return _V30;
+            return SIMD.V30;
         when 31
-            return _V31;
+            return SIMD.V31;
 
 _V[integer n] = bits(128) value
     assert n >= 0 && n <= 31;

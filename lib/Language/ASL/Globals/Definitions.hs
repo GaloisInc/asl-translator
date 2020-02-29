@@ -13,8 +13,13 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Language.ASL.Globals.Definitions
-  ( trackedGlobals'
+  ( simpleGlobals'
+  , trackedGlobals'
+  , memoryGlobal'
   , untrackedGlobals'
+  , gprGlobals'
+  , simdGlobals'
+  , forSome
   ) where
 
 import           GHC.Natural ( naturalFromInteger )
@@ -56,16 +61,13 @@ import           Language.ASL.StaticExpr ( bitsToInteger )
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as TH
 
+-- FIXME: move
 forSome :: Some f -> (forall tp . f tp -> r) -> r
 forSome (Some x) f = f x
 
-trackedGlobals' :: Some (Assignment Global)
-trackedGlobals' =
-  forSome gprGlobals $ \gprGlobals' ->
-  forSome simdGlobals $ \simdGlobals' ->
-  Some $
-  -- the registers
-  gprGlobals' <++> simdGlobals'
+simpleGlobals' :: Some (Assignment Global)
+simpleGlobals' =
+  Some $ Ctx.empty
   -- meta-state indicating abnormal execution status
   :> bool "__AssertionFailure"
   :> bool "__UndefinedBehavior"
@@ -84,10 +86,6 @@ trackedGlobals' =
   :> bool "__conditionPassed"
   :> bv @4 "__currentCond"   
   :> bv @32 "_PC"
-  -- the underlying memory state as a 32-bit indexed array of bytes
-  :> def "__Memory" (WI.BaseArrayRepr (empty :> WI.BaseBVRepr (WI.knownNat @32))
-                  (WI.BaseBVRepr (WI.knownNat @8))) domainUnbounded  
-
   -- rest of the processor state is unconstrained
   :> bv @1 "PSTATE_A"
   :> bv @2 "PSTATE_BTYPE"
@@ -113,18 +111,42 @@ trackedGlobals' =
   :> bv @1 "PSTATE_Z"
   :> bv @1 "PSTATE_nRW"
 
+trackedGlobals' :: Some (Assignment Global)
+trackedGlobals' =
+  forSome simpleGlobals' $ \simpleGlobals'' ->
+  forSome allGPRsGlobal $ \allGPRsGlobal' ->
+  forSome allSIMDsGlobal $ \allSIMDsGlobal' ->
+  forSome memoryGlobal' $ \memoryGlobal'' ->
+  Some $ simpleGlobals''
+  -- the registers
+  :> allGPRsGlobal'
+  :> allSIMDsGlobal'
+  :> memoryGlobal''
 
-gprGlobals :: Some (Assignment Global)
-gprGlobals = Ctx.fromList $ map mkReg [0..14]
+memoryGlobal' :: Some Global
+memoryGlobal' = Some $
+  def "__Memory" (WI.BaseArrayRepr (empty :> WI.BaseBVRepr (WI.knownNat @32))
+    (WI.BaseBVRepr (WI.knownNat @8))) domainUnbounded
+
+gprGlobals' :: Some (Assignment Global)
+gprGlobals' = Ctx.fromList $ map mkReg [0..14]
   where
     mkReg :: Integer -> Some (Global)
-    mkReg i = Some $ Global ("_R" <> T.pack (show i)) (WI.BaseBVRepr (NR.knownNat @32)) domainUnbounded (Just ("_R", i))
+    mkReg i = Some $ Global ("GPRS" <> T.pack (show i)) (WI.BaseBVRepr (NR.knownNat @32)) domainUnbounded (Just ("GPRS", i))
 
-simdGlobals :: Some (Assignment Global)
-simdGlobals = Ctx.fromList $ map mkReg [0..31]
+allGPRsGlobal :: Some Global
+allGPRsGlobal = case gprGlobals' of
+  Some asn -> Some $ Global "GPRS" (WI.BaseStructRepr (FC.fmapFC gbType asn)) domainUnbounded Nothing
+
+simdGlobals' :: Some (Assignment Global)
+simdGlobals' = Ctx.fromList $ map mkReg [0..31]
   where
     mkReg :: Integer -> Some (Global)
-    mkReg i = Some $ Global ("_V" <> T.pack (show i)) (WI.BaseBVRepr (NR.knownNat @128)) domainUnbounded (Just ("_V", i))
+    mkReg i = Some $ Global ("SIMD" <> T.pack (show i)) (WI.BaseBVRepr (NR.knownNat @128)) domainUnbounded (Just ("SIMD", i))
+
+allSIMDsGlobal :: Some Global
+allSIMDsGlobal = case simdGlobals' of
+  Some asn -> Some $ Global "SIMD" (WI.BaseStructRepr (FC.fmapFC gbType asn)) domainUnbounded Nothing
 
 def :: T.Text -> WI.BaseTypeRepr tp -> GlobalDomain tp -> Global tp
 def nm repr dom = Global nm repr dom Nothing
