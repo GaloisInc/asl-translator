@@ -16,6 +16,7 @@ import           System.Console.GetOpt
 
 import           Language.ASL.Translation.Driver ( TranslatorOptions(..), StatOptions(..)
                                                  , FilePathConfig(..), TranslationDepth(..)
+                                                 , NormalizeMode(..)
                                                  )
 import qualified Language.ASL.Translation.Driver as ASL
 
@@ -33,11 +34,13 @@ main = do
     usage
     exitFailure
 
-  case foldl applyOption (Just (defaultOptions nonLogCfg, defaultStatOptions)) args of
+  case foldl applyOption (Just (ASL.defaultOptions nonLogCfg, ASL.defaultStatOptions)) args of
     Nothing -> do
       usage
       exitFailure
-    Just (opts', statOpts) -> runTranslator opts' statOpts
+    Just (opts', statOpts) -> case optNormalizeMode opts' of
+      OnlyNormalize -> ASL.readAndNormalize opts'
+      _ -> runTranslator opts' statOpts
   where
     applyOption (Just (opts, statOpts)) arg = case arg of
       Left f -> do
@@ -80,42 +83,6 @@ usage = do
   pn <- IO.getProgName
   let msg = "Usage: " <> pn <> " [options]"
   putStrLn $ usageInfo msg arguments
-
-
-defaultFilePaths :: FilePathConfig
-defaultFilePaths = FilePathConfig
-  { fpDataRoot = "./data/parsed/"
-  , fpDefs = "arm_defs.sexpr"
-  , fpInsts = "arm_instrs.sexpr"
-  , fpRegs = "arm_regs.sexpr"
-  , fpSupport = "support.sexpr"
-  , fpExtraDefs = "extra_defs.sexpr"
-  , fpOutput = "./output/formulas.what4"
-  }
-
-defaultOptions :: Log.LogCfg -> TranslatorOptions
-defaultOptions logCfg = TranslatorOptions
-  { optVerbosity = 1
-  , optNumberOfInstructions = Nothing
-  , optFilters = (fromJust $ ASL.getTranslationMode "Arch32") ASL.noFilter
-  , optCollectAllExceptions = False
-  , optCollectExpectedExceptions = True
-  , optTranslationDepth = TranslateRecursive
-  , optCheckSerialization = False
-  , optFilePaths = defaultFilePaths
-  , optLogCfg = logCfg
-  , optParallel = False
-  }
-  
-
-defaultStatOptions :: StatOptions
-defaultStatOptions = StatOptions
-  { reportKnownExceptions = False
-  , reportSucceedingInstructions = False
-  , reportAllExceptions = False
-  , reportKnownExceptionFilter = (\_ -> True)
-  , reportFunctionDependencies = False
-  }
 
 arguments :: [OptDescr (Either (TranslatorOptions -> Maybe TranslatorOptions) (StatOptions -> Maybe StatOptions))]
 arguments =
@@ -178,6 +145,19 @@ arguments =
 
   , Option [] ["check-serialization"] (NoArg (Left (\opts -> Just $ opts { optCheckSerialization = True } )))
     "Check that serialization/deserialization for any processed formulas is correct."
+
+  , Option "n" ["normalize-mode"]
+    (ReqArg (\mode -> Left (\opts -> do
+      nmode <- case mode of
+        "only-normalize" -> return $ OnlyNormalize
+        "normalize" -> return $ TranslateAndNormalize
+        "no-normalize" -> return $ NoNormalize
+        _ -> fail ""
+      return $ opts { optNormalizeMode = nmode })) "NORMALIZE_MODE")
+    ("Normalize the resulting formula environment according to NORMALIZE_MODE: \n" ++
+     "only-normalize - skip all translation/simulation steps and normalize the existing formulas file. \n" ++
+     "normalize (default) - normalize the resulting formulas after translation/simulation.\n" ++
+     "no-normalize - do not normalize")
   ]
 
 

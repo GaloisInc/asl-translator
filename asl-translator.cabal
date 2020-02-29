@@ -64,6 +64,7 @@ library                asl-translator-lib
                        Language.ASL.SyntaxTraverse
                        Language.ASL.Types
                        Language.ASL.Formulas.Serialize
+                       Language.ASL.Formulas.Normalize
                        Language.ASL.StaticExpr
                        Language.ASL.Globals
                        Language.ASL.Globals.Types

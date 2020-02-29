@@ -20,7 +20,10 @@ module Language.ASL.Formulas.Serialize
   , serializeSymFnEnv
   , deserializeSymFn'
   , deserializeSymFn
+  , deserializeSymFnEnv'
   , deserializeSymFnEnv
+  , FunctionMaker
+  , envFunctionMaker
   , filteredFunctionMaker
   , uninterpFunctionMaker
   , SExpr
@@ -273,7 +276,33 @@ lookupFnSig sym env sig = case Map.lookup (fsName sig) env of
     return $ Just symFn
   _ -> return Nothing
 
-deserializeSymFnEnv :: forall sym m
+deserializeSymFnEnv' :: forall sym m env
+                     . (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
+                    => MonadFail m
+                    => MonadIO m
+                    => sym
+                    -> env
+                    -> (T.Text -> SomeSome (WI.SymFn sym) -> env -> m env)
+                    -> (env -> FunctionMaker m sym)
+                    -> SExpr
+                    -> m ([(T.Text, SomeSome (WI.SymFn sym))], env)
+deserializeSymFnEnv' sym env extendenv mkFun sexpr = case sexpr of
+  S.L [ S.A (AId "SymFnEnv")
+      , S.L symFnSExprs ] -> do
+    (env', symFns) <- foldM go (env, []) symFnSExprs
+    return $ (reverse $ symFns, env')
+  where
+    go :: (env, [(T.Text, SomeSome (WI.SymFn sym))])
+       -> SExpr
+       -> m (env, [(T.Text, SomeSome (WI.SymFn sym))])
+    go (env', symFns) = \case
+      S.L [ S.A (AStr nm), symFnSExpr ] -> do
+        symFn <- deserializeSymFn' sym (mkFun env') symFnSExpr
+        env'' <- extendenv nm symFn env'
+        return $ (env'', (nm, symFn) : symFns)
+      x -> badSExpr x
+
+deserializeSymFnEnv :: forall sym m env
                      . (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
                     => MonadFail m
                     => MonadIO m
@@ -282,25 +311,22 @@ deserializeSymFnEnv :: forall sym m
                     -> FunctionMaker m sym
                     -> SExpr
                     -> m [(T.Text, SomeSome (WI.SymFn sym))]
-deserializeSymFnEnv sym env mkuninterp sexpr = case sexpr of
-  S.L [ S.A (AId "SymFnEnv")
-      , S.L symFnSExprs ] -> do
-    (_, symFns) <- foldM go (env, []) symFnSExprs
-    return $ reverse $ symFns
+deserializeSymFnEnv sym env mkuninterp sexpr =
+  fst <$> deserializeSymFnEnv' sym env (\nm symfn env -> return $ Map.insert nm symfn env) mkFun sexpr
   where
     mkFun :: NamedSymFnEnv sym -> FunctionMaker m sym
     mkFun env' formalName sig = lookupFnSig sym env' sig >>= \case
       Just symFn -> return symFn
       Nothing -> mkuninterp formalName sig
 
-    go :: (NamedSymFnEnv sym, [(T.Text, SomeSome (WI.SymFn sym))])
-       -> SExpr
-       -> m (NamedSymFnEnv sym, [(T.Text, SomeSome (WI.SymFn sym))])
-    go (env', symFns) = \case
-      S.L [ S.A (AStr nm), symFnSExpr ] -> do
-        symFn <- deserializeSymFn' sym (mkFun env') symFnSExpr
-        return $ (Map.insert nm symFn env', (nm, symFn) : symFns)
-      x -> badSExpr x
+envFunctionMaker :: (WI.IsSymExprBuilder sym, MonadFail m)
+                 => sym
+                 -> FunctionMaker m sym
+                 -> NamedSymFnEnv sym
+                 -> FunctionMaker m sym
+envFunctionMaker sym mkFun env formalName sig = lookupFnSig sym env sig >>= \case
+      Just symFn -> return symFn
+      Nothing -> mkFun formalName sig
 
 uninterpFunctionMaker :: forall sym m. (WI.IsSymExprBuilder sym, MonadIO m) => sym -> FunctionMaker m sym
 uninterpFunctionMaker sym _formalName sig = do

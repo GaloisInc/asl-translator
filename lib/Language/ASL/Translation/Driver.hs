@@ -17,7 +17,11 @@
 
 module Language.ASL.Translation.Driver
   ( TranslatorOptions(..)
+  , defaultFilePaths
+  , defaultOptions
+  , NormalizeMode(..)
   , StatOptions(..)
+  , defaultStatOptions
   , TranslationDepth(..)
   , FilePathConfig(..)
   , runWithFilters
@@ -25,6 +29,7 @@ module Language.ASL.Translation.Driver
   , serializeFormulas
   , getTranslationMode
   , getSimulationMode
+  , readAndNormalize
   , noFilter
   ) where
 
@@ -46,7 +51,7 @@ import qualified Control.Monad.Fail as MF
 import           Data.Map ( Map )
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import           Data.Maybe ( catMaybes, mapMaybe )
+import           Data.Maybe ( catMaybes, mapMaybe, fromJust )
 import           Data.Monoid
 import           Data.Parameterized.Nonce
 import qualified Data.Parameterized.Context as Ctx
@@ -81,6 +86,7 @@ import qualified Language.ASL.SyntaxTraverse as TR
 import qualified Language.ASL as ASL
 import qualified Language.ASL.Globals as G
 import qualified Language.ASL.Formulas.Serialize as FS
+import qualified Language.ASL.Formulas.Normalize as FS
 
 import qualified Language.ASL.Crucible as AC
 
@@ -119,6 +125,7 @@ data TranslatorOptions = TranslatorOptions
   , optFilePaths :: FilePathConfig
   , optLogCfg :: LogCfg
   , optParallel :: Bool
+  , optNormalizeMode :: NormalizeMode
   }
 
 data FilePathConfig = FilePathConfig
@@ -128,6 +135,7 @@ data FilePathConfig = FilePathConfig
   , fpSupport :: FilePath
   , fpExtraDefs :: FilePath
   , fpOutput :: FilePath
+  , fpNormOutput :: FilePath
   , fpDataRoot :: FilePath
   }
 
@@ -139,8 +147,51 @@ data StatOptions = StatOptions
   , reportFunctionDependencies :: Bool
   }
 
+
+defaultFilePaths :: FilePathConfig
+defaultFilePaths = FilePathConfig
+  { fpDataRoot = "./data/parsed/"
+  , fpDefs = "arm_defs.sexpr"
+  , fpInsts = "arm_instrs.sexpr"
+  , fpRegs = "arm_regs.sexpr"
+  , fpSupport = "support.sexpr"
+  , fpExtraDefs = "extra_defs.sexpr"
+  , fpOutput = "./output/formulas.what4"
+  , fpNormOutput = "./output/formulas-norm.what4"
+  }
+
+defaultOptions :: Log.LogCfg -> TranslatorOptions
+defaultOptions logCfg = TranslatorOptions
+  { optVerbosity = 1
+  , optNumberOfInstructions = Nothing
+  , optFilters = (fromJust $ getTranslationMode "Arch32") noFilter
+  , optCollectAllExceptions = False
+  , optCollectExpectedExceptions = True
+  , optTranslationDepth = TranslateRecursive
+  , optCheckSerialization = False
+  , optFilePaths = defaultFilePaths
+  , optLogCfg = logCfg
+  , optParallel = False
+  , optNormalizeMode = NoNormalize
+  }
+
+
+defaultStatOptions :: StatOptions
+defaultStatOptions = StatOptions
+  { reportKnownExceptions = False
+  , reportSucceedingInstructions = False
+  , reportAllExceptions = False
+  , reportKnownExceptionFilter = (\_ -> True)
+  , reportFunctionDependencies = False
+  }
+
 data TranslationDepth = TranslateRecursive
                       | TranslateShallow
+
+data NormalizeMode = OnlyNormalize
+                   | TranslateAndNormalize
+                   | NoNormalize
+ deriving (Eq, Show)
 
 runWithFilters :: HasCallStack => TranslatorOptions -> IO (SigMap arch)
 runWithFilters opts = do
@@ -159,28 +210,49 @@ data BuilderData t = NoBuilderData
 optFormulaOutputFilePath :: TranslatorOptions -> FilePath
 optFormulaOutputFilePath opts = fpOutput (optFilePaths opts)
 
+optNormFormulaOutputFilePath :: TranslatorOptions -> FilePath
+optNormFormulaOutputFilePath opts = fpNormOutput (optFilePaths opts)
+
+readAndNormalize :: TranslatorOptions -> IO ()
+readAndNormalize opts = do
+  let out = optFormulaOutputFilePath opts
+  logMsgIO opts 0 $ "Reading formulas from: " ++ out
+  sexpr <- T.readFile (optFormulaOutputFilePath opts) >>= FS.parseSExpr
+  logMsgIO opts 0 $ "Normalizing formulas.."
+  sexpr' <- FS.normalizeSymFnEnv sexpr
+  let outnorm = optNormFormulaOutputFilePath opts
+  logMsgIO opts 0 $ "Writing normalized formulas to: " ++ outnorm
+  txt <- return $ FS.printSExpr $ sexpr'
+  T.writeFile outnorm txt
+
 serializeFormulas :: TranslatorOptions -> SigMap arch -> IO ()
 serializeFormulas opts (sFormulaPromises -> promises) = do
-  formulas <- mapM getFormula promises
+  formulas <- reverse <$> mapM getFormula promises
   let out = optFormulaOutputFilePath opts
+  sexpr <- return $ FS.assembleSymFnEnv formulas
   logMsgIO opts 0 $ "Writing formulas to: " ++ out
-  txt <- return $ FS.printSExpr $ FS.assembleSymFnEnv (reverse formulas)
+  txt <- return $ FS.printSExpr $ sexpr
   T.writeFile out txt
   logMsgIO opts 0 $ "Serialization successful."
-  when (optCheckSerialization opts) $ checkSerialization opts
+  case optNormalizeMode opts of
+    TranslateAndNormalize -> do
+      readAndNormalize opts
+      when (optCheckSerialization opts) $ checkSerialization opts (optNormFormulaOutputFilePath opts)
+    NoNormalize -> do
+      when (optCheckSerialization opts) $ checkSerialization opts out
+    x -> error $ "Unexpected normalization mode: " ++ show x
   where
     getFormula :: (T.Text, IO (Either SimulationException FS.SExpr)) -> IO FS.SExpr
     getFormula (name, getresult) = getresult >>= \case
       Left err -> X.throw err
       Right result -> return result
 
-checkSerialization :: TranslatorOptions -> IO ()
-checkSerialization opts = do
-  let out = optFormulaOutputFilePath opts
-  logMsgIO opts 0 $ "Deserializing formulas from: " ++ out
+checkSerialization :: TranslatorOptions -> FilePath -> IO ()
+checkSerialization opts fp = do
+  logMsgIO opts 0 $ "Deserializing formulas from: " ++ fp
   Some r <- liftIO $ newIONonceGenerator
   sym <- liftIO $ B.newExprBuilder B.FloatRealRepr NoBuilderData r
-  sexpr <- T.readFile (optFormulaOutputFilePath opts) >>= FS.parseSExpr
+  sexpr <- T.readFile fp >>= FS.parseSExpr
   _ <- FS.deserializeSymFnEnv sym Map.empty (FS.filteredFunctionMaker sym validUninterpFunction) sexpr
   logMsgIO opts 0 $ "Deserializing successful."
   return ()
