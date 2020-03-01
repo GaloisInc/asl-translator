@@ -1,3 +1,5 @@
 dist-newstyle/
 cabal.project
 output/*
+*.th.hs
+*.dump-splices

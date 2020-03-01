@@ -17,9 +17,14 @@ module Language.ASL.Globals.Definitions
   , trackedGlobals'
   , memoryGlobal'
   , untrackedGlobals'
+  , flatTrackedGlobals'
   , gprGlobals'
   , simdGlobals'
   , forSome
+  , MaxGPR
+  , MaxSIMD
+  , maxGPRRepr
+  , maxSIMDRepr
   ) where
 
 import           GHC.Natural ( naturalFromInteger )
@@ -60,6 +65,16 @@ import           Language.ASL.StaticExpr ( bitsToInteger )
 
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as TH
+
+type MaxGPR = 14
+type MaxSIMD = 31
+
+maxGPRRepr :: NR.NatRepr MaxGPR
+maxGPRRepr = NR.knownNat
+
+maxSIMDRepr :: NR.NatRepr MaxSIMD
+maxSIMDRepr = NR.knownNat
+
 
 -- FIXME: move
 forSome :: Some f -> (forall tp . f tp -> r) -> r
@@ -111,6 +126,7 @@ simpleGlobals' =
   :> bv @1 "PSTATE_Z"
   :> bv @1 "PSTATE_nRW"
 
+-- | All 'Global's as they are configured in the ASL global state, with GPRs and SIMDs as nested globals.
 trackedGlobals' :: Some (Assignment Global)
 trackedGlobals' =
   forSome simpleGlobals' $ \simpleGlobals'' ->
@@ -123,6 +139,18 @@ trackedGlobals' =
   :> allSIMDsGlobal'
   :> memoryGlobal''
 
+-- | All 'Global's with GPRs and SIMDs expanded.
+flatTrackedGlobals' :: Some (Assignment Global)
+flatTrackedGlobals' =
+  forSome simpleGlobals' $ \simpleGlobals'' ->
+  forSome gprGlobals' $ \gprGlobals'' ->
+  forSome simdGlobals' $ \simdGlobals' ->
+  forSome memoryGlobal' $ \memoryGlobal'' ->
+  Some $
+  (simpleGlobals''
+  <++> gprGlobals''
+  <++> simdGlobals') :> memoryGlobal''
+
 memoryGlobal' :: Some Global
 memoryGlobal' = Some $
   def "__Memory" (WI.BaseArrayRepr (empty :> WI.BaseBVRepr (WI.knownNat @32))
@@ -132,7 +160,7 @@ gprGlobals' :: Some (Assignment Global)
 gprGlobals' = Ctx.fromList $ map mkReg [0..14]
   where
     mkReg :: Integer -> Some (Global)
-    mkReg i = Some $ Global ("GPRS" <> T.pack (show i)) (WI.BaseBVRepr (NR.knownNat @32)) domainUnbounded (Just ("GPRS", i))
+    mkReg i = Some $ Global ("GPR" <> T.pack (show i)) (WI.BaseBVRepr (NR.knownNat @32)) domainUnbounded (Just ("GPR"))
 
 allGPRsGlobal :: Some Global
 allGPRsGlobal = case gprGlobals' of
@@ -142,11 +170,11 @@ simdGlobals' :: Some (Assignment Global)
 simdGlobals' = Ctx.fromList $ map mkReg [0..31]
   where
     mkReg :: Integer -> Some (Global)
-    mkReg i = Some $ Global ("SIMD" <> T.pack (show i)) (WI.BaseBVRepr (NR.knownNat @128)) domainUnbounded (Just ("SIMD", i))
+    mkReg i = Some $ Global ("SIMD" <> T.pack (show i)) (WI.BaseBVRepr (NR.knownNat @128)) domainUnbounded (Just ("SIMD"))
 
 allSIMDsGlobal :: Some Global
 allSIMDsGlobal = case simdGlobals' of
-  Some asn -> Some $ Global "SIMD" (WI.BaseStructRepr (FC.fmapFC gbType asn)) domainUnbounded Nothing
+  Some asn -> Some $ Global "SIMDS" (WI.BaseStructRepr (FC.fmapFC gbType asn)) domainUnbounded Nothing
 
 def :: T.Text -> WI.BaseTypeRepr tp -> GlobalDomain tp -> Global tp
 def nm repr dom = Global nm repr dom Nothing

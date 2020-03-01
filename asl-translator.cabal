@@ -69,6 +69,7 @@ library                asl-translator-lib
                        Language.ASL.Globals
                        Language.ASL.Globals.Types
                        Language.ASL.Globals.Definitions
+                       Language.ASL.Globals.ConsistencyCheck
                        Util.Log
   hs-source-dirs:      lib
   ghc-options:         -Wcompat -Wall

@@ -13,6 +13,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Language.ASL.Globals.Types
   ( Global(..)
@@ -21,21 +22,27 @@ module Language.ASL.Globals.Types
   , GlobalsType
   , IndexedSymbol
   , IsGlobal
+  , IsSimpleGlobal
   , domainSingleton
   , domainUnbounded
   , asSingleton
   , mkInstDeclsFromGlobals
+  , mkSimpleInstDecls
   , mkAllGlobalSymsT
-  , mkGlobalsSyms
+  , mkAllGlobalSymsE
   , mkTypeFromGlobals
   , mkTypeFromReprs
   , mkReprFromGlobals
-  , mkGlobalAssignment
-  , forNats
+  , mapNatsUpto
+  , mkNatCtx
   , genCond
   , liftIndex
   , liftIndexNatRepr
   , liftIndexNumT
+  , mkGlobalsT
+  , mkGlobalsE
+  , mkSymbolE
+  , mkSymbolT
   ) where
 
 import           GHC.Natural ( naturalFromInteger )
@@ -90,9 +97,15 @@ data Global tp =
     , gbDomain :: GlobalDomain tp
     -- ^ The known domain of this global variable
     -- Every update to this value needs to check that this domain has been respected.
-    , gbIndexed :: Maybe (T.Text, Integer)
-    -- ^ Register globals are "indexed" and can also be referenced by a name and an index
+    , gbGroupName :: Maybe T.Text
+    -- ^ Either "SIMD" or "GPR". This global will be accessed via this name plus an index.
     }
+
+instance TestEquality Global where
+  testEquality (Global nm tp dm gn) (Global nm' tp' dm' gn') =
+    case testEquality tp tp' of
+      Just Refl | nm == nm' && dm == dm' && gn == gn' -> Just Refl
+      _ -> Nothing
 
 data GlobalDomain tp =
     DomainSet (Set (WI.ConcreteVal tp))
@@ -101,6 +114,7 @@ data GlobalDomain tp =
     -- ^ the global is in a range of values (inclusive). A 'Nothing' bound indicates
     -- it is unbounded in that direction.
   | DomainUndefined
+  deriving Eq
 
 domainSingleton :: WI.ConcreteVal tp -> GlobalDomain tp
 domainSingleton v = DomainSet (Set.singleton v)
@@ -231,6 +245,10 @@ genCond mkerr globalsMap lookup sig = do
 type family GlobalsType (s :: Symbol) :: WI.BaseType
 type family IndexedSymbol (s :: Symbol) (n :: Nat) :: Symbol
 
+
+class KnownSymbol s => IsSimpleGlobal (s:: Symbol) where
+  hasKnownGlobalReprSimple :: CT.SymbolRepr s -> WI.BaseTypeRepr (GlobalsType s)
+
 class KnownSymbol s => IsGlobal (s:: Symbol) where
   hasKnownGlobalRepr :: CT.SymbolRepr s -> WI.BaseTypeRepr (GlobalsType s)
 
@@ -252,112 +270,84 @@ symToSGlobal f srepr trepr = case MapF.lookup (LabeledValue (CT.symbolRepr srepr
   Just idx -> SGlobal idx
   Nothing -> error $ "No corresponding global for: " ++ show srepr
 
-
-data ReifiedGlobal ctx tp = ReifiedGlobal
-   { symbolT :: TH.Type
-   , symbolE :: TH.Exp
-   , typeT :: TH.Type
-   , typeE :: TH.Exp
-   , rgIndexed :: Maybe ((TH.Type, TH.Exp), (TH.Type, TH.Exp))
-   , rgIdx :: Ctx.Index ctx tp
-   }
-
-mapAllGlobals :: forall a ctx
-               . (forall tp. ReifiedGlobal ctx tp -> TH.Q a)
-              -> (a -> a -> TH.Q a)
-              -> TH.Q a
-              -> Ctx.Assignment Global ctx
-              -> TH.Q a
-mapAllGlobals mkelem comb fin globals = do
-  exprs <- Ctx.traverseWithIndex go globals
-  e <- fin
-  FC.foldrMFC (\(Const a) b -> comb a b) e exprs
+mkGlobalsGen :: forall a
+              . (a -> a -> TH.Q a)
+             -> TH.Q a
+             -> Some (Ctx.Assignment Global)
+             -> (forall (ctx :: Ctx.Ctx WI.BaseType) (tp :: WI.BaseType). Ctx.Index ctx tp -> Global tp -> TH.Q a)
+             -> TH.Q a
+mkGlobalsGen comb mkinit (Some gbs) mkelem = do
+  elems <- Ctx.traverseWithIndex go gbs
+  init <- mkinit
+  FC.foldlMFC (\b (Const a) -> comb b a) init elems
   where
     go :: Ctx.Index ctx tp -> Global tp -> TH.Q (Const a tp)
-    go idx gb = do
-      symbolT' <- TH.litT (TH.strTyLit (T.unpack $ gbName gb))
-      symbolE' <- [e| CT.knownSymbol :: CT.SymbolRepr $(return symbolT') |]
-      typeT' <- mkTypeFromRepr (gbType gb)
-      typeE' <- mkExprFromRepr (gbType gb)
-      indexedTEs <- case gbIndexed gb of
-        Just (idxNm, idx) -> do
-          idxNmT <- TH.litT (TH.strTyLit (T.unpack $ idxNm))
-          idxNmE <- [e| CT.knownSymbol :: CT.SymbolRepr $(return idxNmT) |]
-          idxT <- TH.litT (TH.numTyLit idx)
-          idxE <- [e| NR.knownNat :: NR.NatRepr $(return idxT) |]
-          return $ Just $ ((idxNmT, idxNmE), (idxT, idxE))
-        Nothing -> return Nothing
+    go idx gb = Const <$> mkelem idx gb
 
-      Const <$> mkelem (ReifiedGlobal symbolT' symbolE' typeT' typeE' indexedTEs idx)
+mkGlobalsE :: Some (Ctx.Assignment Global)
+           -> (forall (ctx :: Ctx.Ctx WI.BaseType) (tp :: WI.BaseType). Ctx.Index ctx tp -> Global tp -> TH.Q TH.Exp)
+           -> TH.Q TH.Exp
+mkGlobalsE = mkGlobalsGen (\b a -> [e| $(return b) Ctx.:> $(return a) |]) [e| Ctx.empty |]
 
+mkGlobalsT :: Some (Ctx.Assignment Global)
+           -> (forall (ctx :: Ctx.Ctx WI.BaseType) (tp :: WI.BaseType). Ctx.Index ctx tp -> Global tp -> TH.Q TH.Type)
+           -> TH.Q TH.Type
+mkGlobalsT = mkGlobalsGen (\b a -> [t| $(return b) Ctx.::> $(return a) |]) [t| Ctx.EmptyCtx |]
 
-mkInstDeclsFromGlobals' :: forall ctx. Ctx.Assignment Global ctx -> TH.DecsQ
-mkInstDeclsFromGlobals' = mapAllGlobals go (\d1 d2 -> return $ d1 ++ d2) (return [])
+-- | T.Text -> [t| Symbol |]
+mkSymbolT :: T.Text -> TH.Q TH.Type
+mkSymbolT nm = TH.litT (TH.strTyLit (T.unpack $ nm))
+
+-- | T.Text -> [e| CT.SymbolRepr |]
+mkSymbolE :: T.Text -> TH.Q TH.Exp
+mkSymbolE nm = [e| CT.knownSymbol :: CT.SymbolRepr $(mkSymbolT nm) |]
+
+mkInstDeclsFromGlobals :: Some (Ctx.Assignment Global) -> TH.DecsQ
+mkInstDeclsFromGlobals gbs = mkGlobalsGen (\b a -> return $ b ++ a) (return []) gbs go
  where
-   go :: ReifiedGlobal ctx tp -> TH.Q [TH.Dec]
-   go (ReifiedGlobal sT sE tT tE rgIdx idx) = do
+   go :: Ctx.Index ctx tp -> Global tp -> TH.DecsQ
+   go idx gb = do
+     symbT <- mkSymbolT (gbName gb)
      decls <- [d|
-      type instance GlobalsType $(return sT) = $(return tT)
-      instance IsGlobal $(return sT) where
-        hasKnownGlobalRepr _ = $(return tE)
+      type instance GlobalsType $(return symbT) = $(mkTypeFromRepr (gbType gb))
+      instance IsGlobal $(return symbT) where
+        hasKnownGlobalRepr _ = $(mkExprFromRepr (gbType gb))
       |]
-     decls' <- case rgIdx of
-       Just ((idxNmT, idxNmE), (idxT, idxE)) ->
+     decls' <- case gbGroupName gb of
+       Just grpNm ->
          [d|
-           type instance IndexedSymbol $(return idxNmT) $(return idxT) = $(return sT)
-           -- instance HasIndexedSymbol $(return idxNmT) $(return idxT) where
-           --  hasIndexedSymbol _ _ = $(return idxNmE) $(return idxE)
+           type instance IndexedSymbol $(mkSymbolT grpNm) $(liftIndexNumT idx) = $(return symbT)
          |]
        Nothing -> return []
      return $ decls ++ decls'
 
-mkInstDeclsFromGlobals :: Some (Ctx.Assignment Global) -> TH.DecsQ
-mkInstDeclsFromGlobals = viewSome mkInstDeclsFromGlobals'
-
-forNats :: Integer -> TH.Q TH.Exp-> TH.Q TH.Exp
-forNats maxnr f = do
-  varnr <- TH.newName "nr"
-  TH.lamE [TH.varP varnr] (go (TH.VarE varnr) maxnr)
+mkSimpleInstDecls :: Some (Ctx.Assignment Global) -> TH.DecsQ
+mkSimpleInstDecls gbs = mkGlobalsGen (\b a -> return $ b ++ a) (return []) gbs go
   where
-    go :: TH.Exp -> Integer -> TH.Q TH.Exp
-    go nrE i | i < 0 = [e| error "Unexpected nat value" |]
-    go nrE i = do
-      maxnrE <- [e| NR.knownNat :: NR.NatRepr $(TH.litT (TH.numTyLit i)) |]
-      [e| case testEquality $(return nrE) $(return maxnrE) of
-            Just Refl -> $(f)
-            Nothing -> $(go nrE (i -1)) |]
+    go :: Ctx.Index ctx tp -> Global tp -> TH.DecsQ
+    go _idx gb = [d| instance IsSimpleGlobal $(mkSymbolT (gbName gb)) |]
 
-mkAllGlobalSymsT' :: forall ctx. Ctx.Assignment Global ctx -> TH.Q TH.Type
-mkAllGlobalSymsT' = mapAllGlobals go (\t1 t2 -> [t| $(return t2) Ctx.::> $(return t1) |]) [t| Ctx.EmptyCtx |]
+-- | withNatsUpto :: maxnat -> (f :: (\nr -> *)) -> [ f (NatRepr n) | n <- forall n. n <= maxnat ]
+mapNatsUpto :: Integer -> TH.Q TH.Exp -> TH.Q TH.Exp
+mapNatsUpto maxnr f = go maxnr
   where
-    go :: ReifiedGlobal ctx tp -> TH.Q TH.Type
-    go rg = return (symbolT rg)
+    go :: Integer -> TH.Q TH.Exp
+    go i | i < 0 = [e| [] |]
+    go i = [e| $(f) (NR.knownNat :: NR.NatRepr $(TH.litT (TH.numTyLit i))) : $(go (i - 1)) |]
+
+-- | mkNatCtx :: maxnat -> EmptyCtx ::> 0 ::> 1 ... ::> maxnat
+mkNatCtx :: Integer -> TH.Q TH.Type
+mkNatCtx maxnr = go maxnr
+  where
+    go :: Integer -> TH.Q TH.Type
+    go i | i < 0 = [t| Ctx.EmptyCtx |]
+    go i = [t| $(go (i-1)) Ctx.::> $(TH.litT (TH.numTyLit i)) |]
 
 mkAllGlobalSymsT :: Some (Ctx.Assignment Global) -> TH.Q TH.Type
-mkAllGlobalSymsT = viewSome mkAllGlobalSymsT'
+mkAllGlobalSymsT gbs = mkGlobalsT gbs $ \_ gb -> mkSymbolT (gbName gb)
 
-foldGlobals :: forall ctx. Ctx.Assignment Global ctx -> (forall tp. Ctx.Index ctx tp -> TH.Q TH.Exp) -> TH.Q TH.Exp -> TH.Q TH.Exp -> TH.Q TH.Exp
-foldGlobals glbs mkelem combElem init =
-    mapAllGlobals go (\e1 e2 -> [e| $(combElem) $(return e2) $(return e1) |]) [e| $(init) |] glbs
-  where
-    go :: ReifiedGlobal ctx tp -> TH.Q TH.Exp
-    go (ReifiedGlobal sT sE tT tE _rgidx idx) =
-      [e| $(mkelem idx) $(return sE) $(return tE) |]
-
-mkGlobalAssignment :: Some (Ctx.Assignment Global)
-             -> (forall (ctx :: Ctx.Ctx WI.BaseType) (tp :: WI.BaseType). Ctx.Index ctx tp -> TH.Q TH.Exp)
-             -> TH.Q TH.Exp
-mkGlobalAssignment (Some asn) mkentry =
-  foldGlobals asn mkentry [e| (:>) |] [| empty |]
-
-mkGlobalsSyms' :: forall ctx. Ctx.Assignment Global ctx -> TH.Q TH.Exp
-mkGlobalsSyms' glbs = do
-  vargbl <- TH.newName "varglbs"
-  TH.lamE [TH.varP vargbl] (mapAllGlobals (go (TH.VarE vargbl)) (\e1 e2 -> [e| $(return e2) :> $(return e1) |]) [e| Ctx.empty |] glbs)
-  where
-    go :: TH.Exp -> ReifiedGlobal ctx tp -> TH.Q TH.Exp
-    go glbsE (ReifiedGlobal sT sE tT tE _rgidx _idx) =
-      [e| Pair $(return sE) (symToSGlobal $(return glbsE) $(return sE) $(return tE)) |]
+mkAllGlobalSymsE :: Some (Ctx.Assignment Global) -> TH.Q TH.Exp
+mkAllGlobalSymsE gbs = mkGlobalsE gbs $ \_ gb -> mkSymbolE (gbName gb)
 
 liftIndex :: Ctx.Index ctx tp -> TH.Q TH.Exp
 liftIndex idx = [e| Ctx.natIndexProxy $(liftIndexNatRepr idx) |]
@@ -367,10 +357,6 @@ liftIndexNatRepr idx = [e| NR.knownNat :: NR.NatRepr $(liftIndexNumT idx) |]
 
 liftIndexNumT :: Ctx.Index ctx tp -> TH.Q TH.Type
 liftIndexNumT idx = TH.litT (TH.numTyLit(fromIntegral $ Ctx.indexVal idx))
-
-
-mkGlobalsSyms :: Some (Ctx.Assignment Global) -> TH.Q TH.Exp
-mkGlobalsSyms = viewSome mkGlobalsSyms'
 
 mkTypeFromRepr :: WI.BaseTypeRepr tp -> TH.Q TH.Type
 mkTypeFromRepr repr = case repr of

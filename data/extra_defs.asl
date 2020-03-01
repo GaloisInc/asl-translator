@@ -238,143 +238,143 @@ type SIMDStruct is (
   bits(128) V31
 )
 
-SIMDStruct SIMD;
+SIMDStruct SIMDS;
 
 demuxVSet(integer n, bits(128) value)
     case n of
         when 0
-            SIMD.V0 = value;
+            SIMDS.V0 = value;
         when 1
-            SIMD.V1 = value;
+            SIMDS.V1 = value;
         when 2
-            SIMD.V2 = value;
+            SIMDS.V2 = value;
         when 3
-            SIMD.V3 = value;
+            SIMDS.V3 = value;
         when 4
-            SIMD.V4 = value;
+            SIMDS.V4 = value;
         when 5
-            SIMD.V5 = value;
+            SIMDS.V5 = value;
         when 6
-            SIMD.V6 = value;
+            SIMDS.V6 = value;
         when 7
-            SIMD.V7 = value;
+            SIMDS.V7 = value;
         when 8
-            SIMD.V8 = value;
+            SIMDS.V8 = value;
         when 9
-            SIMD.V9 = value;
+            SIMDS.V9 = value;
         when 10
-            SIMD.V10 = value;
+            SIMDS.V10 = value;
         when 11
-            SIMD.V11 = value;
+            SIMDS.V11 = value;
         when 12
-            SIMD.V12 = value;
+            SIMDS.V12 = value;
         when 13
-            SIMD.V13 = value;
+            SIMDS.V13 = value;
         when 14
-            SIMD.V14 = value;
+            SIMDS.V14 = value;
         when 15
-            SIMD.V15 = value;
+            SIMDS.V15 = value;
         when 16
-            SIMD.V16 = value;
+            SIMDS.V16 = value;
         when 17
-            SIMD.V17 = value;
+            SIMDS.V17 = value;
         when 18
-            SIMD.V18 = value;
+            SIMDS.V18 = value;
         when 19
-            SIMD.V19 = value;
+            SIMDS.V19 = value;
         when 20
-            SIMD.V20 = value;
+            SIMDS.V20 = value;
         when 21
-            SIMD.V21 = value;
+            SIMDS.V21 = value;
         when 22
-            SIMD.V22 = value;
+            SIMDS.V22 = value;
         when 23
-            SIMD.V23 = value;
+            SIMDS.V23 = value;
         when 24
-            SIMD.V24 = value;
+            SIMDS.V24 = value;
         when 25
-            SIMD.V25 = value;
+            SIMDS.V25 = value;
         when 26
-            SIMD.V26 = value;
+            SIMDS.V26 = value;
         when 27
-            SIMD.V27 = value;
+            SIMDS.V27 = value;
         when 28
-            SIMD.V28 = value;
+            SIMDS.V28 = value;
         when 29
-            SIMD.V29 = value;
+            SIMDS.V29 = value;
         when 30
-            SIMD.V30 = value;
+            SIMDS.V30 = value;
         when 31
-            SIMD.V31 = value;
+            SIMDS.V31 = value;
     return;
 
 
 bits(128) demuxVGet(integer n)
     case n of
         when 0
-            return SIMD.V0;
+            return SIMDS.V0;
         when 1
-            return SIMD.V1;
+            return SIMDS.V1;
         when 2
-            return SIMD.V2;
+            return SIMDS.V2;
         when 3
-            return SIMD.V3;
+            return SIMDS.V3;
         when 4
-            return SIMD.V4;
+            return SIMDS.V4;
         when 5
-            return SIMD.V5;
+            return SIMDS.V5;
         when 6
-            return SIMD.V6;
+            return SIMDS.V6;
         when 7
-            return SIMD.V7;
+            return SIMDS.V7;
         when 8
-            return SIMD.V8;
+            return SIMDS.V8;
         when 9
-            return SIMD.V9;
+            return SIMDS.V9;
         when 10
-            return SIMD.V10;
+            return SIMDS.V10;
         when 11
-            return SIMD.V11;
+            return SIMDS.V11;
         when 12
-            return SIMD.V12;
+            return SIMDS.V12;
         when 13
-            return SIMD.V13;
+            return SIMDS.V13;
         when 14
-            return SIMD.V14;
+            return SIMDS.V14;
         when 15
-            return SIMD.V15;
+            return SIMDS.V15;
         when 16
-            return SIMD.V16;
+            return SIMDS.V16;
         when 17
-            return SIMD.V17;
+            return SIMDS.V17;
         when 18
-            return SIMD.V18;
+            return SIMDS.V18;
         when 19
-            return SIMD.V19;
+            return SIMDS.V19;
         when 20
-            return SIMD.V20;
+            return SIMDS.V20;
         when 21
-            return SIMD.V21;
+            return SIMDS.V21;
         when 22
-            return SIMD.V22;
+            return SIMDS.V22;
         when 23
-            return SIMD.V23;
+            return SIMDS.V23;
         when 24
-            return SIMD.V24;
+            return SIMDS.V24;
         when 25
-            return SIMD.V25;
+            return SIMDS.V25;
         when 26
-            return SIMD.V26;
+            return SIMDS.V26;
         when 27
-            return SIMD.V27;
+            return SIMDS.V27;
         when 28
-            return SIMD.V28;
+            return SIMDS.V28;
         when 29
-            return SIMD.V29;
+            return SIMDS.V29;
         when 30
-            return SIMD.V30;
+            return SIMDS.V30;
         when 31
-            return SIMD.V31;
+            return SIMDS.V31;
 
 _V[integer n] = bits(128) value
     assert n >= 0 && n <= 31;
