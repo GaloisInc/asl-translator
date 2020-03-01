@@ -23,7 +23,7 @@ module Data.Parameterized.CtxFuns
   , mkAppendSymbol
   , mkIndexedSymbol
   , upToProofRepr
-  , replicatedAsnPrf
+  , replicatedCtxPrf
   -- copied from SemMC
   , TyFun
   , Apply
