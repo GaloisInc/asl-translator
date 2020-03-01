@@ -70,6 +70,7 @@ library                asl-translator-lib
                        Language.ASL.Globals.Types
                        Language.ASL.Globals.Definitions
                        Language.ASL.Globals.ConsistencyCheck
+                       Data.Parameterized.CtxFuns
                        Util.Log
   hs-source-dirs:      lib
   ghc-options:         -Wcompat -Wall

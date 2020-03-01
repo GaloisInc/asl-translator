@@ -15,7 +15,8 @@
 module Language.ASL.Globals.Definitions
   ( simpleGlobals'
   , trackedGlobals'
-  , memoryGlobal'
+  , MemoryBaseType
+  , memoryGlobal
   , untrackedGlobals'
   , flatTrackedGlobals'
   , gprGlobals'
@@ -68,6 +69,8 @@ import qualified Language.Haskell.TH.Syntax as TH
 
 type MaxGPR = 14
 type MaxSIMD = 31
+
+type MemoryBaseType = WI.BaseArrayType (EmptyCtx ::> WI.BaseBVType 32) (WI.BaseBVType 8)
 
 maxGPRRepr :: NR.NatRepr MaxGPR
 maxGPRRepr = NR.knownNat
@@ -132,12 +135,11 @@ trackedGlobals' =
   forSome simpleGlobals' $ \simpleGlobals'' ->
   forSome allGPRsGlobal $ \allGPRsGlobal' ->
   forSome allSIMDsGlobal $ \allSIMDsGlobal' ->
-  forSome memoryGlobal' $ \memoryGlobal'' ->
   Some $ simpleGlobals''
   -- the registers
   :> allGPRsGlobal'
   :> allSIMDsGlobal'
-  :> memoryGlobal''
+  :> memoryGlobal
 
 -- | All 'Global's with GPRs and SIMDs expanded.
 flatTrackedGlobals' :: Some (Assignment Global)
@@ -145,14 +147,13 @@ flatTrackedGlobals' =
   forSome simpleGlobals' $ \simpleGlobals'' ->
   forSome gprGlobals' $ \gprGlobals'' ->
   forSome simdGlobals' $ \simdGlobals' ->
-  forSome memoryGlobal' $ \memoryGlobal'' ->
   Some $
   (simpleGlobals''
   <++> gprGlobals''
-  <++> simdGlobals') :> memoryGlobal''
+  <++> simdGlobals') :> memoryGlobal
 
-memoryGlobal' :: Some Global
-memoryGlobal' = Some $
+memoryGlobal :: Global MemoryBaseType
+memoryGlobal =
   def "__Memory" (WI.BaseArrayRepr (empty :> WI.BaseBVRepr (WI.knownNat @32))
     (WI.BaseBVRepr (WI.knownNat @8))) domainUnbounded
 

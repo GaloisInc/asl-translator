@@ -20,14 +20,14 @@ module Language.ASL.Globals.Types
   , GlobalDomain(..)
   , SGlobal(..)
   , GlobalsType
-  , IndexedSymbol
   , IsGlobal
   , IsSimpleGlobal
   , domainSingleton
   , domainUnbounded
   , asSingleton
-  , mkInstDeclsFromGlobals
-  , mkSimpleInstDecls
+  , mkGlobalsTypeInstDecls
+  , mkIsGlobalInstDecls
+  , mkSimpleGlobalInstDecls
   , mkAllGlobalSymsT
   , mkAllGlobalSymsE
   , mkTypeFromGlobals
@@ -243,7 +243,7 @@ genCond mkerr globalsMap lookup sig = do
 -- Retrieving indexes into the globals based on type-level symbols
 
 type family GlobalsType (s :: Symbol) :: WI.BaseType
-type family IndexedSymbol (s :: Symbol) (n :: Nat) :: Symbol
+-- type family IndexedSymbol (s :: Symbol) (n :: Nat) :: Symbol
 
 
 class KnownSymbol s => IsSimpleGlobal (s:: Symbol) where
@@ -252,12 +252,6 @@ class KnownSymbol s => IsSimpleGlobal (s:: Symbol) where
 class KnownSymbol s => IsGlobal (s:: Symbol) where
   hasKnownGlobalRepr :: CT.SymbolRepr s -> WI.BaseTypeRepr (GlobalsType s)
 
-class HasIndexedSymbol (s :: Symbol) (n :: Nat) where
-  hasIndexedSymbol :: CT.SymbolRepr s -> NR.NatRepr n -> CT.SymbolRepr (IndexedSymbol s n)
-
-
---class (KnownSymbol s, KnownNat n) => IsIndexedSymbol (s :: Symbol) (n :: Nat) where
---  hasKnownIndexedSymbol :: CT.SymbolRepr s -> NR.NatRepr n -> CT.SymbolRepr (IndexedSymbol s n)
 
 data SGlobal ctx (s :: Symbol) where
   SGlobal :: { unSG :: Ctx.Index ctx (GlobalsType s) } -> SGlobal ctx s
@@ -302,30 +296,26 @@ mkSymbolT nm = TH.litT (TH.strTyLit (T.unpack $ nm))
 mkSymbolE :: T.Text -> TH.Q TH.Exp
 mkSymbolE nm = [e| CT.knownSymbol :: CT.SymbolRepr $(mkSymbolT nm) |]
 
-mkInstDeclsFromGlobals :: Some (Ctx.Assignment Global) -> TH.DecsQ
-mkInstDeclsFromGlobals gbs = mkGlobalsGen (\b a -> return $ b ++ a) (return []) gbs go
- where
-   go :: Ctx.Index ctx tp -> Global tp -> TH.DecsQ
-   go idx gb = do
-     symbT <- mkSymbolT (gbName gb)
-     decls <- [d|
-      type instance GlobalsType $(return symbT) = $(mkTypeFromRepr (gbType gb))
-      instance IsGlobal $(return symbT) where
-        hasKnownGlobalRepr _ = $(mkExprFromRepr (gbType gb))
-      |]
-     decls' <- case gbGroupName gb of
-       Just grpNm ->
-         [d|
-           type instance IndexedSymbol $(mkSymbolT grpNm) $(liftIndexNumT idx) = $(return symbT)
-         |]
-       Nothing -> return []
-     return $ decls ++ decls'
+mkGlobalsDecls :: (forall tp. Global tp -> TH.DecsQ) -> Some (Ctx.Assignment Global) -> TH.DecsQ
+mkGlobalsDecls f gbs = mkGlobalsGen (\b a -> return $ b ++ a) (return []) gbs (\_ -> f)
 
-mkSimpleInstDecls :: Some (Ctx.Assignment Global) -> TH.DecsQ
-mkSimpleInstDecls gbs = mkGlobalsGen (\b a -> return $ b ++ a) (return []) gbs go
+mkGlobalsTypeInstDecls :: Some (Ctx.Assignment Global) -> TH.DecsQ
+mkGlobalsTypeInstDecls = mkGlobalsDecls $ \gb ->
+  [d| type instance GlobalsType $(mkSymbolT (gbName gb)) = $(mkTypeFromRepr (gbType gb)) |]
+
+mkIsGlobalInstDecls :: Some (Ctx.Assignment Global) -> TH.DecsQ
+mkIsGlobalInstDecls = mkGlobalsDecls $ \gb ->
+  [d| instance IsGlobal $(mkSymbolT (gbName gb)) where
+        hasKnownGlobalRepr _ = $(mkExprFromRepr (gbType gb)) |]
+
+mkSimpleGlobalInstDecls :: Some (Ctx.Assignment Global) -> TH.DecsQ
+mkSimpleGlobalInstDecls gbs = mkGlobalsGen (\b a -> return $ b ++ a) (return []) gbs go
   where
     go :: Ctx.Index ctx tp -> Global tp -> TH.DecsQ
-    go _idx gb = [d| instance IsSimpleGlobal $(mkSymbolT (gbName gb)) |]
+    go _idx gb =
+      [d| instance IsSimpleGlobal $(mkSymbolT (gbName gb)) where
+            hasKnownGlobalReprSimple _ = $(mkExprFromRepr (gbType gb))
+       |]
 
 -- | withNatsUpto :: maxnat -> (f :: (\nr -> *)) -> [ f (NatRepr n) | n <- forall n. n <= maxnat ]
 mapNatsUpto :: Integer -> TH.Q TH.Exp -> TH.Q TH.Exp
