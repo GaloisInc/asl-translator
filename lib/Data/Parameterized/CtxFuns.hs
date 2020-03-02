@@ -24,12 +24,18 @@ module Data.Parameterized.CtxFuns
   , mkIndexedSymbol
   , upToProofRepr
   , replicatedCtxPrf
+  , boundedNatToIndex
+  , boundedNatUpToIndex
   -- copied from SemMC
   , TyFun
   , Apply
   , MapContext
+  , applyMapContext
   , mapContextSize
   , mapContextIndex
+  , mapContextSizeRev
+  , getIndexApplied
+  , IndexApplied(..)
   ) where
 
 import           GHC.TypeLits
@@ -162,7 +168,20 @@ boundedNatToIndex :: forall ctx n
                    . Size ctx
                   -> GeqProofRepr (CtxSize ctx - 1) n
                   -> Some (Index ctx)
-boundedNatToIndex sz (GeqProofRepr _ nr) = fromJust $ intIndex (fromIntegral $ NR.natValue nr) sz
+boundedNatToIndex sz vnr@(GeqProofRepr _ nr) =
+  case intIndex (fromIntegral $ NR.natValue nr) sz of
+    Just idx -> idx
+    _ -> error $ "boundedNatToIndex: impossible" ++ show vnr
+
+boundedNatUpToIndex :: forall n m
+                     . GeqProofRepr n m
+                    -> Index (CtxUpTo n) m
+boundedNatUpToIndex vnr@(GeqProofRepr maxnr nr) =
+  let
+    prfs = upToProofRepr maxnr
+  in case intIndex (fromIntegral $ NR.natValue nr) (Ctx.size prfs) of
+    Just (Some idx) | Just Refl <- testEquality (upToProofRepr maxnr ! idx) vnr -> idx
+    _ -> error $ "boundedNatUpToIndex: impossible" ++ show vnr
 
 -- Clagged from TyMap
 data TyFun :: k1 -> k2 -> Type
@@ -171,6 +190,101 @@ type family Apply (f :: TyFun k1 k2 -> Type) (x :: k1) :: k2
 type family MapContext (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1) :: Ctx.Ctx k2 where
   MapContext f Ctx.EmptyCtx = Ctx.EmptyCtx
   MapContext f (xs Ctx.::> x) = MapContext f xs Ctx.::> Apply f x
+
+data MapContextSzRepr f ctx fctx where
+  MapContextSzReprEmpty :: MapContextSzRepr f EmptyCtx EmptyCtx
+  MapContextSzReprCons :: MapContextSzRepr f ctx fctx
+                       -> Size (ctx ::> tp)
+                       -> MapContextSzRepr f (ctx ::> tp) (fctx ::> Apply f tp)
+
+getSizeFromRepr :: MapContextSzRepr f ctx fctx -> Size ctx
+getSizeFromRepr repr = case repr of
+  MapContextSzReprEmpty -> zeroSize
+  MapContextSzReprCons _ sz -> sz
+
+
+getPrfFromRepr :: MapContextSzRepr f ctx fctx -> MapContext f ctx :~: fctx
+getPrfFromRepr repr = case repr of
+  MapContextSzReprCons repr' _ | Refl <- getPrfFromRepr repr' -> Refl
+  MapContextSzReprEmpty -> Refl
+
+type family TailCtx (xs :: Ctx k) :: Ctx k where
+  TailCtx (xs ::> _) = xs
+
+type family HeadCtx (xs :: Ctx k) :: k where
+  HeadCtx (_ ::> x) = x
+
+
+mapContextToSzRepr :: forall (f :: TyFun k1 k2 -> Type) ctx
+                  . Proxy f
+                 -> Proxy ctx
+                 -> Size (MapContext f ctx)
+                 -> MapContextSzRepr f ctx (MapContext f ctx)
+mapContextToSzRepr pf pctx sz = case Ctx.viewSize sz of
+  ZeroSize | Refl <- mapContextEmpty pf pctx -> MapContextSzReprEmpty
+  IncSize sz' -> step sz'
+  where
+    step :: forall fctx ftp
+          . MapContext f ctx ~ (fctx Ctx.::> ftp)
+         => Size fctx
+         -> MapContextSzRepr f ctx (MapContext f ctx)
+    step sz'
+      | Refl <- mapContextExpand pf (Proxy @ctx)
+      , repr <- mapContextToSzRepr pf (Proxy @(TailCtx ctx)) sz'
+      , sz_tailctx <- getSizeFromRepr repr
+      = MapContextSzReprCons repr (incSize sz_tailctx)
+
+-- proves that an index type is the result of some 'Apply'
+data IndexApplied f ctx ftp where
+  IndexApplied :: Index ctx tp -> IndexApplied f ctx (Apply f tp)
+
+skipIndexApplied :: IndexApplied f ctx ftp -> IndexApplied f (ctx ::> u) ftp
+skipIndexApplied (IndexApplied idx) = IndexApplied (skipIndex idx)
+
+-- | From a 'MapContext' we can dervive an equivalent 'Index' in the range
+-- context. The 'IndexApplied' datatype retains the proof that the type of the
+-- 'Index' must be the result of the 'Apply' in the mapped context.
+getIndexApplied :: forall f ctx ftp
+                 . Proxy f
+                -> Proxy ctx
+                -> Size (MapContext f ctx)
+                -> Index (MapContext f ctx) ftp
+                -> IndexApplied f ctx ftp
+getIndexApplied pf pctx sz idx
+ | szRepr <- mapContextToSzRepr pf pctx sz
+ = case viewIndex sz idx of
+     IndexViewLast sz'
+       | Refl <- mapContextExpand pf pctx
+      -> IndexApplied $ lastIndex $ getSizeFromRepr szRepr
+     IndexViewInit idx'
+       | Refl <- mapContextExpand pf pctx
+       , idxAp <- getIndexApplied pf (Proxy @(TailCtx ctx)) (decSize sz) idx'
+      -> skipIndexApplied idxAp
+
+-- injectivity assumptions about how 'MapContext' affects the structure of a context.
+mapContextExpand :: forall f ctx fctx ftp
+                  . MapContext f ctx ~ (fctx Ctx.::> ftp)
+                 => Proxy f
+                 -> Proxy ctx
+                 -> ctx :~: (TailCtx ctx ::> HeadCtx ctx)
+mapContextExpand _ = unsafeCoerce (Refl :: TailCtx ctx ::> HeadCtx ctx :~: TailCtx ctx ::> HeadCtx ctx)
+
+
+mapContextEmpty :: MapContext f ctx ~ Ctx.EmptyCtx
+                => Proxy f
+                -> Proxy ctx
+                -> ctx :~: Ctx.EmptyCtx
+mapContextEmpty _ = unsafeCoerce (Refl :: (Ctx.EmptyCtx :~: Ctx.EmptyCtx))
+
+
+applyMapContext :: forall (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1)
+                        (g :: k2 -> Type) (h :: k1 -> Type)
+               . Proxy f -> (forall (x :: k1). h x -> g (Apply f x))
+              -> Ctx.Assignment h xs
+              -> Ctx.Assignment g (MapContext f xs)
+applyMapContext p1 f asn = case Ctx.viewAssign asn of
+  Ctx.AssignEmpty -> Ctx.empty
+  Ctx.AssignExtend asn' x -> applyMapContext p1 f asn' Ctx.:> f x
 -- fin
 
 -- proofs about maps
@@ -179,8 +293,10 @@ mapContextSize pf sz = case viewSize sz of
   ZeroSize -> zeroSize
   IncSize sz' -> incSize (mapContextSize pf sz')
 
+mapContextSizeRev :: forall ctx f. Proxy f -> Proxy ctx -> Size (MapContext f ctx) -> Size ctx
+mapContextSizeRev pf pctx sz = getSizeFromRepr $ mapContextToSzRepr pf pctx sz
+
 mapContextIndex :: Proxy f -> Size ctx -> Index ctx tp -> Index (MapContext f ctx) (Apply f tp)
 mapContextIndex pf sz idx = case viewIndex sz idx of
   IndexViewLast sz' -> lastIndex (mapContextSize pf sz)
   IndexViewInit idx' -> skipIndex (mapContextIndex pf (decSize sz) idx')
---
