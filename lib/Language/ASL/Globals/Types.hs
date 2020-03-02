@@ -14,25 +14,24 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module Language.ASL.Globals.Types
   ( Global(..)
   , GlobalDomain(..)
-  , SGlobal(..)
   , GlobalsType
-  , IsGlobal
-  , IsSimpleGlobal
+  , KnownIndex(..)
+  , HasGlobalsType(..)
+  , IsGlobalOf
   , domainSingleton
   , domainUnbounded
   , asSingleton
   , mkGlobalsTypeInstDecls
-  , mkIsGlobalInstDecls
-  , mkSimpleGlobalInstDecls
+  , mkHasGlobalsTypeInstDecls
+  , mkKnownIndexInstDecls
   , mkAllGlobalSymsT
-  , mkAllGlobalSymsE
   , mkTypeFromGlobals
   , mkTypeFromReprs
-  , mkReprFromGlobals
   , genCond
   , mkGlobalsT
   , mkGlobalsE
@@ -59,6 +58,7 @@ import           Data.Parameterized.Map ( MapF )
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair
 
+import           Data.Void
 import           Data.Maybe ( catMaybes )
 import           Data.List ( intercalate )
 import           Data.Set ( Set )
@@ -240,14 +240,13 @@ genCond mkerr globalsMap lookup sig = do
 -- | The type-level mapping from name of each global to its type
 type family GlobalsType (s :: Symbol) :: WI.BaseType
 
--- | 'IsSimpleGlobal' classifies the names of "simple" (non-register and non-memory) globals
-class IsSimpleGlobal (s :: Symbol) where
-  hasKnownGlobalReprSimple :: CT.SymbolRepr s -> WI.BaseTypeRepr (GlobalsType s)
+class KnownIndex (ctx :: Ctx.Ctx k) (s :: k) where
+  knownIndex :: Ctx.Index ctx s
 
--- | 'IsSimpleGlobal' classifies the names of all globals
-class IsGlobal (s:: Symbol) where
-  hasKnownGlobalRepr :: CT.SymbolRepr s -> WI.BaseTypeRepr (GlobalsType s)
+class HasGlobalsType (s :: Symbol) where
+  hasGlobalsType :: CT.SymbolRepr s -> (KnownRepr WI.BaseTypeRepr (GlobalsType s) => a) -> a
 
+type IsGlobalOf ctx s = (KnownIndex ctx s, HasGlobalsType s, KnownSymbol s)
 
 -- Template haskell for reifying the types and names from 'Language.ASL.Globals.Types'
 
@@ -283,32 +282,30 @@ mkSymbolT nm = TH.litT (TH.strTyLit (T.unpack $ nm))
 mkSymbolE :: T.Text -> TH.Q TH.Exp
 mkSymbolE nm = [e| CT.knownSymbol :: CT.SymbolRepr $(mkSymbolT nm) |]
 
+mkGlobalsDecls' :: (forall ctx tp. Ctx.Index ctx tp -> Global tp -> TH.DecsQ) -> Some (Ctx.Assignment Global) -> TH.DecsQ
+mkGlobalsDecls' f gbs = mkGlobalsGen (\b a -> return $ b ++ a) (return []) gbs f
+
 mkGlobalsDecls :: (forall tp. Global tp -> TH.DecsQ) -> Some (Ctx.Assignment Global) -> TH.DecsQ
-mkGlobalsDecls f gbs = mkGlobalsGen (\b a -> return $ b ++ a) (return []) gbs (\_ -> f)
+mkGlobalsDecls f = mkGlobalsDecls' (\_ -> f)
 
 mkGlobalsTypeInstDecls :: Some (Ctx.Assignment Global) -> TH.DecsQ
 mkGlobalsTypeInstDecls = mkGlobalsDecls $ \gb ->
   [d| type instance GlobalsType $(mkSymbolT (gbName gb)) = $(mkTypeFromRepr (gbType gb)) |]
 
-mkIsGlobalInstDecls :: Some (Ctx.Assignment Global) -> TH.DecsQ
-mkIsGlobalInstDecls = mkGlobalsDecls $ \gb ->
-  [d| instance IsGlobal $(mkSymbolT (gbName gb)) where
-        hasKnownGlobalRepr _ = $(mkExprFromRepr (gbType gb)) |]
+mkHasGlobalsTypeInstDecls :: Some (Ctx.Assignment Global) -> TH.DecsQ
+mkHasGlobalsTypeInstDecls = mkGlobalsDecls $ \gb ->
+  [d| instance HasGlobalsType $(mkSymbolT (gbName gb)) where
+        hasGlobalsType _ f = f
+  |]
 
-mkSimpleGlobalInstDecls :: Some (Ctx.Assignment Global) -> TH.DecsQ
-mkSimpleGlobalInstDecls gbs = mkGlobalsGen (\b a -> return $ b ++ a) (return []) gbs go
+mkKnownIndexInstDecls :: Some (Ctx.Assignment Global) -> TH.Q TH.Type -> TH.DecsQ
+mkKnownIndexInstDecls gbs ctxE = go gbs
   where
-    go :: Ctx.Index ctx tp -> Global tp -> TH.DecsQ
-    go _idx gb =
-      [d| instance IsSimpleGlobal $(mkSymbolT (gbName gb)) where
-            hasKnownGlobalReprSimple _ = $(mkExprFromRepr (gbType gb))
-       |]
-
-mkAllGlobalSymsT :: Some (Ctx.Assignment Global) -> TH.Q TH.Type
-mkAllGlobalSymsT gbs = mkGlobalsT gbs $ \_ gb -> mkSymbolT (gbName gb)
-
-mkAllGlobalSymsE :: Some (Ctx.Assignment Global) -> TH.Q TH.Exp
-mkAllGlobalSymsE gbs = mkGlobalsE gbs $ \_ gb -> mkSymbolE (gbName gb)
+   go :: Some (Ctx.Assignment Global) -> TH.DecsQ
+   go = mkGlobalsDecls' $ \idx gb ->
+     [d| instance KnownIndex $(ctxE) $(mkSymbolT (gbName gb)) where
+           knownIndex = $(liftIndex idx)
+     |]
 
 liftIndex :: Ctx.Index ctx tp -> TH.Q TH.Exp
 liftIndex idx = [e| Ctx.natIndexProxy $(liftIndexNatRepr idx) |]
@@ -318,6 +315,13 @@ liftIndexNatRepr idx = [e| NR.knownNat :: NR.NatRepr $(liftIndexNumT idx) |]
 
 liftIndexNumT :: Ctx.Index ctx tp -> TH.Q TH.Type
 liftIndexNumT idx = TH.litT (TH.numTyLit(fromIntegral $ Ctx.indexVal idx))
+
+mkAllGlobalSymsT :: Some (Ctx.Assignment Global) -> TH.Q TH.Type
+mkAllGlobalSymsT gbs = mkGlobalsT gbs $ \_ gb -> mkSymbolT (gbName gb)
+
+
+-- mkAllGlobalSymsE :: Some (Ctx.Assignment Global) -> TH.Q TH.Exp
+-- mkAllGlobalSymsE gbs = mkGlobalsE gbs $ \_ gb -> mkSymbolE (gbName gb)
 
 mkTypeFromRepr :: WI.BaseTypeRepr tp -> TH.Q TH.Type
 mkTypeFromRepr repr = case repr of
@@ -332,23 +336,23 @@ mkTypeFromReprs reprs = case Ctx.viewAssign reprs of
   Ctx.AssignEmpty -> [t| Ctx.EmptyCtx |]
   Ctx.AssignExtend reprs' repr -> [t| $(mkTypeFromReprs reprs') Ctx.::> $(mkTypeFromRepr repr) |]
 
-mkExprFromRepr :: WI.BaseTypeRepr tp -> TH.Q TH.Exp
-mkExprFromRepr repr = case repr of
-  WI.BaseBoolRepr -> [e| WI.BaseBoolRepr |]
-  WI.BaseIntegerRepr -> [e| WI.BaseIntegerRepr |]
-  WI.BaseBVRepr nr -> do
-    knownNatE <- [e| NR.knownNat |]
-    [e| WI.BaseBVRepr $(return (TH.AppTypeE knownNatE (TH.LitT (TH.NumTyLit (NR.intValue nr))))) |]
-  WI.BaseArrayRepr idx ret -> [e| WI.BaseArrayRepr $(mkExprFromReprs idx) $(mkExprFromRepr ret) |]
-  WI.BaseStructRepr reprs -> [e| WI.BaseStructRepr $(mkExprFromReprs reprs) |]
+-- mkExprFromRepr :: WI.BaseTypeRepr tp -> TH.Q TH.Exp
+-- mkExprFromRepr repr = case repr of
+--   WI.BaseBoolRepr -> [e| WI.BaseBoolRepr |]
+--   WI.BaseIntegerRepr -> [e| WI.BaseIntegerRepr |]
+--   WI.BaseBVRepr nr -> do
+--     knownNatE <- [e| NR.knownNat |]
+--     [e| WI.BaseBVRepr $(return (TH.AppTypeE knownNatE (TH.LitT (TH.NumTyLit (NR.intValue nr))))) |]
+--   WI.BaseArrayRepr idx ret -> [e| WI.BaseArrayRepr $(mkExprFromReprs idx) $(mkExprFromRepr ret) |]
+--   WI.BaseStructRepr reprs -> [e| WI.BaseStructRepr $(mkExprFromReprs reprs) |]
 
-mkExprFromReprs :: Ctx.Assignment WI.BaseTypeRepr ctx -> TH.Q TH.Exp
-mkExprFromReprs reprs = case Ctx.viewAssign reprs of
-  Ctx.AssignEmpty -> [e| Ctx.empty |]
-  Ctx.AssignExtend reprs' repr -> [e| $(mkExprFromReprs reprs') Ctx.:> $(mkExprFromRepr repr) |]
+-- mkExprFromReprs :: Ctx.Assignment WI.BaseTypeRepr ctx -> TH.Q TH.Exp
+-- mkExprFromReprs reprs = case Ctx.viewAssign reprs of
+--   Ctx.AssignEmpty -> [e| Ctx.empty |]
+--   Ctx.AssignExtend reprs' repr -> [e| $(mkExprFromReprs reprs') Ctx.:> $(mkExprFromRepr repr) |]
 
 mkTypeFromGlobals :: Some (Ctx.Assignment Global) -> TH.Q TH.Type
 mkTypeFromGlobals (Some globals) = mkTypeFromReprs $ FC.fmapFC gbType globals
 
-mkReprFromGlobals :: Some (Ctx.Assignment Global) -> TH.Q TH.Exp
-mkReprFromGlobals (Some globals) = mkExprFromReprs $ FC.fmapFC gbType globals
+-- mkReprFromGlobals :: Some (Ctx.Assignment Global) -> TH.Q TH.Exp
+-- mkReprFromGlobals (Some globals) = mkExprFromReprs $ FC.fmapFC gbType globals
