@@ -33,12 +33,7 @@ module Language.ASL.Globals.Types
   , mkTypeFromGlobals
   , mkTypeFromReprs
   , mkReprFromGlobals
-  , mapNatsUpto
-  , mkNatCtx
   , genCond
-  , liftIndex
-  , liftIndexNatRepr
-  , liftIndexNumT
   , mkGlobalsT
   , mkGlobalsE
   , mkSymbolE
@@ -242,27 +237,19 @@ genCond mkerr globalsMap lookup sig = do
 
 -- Retrieving indexes into the globals based on type-level symbols
 
+-- | The type-level mapping from name of each global to its type
 type family GlobalsType (s :: Symbol) :: WI.BaseType
--- type family IndexedSymbol (s :: Symbol) (n :: Nat) :: Symbol
 
-
-class KnownSymbol s => IsSimpleGlobal (s:: Symbol) where
+-- | 'IsSimpleGlobal' classifies the names of "simple" (non-register and non-memory) globals
+class IsSimpleGlobal (s :: Symbol) where
   hasKnownGlobalReprSimple :: CT.SymbolRepr s -> WI.BaseTypeRepr (GlobalsType s)
 
-class KnownSymbol s => IsGlobal (s:: Symbol) where
+-- | 'IsSimpleGlobal' classifies the names of all globals
+class IsGlobal (s:: Symbol) where
   hasKnownGlobalRepr :: CT.SymbolRepr s -> WI.BaseTypeRepr (GlobalsType s)
 
 
-data SGlobal ctx (s :: Symbol) where
-  SGlobal :: { unSG :: Ctx.Index ctx (GlobalsType s) } -> SGlobal ctx s
-
-symToSGlobal :: forall s ctx. MapF (LabeledValue T.Text WI.BaseTypeRepr) (Ctx.Index ctx)
-          -> CT.SymbolRepr s
-          -> WI.BaseTypeRepr (GlobalsType s)
-          -> SGlobal ctx s
-symToSGlobal f srepr trepr = case MapF.lookup (LabeledValue (CT.symbolRepr srepr) trepr) f of
-  Just idx -> SGlobal idx
-  Nothing -> error $ "No corresponding global for: " ++ show srepr
+-- Template haskell for reifying the types and names from 'Language.ASL.Globals.Types'
 
 mkGlobalsGen :: forall a
               . (a -> a -> TH.Q a)
@@ -316,22 +303,6 @@ mkSimpleGlobalInstDecls gbs = mkGlobalsGen (\b a -> return $ b ++ a) (return [])
       [d| instance IsSimpleGlobal $(mkSymbolT (gbName gb)) where
             hasKnownGlobalReprSimple _ = $(mkExprFromRepr (gbType gb))
        |]
-
--- | withNatsUpto :: maxnat -> (f :: (\nr -> *)) -> [ f (NatRepr n) | n <- forall n. n <= maxnat ]
-mapNatsUpto :: Integer -> TH.Q TH.Exp -> TH.Q TH.Exp
-mapNatsUpto maxnr f = go maxnr
-  where
-    go :: Integer -> TH.Q TH.Exp
-    go i | i < 0 = [e| [] |]
-    go i = [e| $(f) (NR.knownNat :: NR.NatRepr $(TH.litT (TH.numTyLit i))) : $(go (i - 1)) |]
-
--- | mkNatCtx :: maxnat -> EmptyCtx ::> 0 ::> 1 ... ::> maxnat
-mkNatCtx :: Integer -> TH.Q TH.Type
-mkNatCtx maxnr = go maxnr
-  where
-    go :: Integer -> TH.Q TH.Type
-    go i | i < 0 = [t| Ctx.EmptyCtx |]
-    go i = [t| $(go (i-1)) Ctx.::> $(TH.litT (TH.numTyLit i)) |]
 
 mkAllGlobalSymsT :: Some (Ctx.Assignment Global) -> TH.Q TH.Type
 mkAllGlobalSymsT gbs = mkGlobalsT gbs $ \_ gb -> mkSymbolT (gbName gb)

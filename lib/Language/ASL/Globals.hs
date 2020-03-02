@@ -127,6 +127,12 @@ $(mkIsGlobalInstDecls flatTrackedGlobals')
 -- "IsSimpleGlobal" instances
 $(mkSimpleGlobalInstDecls simpleGlobals')
 
+-- Symbols for each simple global
+type SimpleGlobalSymsCtx = $(mkAllGlobalSymsT simpleGlobals')
+
+-- Types for all untracked globals
+type UntrackedGlobalsCtx = $(mkTypeFromGlobals untrackedGlobals')
+
 data GlobalsTypeWrapper :: TyFun Symbol WI.BaseType -> Type
 type instance Apply GlobalsTypeWrapper s = GlobalsType s
 
@@ -138,28 +144,22 @@ type instance Apply (NatToRegTypeWrapper s) n = GlobalsType (AppendSymbol s (Nat
 
 type GlobalsTypeCtx (sh :: Ctx Symbol) = MapContext GlobalsTypeWrapper sh
 
-type SimpleGlobalSymsCtx = $(mkAllGlobalSymsT simpleGlobals')
-type UntrackedGlobalsCtx = $(mkTypeFromGlobals untrackedGlobals')
 type SimpleGlobalsCtx = GlobalsTypeCtx SimpleGlobalSymsCtx
-type GlobalSymsCtx = $(mkAllGlobalSymsT trackedGlobals')
-
+type GlobalSymsCtx = SimpleGlobalSymsCtx ::> "GPRS" ::> "SIMDS" ::> "__Memory"
 
 type GPRIdxCtx = CtxUpTo MaxGPR
-type GPRSymsUpToCtx n = MapContext (NatToRegSymWrapper "GPR") (CtxUpTo n)
-type GPRSymsCtx = GPRSymsUpToCtx MaxGPR
+type GPRSymsCtx = MapContext (NatToRegSymWrapper "GPR") GPRIdxCtx
 type GPRCtx = GlobalsTypeCtx GPRSymsCtx
 
 _gprCtxTest :: GPRCtx :~: CtxReplicate (WI.BaseBVType 32) (MaxGPR + 1)
 _gprCtxTest = Refl
 
 type SIMDIdxCtx = CtxUpTo MaxSIMD
-type SIMDSymsUpToCtx n = MapContext (NatToRegSymWrapper "SIMD") (CtxUpTo n)
-type SIMDSymsCtx = SIMDSymsUpToCtx MaxSIMD
+type SIMDSymsCtx = MapContext (NatToRegSymWrapper "SIMD") SIMDIdxCtx
 type SIMDCtx = GlobalsTypeCtx SIMDSymsCtx
 
--- | The type-level symbols of all 'GlobalDef's.
-type FlatGlobalSymsCtx =
-  SimpleGlobalSymsCtx <+> GPRSymsCtx <+> SIMDSymsCtx ::> "__Memory"
+-- | The symbols of all 'GlobalRef's including each individual GPR, SIMD and the memory global.
+type FlatGlobalSymsCtx = SimpleGlobalSymsCtx <+> GPRSymsCtx <+> SIMDSymsCtx ::> "__Memory"
 
 _simdCtxTest :: SIMDCtx :~: CtxReplicate (WI.BaseBVType 128) (MaxSIMD + 1)
 _simdCtxTest = Refl
