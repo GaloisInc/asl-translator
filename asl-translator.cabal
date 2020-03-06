@@ -23,6 +23,7 @@ common shared-properties
                        bv-sized >= 0.7.0,
                        panic >= 0.3,
                        containers,
+                       constraints,
                        dismantle-arm-xml,
                        dismantle-tablegen,
                        hashtables,
@@ -45,12 +46,15 @@ common shared-properties
                        time,
                        panic >= 0.3,
                        template-haskell,
-                       vector
+                       vector,
+                       directory,
+                       bytestring,
+                       zlib
 
   if flag(unsafe-operations)
     cpp-options: -DUNSAFE_OPS
 
-library                asl-translator-lib
+library
   import:              shared-properties
   exposed-modules:     Language.ASL
                        Language.ASL.Crucible
@@ -71,30 +75,9 @@ library                asl-translator-lib
                        Language.ASL.Globals.Definitions
                        Language.ASL.Globals.ConsistencyCheck
                        Data.Parameterized.CtxFuns
-                       Util.Log
-  hs-source-dirs:      lib
-  ghc-options:         -Wcompat -Wall
-
-library
-  import:              shared-properties
-  exposed-modules:     Language.ASL.Globals
-                       Language.ASL.Formulas
-
-  other-modules:       Language.ASL.Globals.Types
-                       Language.ASL.Globals.Definitions
-                       Language.ASL.StaticExpr
-                       Language.ASL.Signature
-                       Language.ASL.SyntaxTraverse
-                       Language.ASL.Types
                        Language.ASL.Formulas.Attach
-                       Language.ASL.Formulas.Serialize
+                       Language.ASL.Formulas
                        Util.Log
-
-  build-depends:       asl-translator-lib,
-                       directory,
-                       bytestring,
-                       zlib
-
   hs-source-dirs:      lib
   ghc-options:         -Wcompat -Wall
 
@@ -103,7 +86,7 @@ executable asl-translator-exec
   build-depends:       base >=4.10.0.0 && < 5,
                        filepath,
                        what4-serialize,
-                       asl-translator-lib
+                       asl-translator
   hs-source-dirs:      exe
   ghc-options:         -Wcompat -Wall -O2 -threaded -rtsopts "-with-rtsopts=-N"
   default-language: Haskell2010
@@ -116,7 +99,7 @@ test-suite asl-translator-genarm-test
   build-depends:       base >= 4.10.0.0 && < 5,
                        filepath,
                        what4-serialize,
-                       asl-translator-lib
+                       asl-translator
   main-is: Main.hs
 
 test-suite asl-translator-formula-test

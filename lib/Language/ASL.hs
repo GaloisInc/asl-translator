@@ -218,16 +218,16 @@ simulateInstruction :: forall arch sym init globalReads globalWrites tps scope
                      . (CB.IsSymInterface sym, OnlineSolver scope sym)
                     => SimulatorConfig scope
                     -> AC.Instruction arch globalReads globalWrites init
-                    -> IO (S.ExprSymFn scope (init Ctx.::> WT.BaseStructType G.GlobalsCtx) (WT.BaseStructType G.GlobalsCtx))
+                    -> IO (S.ExprSymFn scope (init Ctx.::> WT.BaseStructType G.StructGlobalsCtx) (WT.BaseStructType G.StructGlobalsCtx))
 simulateInstruction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
   where
     sig = AC.funcSig crucFunc
     sym = simSym symCfg
     retType = AS.funcSigBaseRepr sig
 
-    mkStructField :: WI.SymExpr sym (WT.BaseStructType G.GlobalsCtx)
+    mkStructField :: WI.SymExpr sym (WT.BaseStructType G.StructGlobalsCtx)
                   -> WI.SymExpr sym (WT.BaseStructType globalWrites)
-                  -> Ctx.Index G.GlobalsCtx tp
+                  -> Ctx.Index G.StructGlobalsCtx tp
                   -> IO (WI.SymExpr sym tp)
     mkStructField inStruct outStruct idx = case AC.funcWriteProj crucFunc idx of
       Just idx' -> WI.structField sym outStruct idx'

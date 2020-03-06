@@ -50,8 +50,11 @@ module Language.ASL.Globals
   , getGlobalsSubMap
   -- find a 'Global' based on its name and type.
   , lookupGlobal
-  -- Symbols for globals as they appear
+  -- Type-level list of all globals
   , GlobalSymsCtx
+  -- Structured view of the globals, with registers as arrays
+  , StructGlobalSymsCtx
+  , StructGlobalsCtx
   , allGlobalRefs
 
   -- All specified 'GlobalRefs'
@@ -66,7 +69,7 @@ module Language.ASL.Globals
   , globalRefSymbol
   , globalRefRepr
   , globalOfGlobalRef
-  , resolveGlobalRef
+  , globalRefIndex
 
   -- check if a given global is a specific (known) one
   , testGlobalEq
@@ -98,6 +101,7 @@ module Language.ASL.Globals
 where
 
 import           GHC.TypeLits
+import           Data.Constraint
 
 import           Control.Applicative ( Const(..) )
 import           Control.Monad.Identity
@@ -129,6 +133,7 @@ import qualified What4.Concrete as WI
 
 import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.Types as CT
+import           Lang.Crucible.Types ( SymbolRepr, knownSymbol )
 
 import           Language.ASL.StaticExpr
 import           Language.ASL.Signature
@@ -149,21 +154,68 @@ type UntrackedGlobalsCtx = $(mkTypeFromGlobals untrackedGlobals')
 $(mkGlobalsTypeInstDecls trackedGlobals')
 $(mkGlobalsTypeInstDecls gprGlobals')
 $(mkGlobalsTypeInstDecls simdGlobals')
-$(mkHasGlobalsTypeInstDecls flatTrackedGlobals')
 
--- Symbols for each simple global
+
+
 type SimpleGlobalSymsCtx = $(mkAllGlobalSymsT simpleGlobals')
-$(mkKnownIndexInstDecls simpleGlobals' [t| SimpleGlobalSymsCtx |])
+type SimpleGlobalsCtx = GlobalsTypeCtx SimpleGlobalSymsCtx
 
--- | The symbols of all 'GlobalRef's including each individual GPR, SIMD and the memory global.
-type FlatGlobalSymsCtx = $(mkAllGlobalSymsT flatTrackedGlobals')
-$(mkKnownIndexInstDecls flatTrackedGlobals' [t| FlatGlobalSymsCtx |])
+type GlobalSymsCtx = $(mkAllGlobalSymsT flatTrackedGlobals')
+type GlobalsCtx = GlobalsTypeCtx GlobalSymsCtx
 
-type IsGlobal s = IsGlobalOf FlatGlobalSymsCtx s
-type IsSimpleGlobal s = IsGlobalOf SimpleGlobalSymsCtx s
+type GPRIdxCtx = CtxUpTo MaxGPR
+type GPRSymsCtx = MapContext (NatToRegSymWrapper "_R") GPRIdxCtx
+
+type SIMDIdxCtx = CtxUpTo MaxSIMD
+type SIMDSymsCtx = MapContext (NatToRegSymWrapper "_V") SIMDIdxCtx
+
+
+class KnownIndex GlobalSymsCtx s => IsGlobal s
+instance KnownIndex GlobalSymsCtx s => IsGlobal s
+
+class (IsGlobal s, KnownIndex SimpleGlobalSymsCtx s) => IsSimpleGlobal s
+instance (IsGlobal s, KnownIndex SimpleGlobalSymsCtx s) => IsSimpleGlobal s
+
+type GPRConstraints n =
+  ( IsGlobal (IndexedSymbol "_R" n)
+  , KnownIndex GPRIdxCtx n
+  , GlobalsType (IndexedSymbol "_R" n) ~ WI.BaseBVType 32
+  , n <= MaxGPR
+  )
+
+class GPRConstraints n => IsGPR n
+instance GPRConstraints n => IsGPR n
+
+natToGPR :: forall n. NR.NatRepr n -> (n <= MaxGPR) :- IsGPR n
+natToGPR n = forallUpTo (Proxy @IsGPR) (Proxy @MaxGPR) n
+
+type SIMDConstraints n =
+  ( IsGlobal (IndexedSymbol "_V" n)
+  , KnownIndex SIMDIdxCtx n
+  , GlobalsType (IndexedSymbol "_V" n) ~ WI.BaseBVType 128
+  , n <= MaxSIMD
+  )
+
+class SIMDConstraints n => IsSIMD n
+instance SIMDConstraints n => IsSIMD n
+
+natToSIMD :: forall n. NR.NatRepr n -> (n <= MaxSIMD) :- IsSIMD n
+natToSIMD n = forallUpTo (Proxy @IsSIMD) (Proxy @MaxSIMD) n
+
+-- | Test the shape of the globals signature.
+_testDistinct :: (( DistinctCtx SimpleGlobalSymsCtx
+                  , DistinctCtx GPRIdxCtx
+                  , DistinctCtx SIMDIdxCtx
+                  , DistinctCtx GlobalSymsCtx
+                  , ForallCtx IsGPR GPRIdxCtx
+                  , ForallCtx IsSIMD SIMDIdxCtx
+                  ) => f)
+                 -> f
+_testDistinct f = f
 
 -- Symbols for the globals as they appear in the ASL global struct
-type GlobalSymsCtx = SimpleGlobalSymsCtx ::> "GPRS" ::> "SIMDS" ::> "__Memory"
+type StructGlobalSymsCtx = SimpleGlobalSymsCtx ::> "GPRS" ::> "SIMDS" ::> "__Memory"
+type StructGlobalsCtx = GlobalsTypeCtx StructGlobalSymsCtx
 
 data GlobalsTypeWrapper :: TyFun Symbol WI.BaseType -> Type
 type instance Apply GlobalsTypeWrapper s = GlobalsType s
@@ -176,30 +228,6 @@ type instance Apply (NatToRegTypeWrapper s) n = GlobalsType (AppendSymbol s (Nat
 
 type GlobalsTypeCtx (sh :: Ctx Symbol) = MapContext GlobalsTypeWrapper sh
 
-type SimpleGlobalsCtx = GlobalsTypeCtx SimpleGlobalSymsCtx
-
-type GPRIdxCtx = CtxUpTo MaxGPR
-type GPRSymsCtx = MapContext (NatToRegSymWrapper "GPR") GPRIdxCtx
-type GPRCtx = GlobalsTypeCtx GPRSymsCtx
-
-_gprCtxTest :: GPRCtx :~: CtxReplicate (WI.BaseBVType 32) (MaxGPR + 1)
-_gprCtxTest = Refl
-
-type SIMDIdxCtx = CtxUpTo MaxSIMD
-type SIMDSymsCtx = MapContext (NatToRegSymWrapper "SIMD") SIMDIdxCtx
-type SIMDCtx = GlobalsTypeCtx SIMDSymsCtx
-
-_simdCtxTest :: SIMDCtx :~: CtxReplicate (WI.BaseBVType 128) (MaxSIMD + 1)
-_simdCtxTest = Refl
-
--- | The Context corresponding to the structure of the globals in ASL,
--- (i.e. with GPRs and SIMDs in structs)
-type GlobalsCtx = GlobalsTypeCtx GlobalSymsCtx
-
-simpleEmbedding :: CtxEmbedding SimpleGlobalsCtx GlobalsCtx
-simpleEmbedding =
-  extendEmbeddingRight $ extendEmbeddingRight $ extendEmbeddingRight $ identityEmbedding (Ctx.size simpleGlobals)
-
 untrackedGlobals :: Assignment Global UntrackedGlobalsCtx
 untrackedGlobals = forSome untrackedGlobals' $ \gbs ->
   case testEquality (FC.fmapFC gbType gbs) (knownRepr :: Assignment WI.BaseTypeRepr UntrackedGlobalsCtx) of
@@ -210,30 +238,19 @@ untrackedGlobalReprs :: Assignment (LabeledValue T.Text WI.BaseTypeRepr) Untrack
 untrackedGlobalReprs = FC.fmapFC (\gb -> LabeledValue (gbName gb) (gbType gb)) untrackedGlobals
 
 -- | All tracked globals (with each register set as a single struct)
-trackedGlobals :: Assignment Global GlobalsCtx
+trackedGlobals :: Assignment Global StructGlobalsCtx
 trackedGlobals = forSome trackedGlobals' $ \gbs ->
-  case testEquality (FC.fmapFC gbType gbs) (knownRepr :: Assignment WI.BaseTypeRepr GlobalsCtx) of
+  case testEquality (FC.fmapFC gbType gbs) (knownRepr :: Assignment WI.BaseTypeRepr StructGlobalsCtx) of
     Just Refl -> gbs
     _ -> error "trackedGlobals: template haskell error"
 
-simpleGlobals :: Assignment Global SimpleGlobalsCtx
-simpleGlobals = forSome simpleGlobals' $ \gbs ->
-  case testEquality (FC.fmapFC gbType gbs) (knownRepr :: Assignment WI.BaseTypeRepr SimpleGlobalsCtx) of
+flatTrackedGlobals :: Assignment Global GlobalsCtx
+flatTrackedGlobals = forSome flatTrackedGlobals' $ \gbs ->
+  case testEquality (FC.fmapFC gbType gbs) (knownRepr :: Assignment WI.BaseTypeRepr GlobalsCtx) of
     Just Refl -> gbs
-    _ -> error "simpleGlobals: template haskell error"
+    _ -> error "flatTrackedGlobals: template haskell error"
 
-
-gprGlobals :: Assignment Global GPRCtx
-gprGlobals = case gprGlobals' of
-  Some gbs | Just Refl <- testEquality (FC.fmapFC gbType gbs) (knownRepr :: Assignment WI.BaseTypeRepr GPRCtx) -> gbs
-  _ -> error "gprGlobals: template haskell error"
-
-simdGlobals :: Assignment Global SIMDCtx
-simdGlobals = case simdGlobals' of
-  Some gbs | Just Refl <- testEquality (FC.fmapFC gbType gbs) (knownRepr :: Assignment WI.BaseTypeRepr SIMDCtx) -> gbs
-  _ -> error "simdGlobals: template haskell error"
-
-trackedGlobalReprs :: Assignment (LabeledValue T.Text WI.BaseTypeRepr) GlobalsCtx
+trackedGlobalReprs :: Assignment (LabeledValue T.Text WI.BaseTypeRepr) StructGlobalsCtx
 trackedGlobalReprs = FC.fmapFC (\gb -> LabeledValue (gbName gb) (gbType gb)) trackedGlobals
 
 getPrecond :: forall ext s reads writes args ret err m
@@ -269,7 +286,7 @@ mkMapIndexF reprs = runIdentity $ do
             -> Identity (Const (Pair (LabeledValue T.Text WI.BaseTypeRepr) (Index globals)) tp)
     mkEntry idx gb = return $ Const $ Pair (LabeledValue (gbName gb) (gbType gb)) idx
 
-globalsMapIndexF :: MapF (LabeledValue T.Text WI.BaseTypeRepr) (Index GlobalsCtx)
+globalsMapIndexF :: MapF (LabeledValue T.Text WI.BaseTypeRepr) (Index StructGlobalsCtx)
 globalsMapIndexF = mkMapIndexF trackedGlobals
 
 untrackedGlobalsMapIndexF :: MapF (LabeledValue T.Text WI.BaseTypeRepr) (Index UntrackedGlobalsCtx)
@@ -278,7 +295,8 @@ untrackedGlobalsMapIndexF = mkMapIndexF untrackedGlobals
 lookupUntrackedGlobal :: LabeledValue T.Text WI.BaseTypeRepr tp -> Maybe (Global tp)
 lookupUntrackedGlobal lbl = (\idx -> untrackedGlobals ! idx) <$> MapF.lookup lbl untrackedGlobalsMapIndexF
 
-lookupTrackedGlobal :: LabeledValue T.Text WI.BaseTypeRepr tp -> Maybe (Global tp)
+lookupTrackedGlobal :: LabeledValue T.Text WI.BaseTypeRepr tp
+                    -> Maybe (Global tp)
 lookupTrackedGlobal lbl = (\idx -> trackedGlobals ! idx) <$> MapF.lookup lbl globalsMapIndexF
 
 lookupGlobal :: LabeledValue T.Text WI.BaseTypeRepr tp -> Maybe (Either (Global tp) (Global tp))
@@ -306,12 +324,12 @@ staticGlobals = Map.mapMaybe getStaticGlobal globalsMap
 getGlobalsSubMap :: forall m ctx
                   . (Monad m, ME.MonadError String m)
                  => Assignment (LabeledValue T.Text WI.BaseTypeRepr) ctx
-                 -> m (MapF (Index GlobalsCtx) (Index ctx))
+                 -> m (MapF (Index StructGlobalsCtx) (Index ctx))
 getGlobalsSubMap reprs = do
   pairs <- traverseWithIndex mkEntry reprs
   return $ MapF.fromList $ catMaybes $ FC.toListFC (\(Const c) -> c) pairs
   where
-    mkEntry :: Index ctx tp -> LabeledValue T.Text WI.BaseTypeRepr tp -> m (Const (Maybe (Pair (Index GlobalsCtx) (Index ctx))) tp)
+    mkEntry :: Index ctx tp -> LabeledValue T.Text WI.BaseTypeRepr tp -> m (Const (Maybe (Pair (Index StructGlobalsCtx) (Index ctx))) tp)
     mkEntry idx lblv = case MapF.lookup lblv globalsMapIndexF of
       Just idx' -> return $ Const $ Just $ Pair idx' idx
       Nothing -> case MapF.lookup lblv untrackedGlobalsMapIndexF of
@@ -324,158 +342,181 @@ getGlobalsSubMap reprs = do
 -- | A 'SimpleGlobalRef' is a reference to a single piece of
 -- global state (i.e. a meta-state flag or the processor state).
 data SimpleGlobalRef (s :: Symbol) where
-  SimpleGlobalRef' :: CT.SymbolRepr s
-                   -> Index SimpleGlobalsCtx (GlobalsType s)
+  SimpleGlobalRef' :: IsSimpleGlobal s
+                   => SymbolRepr s
                    -> SimpleGlobalRef s
-  deriving (Eq, Show)
+
+deriving instance Show (SimpleGlobalRef s)
 
 instance TestEquality SimpleGlobalRef where
-  testEquality (SimpleGlobalRef' symb idx) (SimpleGlobalRef' symb' idx') = do
-    Refl <- testEquality symb symb'
-    Refl <- testEquality idx idx'
-    return Refl
+  testEquality (SimpleGlobalRef' s) (SimpleGlobalRef' s') = testEquality s s'
+
+instance Eq (SimpleGlobalRef s) where
+  ref == ref' = isJust $ testEquality ref ref'
+
+
+withSimpleGlobalRef :: SimpleGlobalRef s
+                    -> (IsSimpleGlobal s
+                       => CT.SymbolRepr s
+                       -> f)
+                    -> f
+withSimpleGlobalRef (SimpleGlobalRef' symb) f = f symb
+
+mkSimpleGlobalRef :: IsSimpleGlobal s => CT.SymbolRepr s -> SimpleGlobalRef s
+mkSimpleGlobalRef symb = SimpleGlobalRef' symb
+
+knownSimpleGlobalRef :: IsSimpleGlobal s => KnownSymbol s => SimpleGlobalRef s
+knownSimpleGlobalRef = mkSimpleGlobalRef knownSymbol
 
 -- | A 'GPRRef' represents a reference to a particular general-purpose register.
 data GPRRef (n :: Nat) where
-  GPRRef' :: CT.SymbolRepr (IndexedSymbol "GPR" n)
-          -> GeqProofRepr MaxGPR n
-          -> Index GPRCtx (GlobalsType (IndexedSymbol "GPR" n))
-          -> GPRRef n
+  GPRRef' :: (IsGPR n, n <= MaxGPR) => NR.NatRepr n -> GPRRef n
 
 deriving instance Eq (GPRRef n)
 deriving instance Show (GPRRef n)
 
 instance TestEquality GPRRef where
-  testEquality (GPRRef' symb vnr idx) (GPRRef' symb' vnr' idx') = do
-    Refl <- testEquality symb symb'
-    Refl <- testEquality vnr vnr'
-    Refl <- testEquality idx idx'
-    return Refl
+  testEquality (GPRRef' n) (GPRRef' n') = testEquality n n'
+
+withGPRRef :: GPRRef n
+           -> (IsGPR n => NR.NatRepr n -> f)
+           -> f
+withGPRRef (GPRRef' n) f = f n
+
+mkGPRRef :: forall n. n <= MaxGPR => NR.NatRepr n -> GPRRef n
+mkGPRRef n = (GPRRef' n) \\ natToGPR n
+
+knownGPRRef :: forall n. n <= MaxGPR => KnownNat n => GPRRef n
+knownGPRRef = mkGPRRef @n NR.knownNat
 
 -- | A 'SIMDRef' represents a reference to a particular SIMD register.
 data SIMDRef (n :: Nat) where
-  SIMDRef' :: CT.SymbolRepr (IndexedSymbol "SIMD" n)
-           -> GeqProofRepr MaxSIMD n
-           -> Index SIMDCtx (GlobalsType (IndexedSymbol "SIMD" n))
-           -> SIMDRef n
-  deriving (Eq, Show)
+  SIMDRef' :: (IsSIMD n, n <= MaxSIMD) => NR.NatRepr n -> SIMDRef n
+
+deriving instance Eq (SIMDRef n)
+deriving instance Show (SIMDRef n)
+
+withSIMDRef :: SIMDRef n
+            -> (IsSIMD n => n <= MaxSIMD => NR.NatRepr n -> f)
+            -> f
+withSIMDRef (SIMDRef' n) f = f n
+
+mkSIMDRef :: forall n. n <= MaxSIMD => NR.NatRepr n -> SIMDRef n
+mkSIMDRef n = (SIMDRef' n) \\ natToSIMD n
+
+knownSIMDRef :: forall n. IsSIMD n => KnownNat n => SIMDRef n
+knownSIMDRef = mkSIMDRef @n NR.knownNat
 
 instance TestEquality SIMDRef where
-  testEquality (SIMDRef' symb vnr idx) (SIMDRef' symb' vnr' idx') = do
-    Refl <- testEquality symb symb'
-    Refl <- testEquality vnr vnr'
-    Refl <- testEquality idx idx'
-    return Refl
+  testEquality (SIMDRef' n) (SIMDRef' n') = testEquality n n'
 
 -- | A 'GlobalRef' refers to any single piece of global state tracked by the ASL semantics.
 data GlobalRef (s :: Symbol) where
   SimpleGlobalRef :: SimpleGlobalRef s -> GlobalRef s
-  GPRRef :: GPRRef n -> GlobalRef (IndexedSymbol "GPR" n)
-  SIMDRef :: SIMDRef n -> GlobalRef (IndexedSymbol "SIMD" n)
-  MemoryRef :: Index GlobalsCtx (GlobalsType "__Memory") -> GlobalRef "__Memory"
+  GPRRef :: GPRRef n -> GlobalRef (IndexedSymbol "_R" n)
+  SIMDRef :: SIMDRef n -> GlobalRef (IndexedSymbol "_V" n)
+  MemoryRef :: GlobalRef "__Memory"
   -- ^ The distinguished global state variable representing memory.
+
+memoryGlobalRef :: GlobalRef "__Memory"
+memoryGlobalRef = MemoryRef
+
+
+
+mkGPRGlobalRef :: forall n. IsGPR n => NR.NatRepr n -> GlobalRef (IndexedSymbol "_R" n)
+mkGPRGlobalRef n = GPRRef (mkGPRRef n)
+
+knownGPRGlobalRef :: forall n. IsGPR n => KnownNat n => GlobalRef (IndexedSymbol "_R" n)
+knownGPRGlobalRef = mkGPRGlobalRef @n NR.knownNat
+
+mkSIMDGlobalRef :: forall n. IsSIMD n => NR.NatRepr n -> GlobalRef (IndexedSymbol "_V" n)
+mkSIMDGlobalRef n = SIMDRef (mkSIMDRef n)
+
+knownSIMDGlobalRef :: forall n. IsSIMD n => KnownNat n => GlobalRef (IndexedSymbol "_V" n)
+knownSIMDGlobalRef = mkSIMDGlobalRef @n NR.knownNat
+
+instance TestEquality GlobalRef where
+  testEquality gref gref' = case (gref, gref') of
+    (SimpleGlobalRef ref, SimpleGlobalRef ref') -> testEquality ref ref'
+    (GPRRef ref, GPRRef ref') | Just Refl <- testEquality ref ref' -> Just Refl
+    (SIMDRef ref, SIMDRef ref') | Just Refl <- testEquality ref ref' -> Just Refl
+    (MemoryRef, MemoryRef) -> Just Refl
+    _ -> Nothing
 
 deriving instance Show (GlobalRef s)
 
 instance ShowF GlobalRef where
   showF = show
 
--- | Deep equality check on 'GlobalRef's. In general this is unnecessary since
--- we assume the symbols are distinct as an invariant (i.e. symbol equality implies ref equality).
-deepTestRefEquality :: GlobalRef s -> GlobalRef s' -> Maybe (s :~: s')
-deepTestRefEquality gr gr' = case (gr, gr') of
-    (SimpleGlobalRef sgr, SimpleGlobalRef sgr') | Just Refl <- testEquality sgr sgr' -> Just Refl
-    (GPRRef gpr, GPRRef gpr') | Just Refl <- testEquality gpr gpr' -> Just Refl
-    (SIMDRef simd, SIMDRef simd') | Just Refl <- testEquality simd simd' -> Just Refl
-    (MemoryRef idx, MemoryRef idx') | Just Refl <- testEquality idx idx' -> Just Refl
-    _ -> Nothing
+withGlobalRef :: GlobalRef s -> (IsGlobal s => f) -> f
+withGlobalRef gpr f = case gpr of
+  SimpleGlobalRef ref -> withSimpleGlobalRef ref $ \_ -> f
+  GPRRef ref -> withGPRRef ref $ \_ -> f
+  SIMDRef ref -> withSIMDRef ref $ \_ -> f
+  MemoryRef -> f
 
 simpleGlobalRefs :: Assignment SimpleGlobalRef SimpleGlobalSymsCtx
 simpleGlobalRefs =
-  let
-    go :: Index SimpleGlobalSymsCtx s -> CT.SymbolRepr s -> Identity (SimpleGlobalRef s)
-    go idx symb = return $
-      SimpleGlobalRef' symb (mapContextIndex (Proxy @GlobalsTypeWrapper) knownSize idx)
-  in runIdentity $ Ctx.traverseWithIndex go knownRepr
-
+  mapForallCtx (Proxy @(IsSimpleGlobal)) mkSimpleGlobalRef (knownRepr :: Assignment CT.SymbolRepr SimpleGlobalSymsCtx)
 
 gprGlobalRefs :: Assignment GPRRef GPRIdxCtx
 gprGlobalRefs =
-  let
-    go :: Index GPRIdxCtx n -> NR.NatRepr n -> Identity (GPRRef n)
-    go idx nr = return $
-      GPRRef' (mkIndexedSymbol (CT.knownSymbol @"GPR") nr)
-              (upToProofRepr maxGPRRepr ! idx)
-              (mapContextIndex (Proxy @(NatToRegTypeWrapper "GPR")) knownSize idx)
-  in runIdentity $ Ctx.traverseWithIndex go knownRepr
+  mapForallCtx (Proxy @(IsGPR)) mkGPRRef (knownRepr :: Assignment NR.NatRepr GPRIdxCtx)
 
 simdGlobalRefs :: Assignment SIMDRef SIMDIdxCtx
 simdGlobalRefs =
-  let
-    go :: Index SIMDIdxCtx n -> NR.NatRepr n -> Identity (SIMDRef n)
-    go idx nr = return $
-      SIMDRef' (mkIndexedSymbol (CT.knownSymbol @"SIMD") nr)
-               (upToProofRepr maxSIMDRepr ! idx)
-               (mapContextIndex (Proxy @(NatToRegTypeWrapper "SIMD")) knownSize idx)
-  in runIdentity $ Ctx.traverseWithIndex go knownRepr
+  mapForallCtx (Proxy @(IsSIMD)) mkSIMDRef (knownRepr :: Assignment NR.NatRepr SIMDIdxCtx)
 
-memoryGlobalIdx :: Index GlobalsCtx (GlobalsType "__Memory")
-memoryGlobalIdx = lastIndex $ (Ctx.size trackedGlobals)
+data AllGlobalSig simple gprs simds mem =
+  AllGlobalSig { aSimpleGlobalRefs :: Assignment simple SimpleGlobalSymsCtx
+               , aGPRGlobalRefs :: Assignment gprs GPRIdxCtx
+               , aSIMDGlobalRefs :: Assignment simds SIMDIdxCtx
+               , aMemRef :: mem "__Memory"
+               }
 
-memoryGlobalRef :: GlobalRef "__Memory"
-memoryGlobalRef = MemoryRef memoryGlobalIdx
+allGlobalRefsSig :: AllGlobalSig SimpleGlobalRef GPRRef SIMDRef SymbolRepr
+allGlobalRefsSig = AllGlobalSig simpleGlobalRefs gprGlobalRefs simdGlobalRefs knownSymbol
 
-allGlobalRefs :: Assignment GlobalRef FlatGlobalSymsCtx
+mapAllGlobalRefsSig :: (forall s. IsSimpleGlobal s => simple s -> simple' s)
+                    -> (forall n. IsGPR n => gprs n -> gprs' n)
+                    -> (forall n. IsSIMD n => simds n -> simds' n)
+                    -> (mem "__Memory" -> mem' "__Memory")
+                    -> AllGlobalSig simple gprs simds mem
+                    -> AllGlobalSig simple' gprs' simds' mem'
+mapAllGlobalRefsSig fsimple fgprs fsimds fmem (AllGlobalSig simple gprs simds mem) =
+  AllGlobalSig
+  (mapForallCtx (Proxy @(IsSimpleGlobal)) fsimple simple)
+  (mapForallCtx (Proxy @(IsGPR)) fgprs gprs)
+  (mapForallCtx (Proxy @(IsSIMD)) fsimds simds)
+  (fmem mem)
+
+allGlobalRefs :: Assignment GlobalRef GlobalSymsCtx
 allGlobalRefs =
-       FC.fmapFC SimpleGlobalRef simpleGlobalRefs
-  <++> applyMapContext (Proxy @(NatToRegSymWrapper "GPR")) GPRRef gprGlobalRefs
-  <++> applyMapContext (Proxy @(NatToRegSymWrapper "SIMD")) SIMDRef simdGlobalRefs
-  :> memoryGlobalRef
+  (FC.fmapFC SimpleGlobalRef simpleGlobalRefs
+  <++> applyMapContext (Proxy @(NatToRegSymWrapper "_R")) GPRRef gprGlobalRefs
+  <++> applyMapContext (Proxy @(NatToRegSymWrapper "_V")) SIMDRef simdGlobalRefs
+  ):> memoryGlobalRef
+
+knownGlobalRef :: forall s. IsGlobal s => GlobalRef s
+knownGlobalRef = allGlobalRefs ! knownIndex
+
 
 globalRefMap :: MapF CT.SymbolRepr GlobalRef
 globalRefMap = MapF.fromList $
   FC.toListFC (\gb -> Pair (globalRefSymbol gb) gb) allGlobalRefs
-
-gprIdxPrf :: Index GPRCtx tp
-          -> tp :~: WI.BaseBVType 32
-gprIdxPrf idx = replicatedCtxPrf (NR.incNat maxGPRRepr) knownSize idx
-
-simdIdxPrf :: Index SIMDCtx tp
-           -> tp :~: WI.BaseBVType 128
-simdIdxPrf idx = replicatedCtxPrf (NR.incNat maxSIMDRepr) knownSize idx
 
 ctxSizeRepr :: forall ctx. Size ctx -> NR.NatRepr (CtxSize ctx)
 ctxSizeRepr sz = case viewSize sz of
   ZeroSize -> NR.knownNat
   IncSize sz' -> NR.addNat (NR.knownNat @1) (ctxSizeRepr sz')
 
--- | Index into the set of all tracked globals - pointing to the struct that contains all of the GPRs
-gprGlobalIndex :: Index GlobalsCtx (WI.BaseStructType GPRCtx)
-gprGlobalIndex = skipIndex $ skipIndex $ lastIndex $ decSize $ decSize $ (Ctx.size trackedGlobals)
+-- | Index into the set of all tracked globals - pointing to the array that contains all of the GPRs
+gprGlobalIndex :: Index StructGlobalsCtx AllGPRBaseType
+gprGlobalIndex = knownIndex
 
--- | Index into the set of all tracked globals - pointing to the struct that contains all of the SIMDs
-simdGlobalIdx :: Index GlobalsCtx (WI.BaseStructType SIMDCtx)
-simdGlobalIdx =  skipIndex $ lastIndex $ decSize $ (Ctx.size trackedGlobals)
-
--- | Resolve a 'GlobalRef' against a given 'Assignment'. In the case of register globals,
--- the provided function is used to project out the appropriate register.
-resolveGlobalRef :: (forall ctx. f (WI.BaseStructType ctx) -> Index ctx (GlobalsType s) -> f (GlobalsType s))
-                 -> Assignment f GlobalsCtx
-                 -> GlobalRef s
-                 -> f (GlobalsType s)
-resolveGlobalRef resolveidx asn gr = case gr of
-  SimpleGlobalRef (SimpleGlobalRef' _ idx) -> asn ! (applyEmbedding' simpleEmbedding idx)
-  GPRRef (GPRRef' _ _ idx) -> resolveidx (asn ! gprGlobalIndex) idx
-  SIMDRef (SIMDRef' _ _ idx) -> resolveidx (asn ! simdGlobalIdx) idx
-  MemoryRef idx -> asn ! idx
-
--- | Get the original 'Global' used to specify the given 'GlobalRef'.
-globalOfGlobalRef :: GlobalRef s -> Global (GlobalsType s)
-globalOfGlobalRef gr = case gr of
-  SimpleGlobalRef (SimpleGlobalRef' _ idx) -> simpleGlobals ! idx
-  GPRRef (GPRRef' _ _ idx) -> gprGlobals ! idx
-  SIMDRef (SIMDRef' _ _ idx) -> simdGlobals ! idx
-  MemoryRef idx -> trackedGlobals ! idx
+-- | Index into the set of all tracked globals - pointing to the array that contains all of the SIMDs
+simdGlobalIndex :: Index StructGlobalsCtx AllSIMDBaseType
+simdGlobalIndex = knownIndex
 
 testGlobalEq :: forall s s'
               . IsGlobal s
@@ -487,17 +528,24 @@ testGlobalEq gr = do
 
 globalRefSymbol :: GlobalRef s -> CT.SymbolRepr s
 globalRefSymbol gr = case gr of
-  SimpleGlobalRef (SimpleGlobalRef' symb _) -> symb
-  GPRRef (GPRRef' symb _ _) -> symb
-  SIMDRef (SIMDRef' symb _ _) -> symb
-  MemoryRef _ -> CT.knownSymbol
+  SimpleGlobalRef ref -> withSimpleGlobalRef ref $ \symb -> symb
+  GPRRef ref -> withGPRRef ref $ \n -> mkIndexedSymbol knownSymbol n
+  SIMDRef ref -> withSIMDRef ref $ \n -> mkIndexedSymbol knownSymbol n
+  MemoryRef -> CT.knownSymbol
 
-globalRefRepr :: GlobalRef s -> WI.BaseTypeRepr (GlobalsType s)
-globalRefRepr = resolveGlobalRef (\(WI.BaseStructRepr repr) idx -> repr ! idx) knownRepr
+globalRefIndex :: forall s. GlobalRef s -> Index GlobalsCtx (GlobalsType s)
+globalRefIndex gr = withGlobalRef gr $
+  mapContextIndex (Proxy @(GlobalsTypeWrapper))
+    Ctx.knownSize (knownIndex @GlobalSymsCtx @s)
 
--- Here we explicitly assume that each symbol represents a unique global ref
-instance TestEquality GlobalRef where
-  testEquality gr1 gr2 = testEquality (globalRefSymbol gr1) (globalRefSymbol gr2)
+globalRefRepr :: forall s. GlobalRef s -> WI.BaseTypeRepr (GlobalsType s)
+globalRefRepr gr =
+  (knownRepr :: Assignment WI.BaseTypeRepr GlobalsCtx) ! globalRefIndex gr
+
+globalOfGlobalRef :: GlobalRef s -> Global (GlobalsType s)
+globalOfGlobalRef gr =
+  flatTrackedGlobals ! globalRefIndex gr
+
 
 instance OrdF GlobalRef where
   compareF gr1 gr2 = compareF (globalRefSymbol gr1) (globalRefSymbol gr2)
@@ -512,137 +560,11 @@ lookupGlobalRef :: String -> Maybe (Some GlobalRef)
 lookupGlobalRef str = case CT.someSymbol (T.pack str) of
   Some symb -> Some <$> lookupGlobalRefSymbol symb
 
-mkSimpleGlobalRef :: IsSimpleGlobal s => CT.SymbolRepr s -> SimpleGlobalRef s
-mkSimpleGlobalRef _ = knownSimpleGlobalRef
-
-knownSimpleGlobalRef :: forall s. IsSimpleGlobal s => SimpleGlobalRef s
-knownSimpleGlobalRef = simpleGlobalRefs ! knownIndex
-
 lookupSimpleGlobalRef :: String -> Maybe (Some SimpleGlobalRef)
 lookupSimpleGlobalRef str = case lookupGlobalRef str of
   Just (Some (SimpleGlobalRef sgr)) -> Just $ Some sgr
-  Nothing -> Nothing
+  _ -> Nothing
 
-gprSymbolRepr :: GeqProofRepr MaxGPR n -> CT.SymbolRepr (IndexedSymbol "GPR" n)
-gprSymbolRepr (GeqProofRepr _ n) =
-  case mkGPRRef n of
-    GPRRef' symb _ _ -> symb
-
--- | Get the 'GPRRef' corresponding to the nth GPR, with an explicit 'NR.NatRepr' for n
-mkGPRRef :: forall n. n <= MaxGPR => NR.NatRepr n -> GPRRef n
-mkGPRRef nr
-  | vnr <- GeqProofRepr maxGPRRepr nr
-  , idx <- boundedNatUpToIndex vnr
-  = gprGlobalRefs ! idx
-
--- | Get the 'GPRRef' corresponding to the nth GPR, with an implicit 'KnownNat' for n.
-knownGPRRef :: forall n. KnownNat n => n <= MaxGPR => GPRRef n
-knownGPRRef = mkGPRRef (NR.knownNat @n)
-
--- | Evidence that the given symbols and nat are all wellformed with respect to the
--- 'GlobalsType' class.
--- e.g. IndexedGlobalsTypeRepr "GPR" 1 "GPR1" (BaseBVType 32)
-data IndexedGlobalsTypeProof (s :: Symbol) (tp :: WI.BaseType)  (s' :: Symbol) where
-  IndexedGlobalsTypeProof :: forall s n s'. IndexedGlobalsTypeProof s (GlobalsType (IndexedSymbol s' n)) (IndexedSymbol s' n)
-
-gprTypePrf' :: Assignment (IndexedGlobalsTypeProof "GPR" (WI.BaseBVType 32)) GPRSymsCtx
-gprTypePrf' =
-  FC.fmapFC mkTypeRepr (applyMapContext (Proxy @(NatToRegSymWrapper "GPR")) GPRRef gprGlobalRefs)
-  where
-    mkTypeRepr :: GlobalRef s -> IndexedGlobalsTypeProof "GPR" (WI.BaseBVType 32) s
-    mkTypeRepr (GPRRef (GPRRef' symb (GeqProofRepr _ n) idx))
-      | Refl <- gprIdxPrf idx
-      , (nr :: NR.NatRepr n) <- n
-      = IndexedGlobalsTypeProof @"GPR" @n
-    mkTypeRepr _ = error "impossible"
-
-gprTypePrf :: forall n
-            . NR.NatRepr n
-           -> Index GPRCtx (GlobalsType (IndexedSymbol "GPR" n))
-           -> GlobalsType (IndexedSymbol "GPR" n) :~: WI.BaseBVType 32
-gprTypePrf n idx
-  | IndexApplied idx' <- getIndexApplied (Proxy @(GlobalsTypeWrapper)) (Proxy @GPRSymsCtx) knownSize idx
-  , IndexedGlobalsTypeProof <- gprTypePrf' ! idx'
-  = Refl
-
--- | View the components of a 'GPRRef', with sufficient type information to reconstruct it.
-withGPRRef :: forall n a
-            . GPRRef n
-            -> (n <= MaxGPR => GlobalsType (IndexedSymbol "GPR" n) ~ WI.BaseBVType 32
-                => CT.SymbolRepr (IndexedSymbol "GPR" n)
-                -> NR.NatRepr n
-                -> a)
-             -> a
-withGPRRef (GPRRef' symb vnr@(GeqProofRepr _ n) idx) f
-  | Refl <- gprTypePrf n idx
-  = withGeqProofRepr vnr (\_ _ -> f symb)
-
--- | Get the 'GlobalRef' corresponding to the nth GPR, with an explicit 'NR.NatRepr' for n.
-mkGPRGlobalRef :: forall n. n <= MaxGPR => NR.NatRepr n -> GlobalRef (IndexedSymbol "GPR" n)
-mkGPRGlobalRef nr = GPRRef (mkGPRRef nr)
-
--- | Get the 'GlobalRef' corresponding to the nth GPR, with an implicit 'KnownNat' for n
-knownGPRGlobalRef :: forall n. KnownNat n => n <= MaxGPR => GlobalRef (IndexedSymbol "GPR" n)
-knownGPRGlobalRef = GPRRef (knownGPRRef @n)
-
-simdSymbolRepr :: GeqProofRepr MaxSIMD n -> CT.SymbolRepr (IndexedSymbol "SIMD" n)
-simdSymbolRepr (GeqProofRepr _ n) =
-  case mkSIMDRef n of
-    SIMDRef' symb _ _ -> symb
-
--- | Get the 'SIMDRef' corresponding to the nth SIMD register, with an explicit 'NR.NatRepr' for n.
-mkSIMDRef :: forall n. n <= MaxSIMD => NR.NatRepr n -> SIMDRef n
-mkSIMDRef nr
-  | vnr <- GeqProofRepr maxSIMDRepr nr
-  , idx <- boundedNatUpToIndex vnr
-  = simdGlobalRefs ! idx
-
--- | Get the 'SIMDRef' corresponding to the nth SIMD register, with an implicit 'KnownNat' for n.
-knownSIMDRef :: forall n. KnownNat n => n <= MaxSIMD => SIMDRef n
-knownSIMDRef = mkSIMDRef (NR.knownNat @n)
-
-simdTypePrf' :: Assignment (IndexedGlobalsTypeProof "SIMD" (WI.BaseBVType 128)) SIMDSymsCtx
-simdTypePrf' =
-  FC.fmapFC mkTypeRepr (applyMapContext (Proxy @(NatToRegSymWrapper "SIMD")) SIMDRef simdGlobalRefs)
-  where
-    mkTypeRepr :: GlobalRef s -> IndexedGlobalsTypeProof "SIMD" (WI.BaseBVType 128) s
-    mkTypeRepr (SIMDRef (SIMDRef' symb (GeqProofRepr _ n) idx))
-      | Refl <- simdIdxPrf idx
-      , (nr :: NR.NatRepr n) <- n
-      = IndexedGlobalsTypeProof @"SIMD" @n
-    mkTypeRepr _ = error "impossible"
-
-simdTypePrf :: forall n
-            . NR.NatRepr n
-           -> Index SIMDCtx (GlobalsType (IndexedSymbol "SIMD" n))
-           -> GlobalsType (IndexedSymbol "SIMD" n) :~: WI.BaseBVType 128
-simdTypePrf n idx
-  | IndexApplied idx' <- getIndexApplied (Proxy @(GlobalsTypeWrapper)) (Proxy @SIMDSymsCtx) knownSize idx
-  , IndexedGlobalsTypeProof <- simdTypePrf' ! idx'
-  = Refl
-
--- | View the components of a 'SIMDRef', with sufficient type information to reconstruct it.
-withSIMDRef :: SIMDRef n
-             -> (n <= MaxSIMD => GlobalsType (IndexedSymbol "SIMD" n) ~ WI.BaseBVType 128
-                 => CT.SymbolRepr (IndexedSymbol "SIMD" n)
-                 -> NR.NatRepr n
-                 -> a)
-             -> a
-withSIMDRef (SIMDRef' symb vnr@(GeqProofRepr _ n) idx) f
-  | Refl <- simdTypePrf n idx
-  = withGeqProofRepr vnr (\_ _ -> f symb)
-
-
-mkSIMDGlobalRef :: forall n. n <= MaxSIMD => NR.NatRepr n -> GlobalRef (IndexedSymbol "SIMD" n)
-mkSIMDGlobalRef nr = SIMDRef (mkSIMDRef nr)
-
-knownSIMDGlobalRef :: forall n. KnownNat n => n <= MaxSIMD => GlobalRef (IndexedSymbol "SIMD" n)
-knownSIMDGlobalRef = SIMDRef (knownSIMDRef @n)
-
-knownGlobalRef :: forall s
-                . IsGlobal s
-               => GlobalRef s
-knownGlobalRef = allGlobalRefs ! knownIndex
 
 instance TH.Lift (GlobalRef s) where
   lift gr = [e| knownGlobalRef :: GlobalRef $(TH.litT (TH.strTyLit (T.unpack $ CT.symbolRepr $ globalRefSymbol gr))) |]
@@ -656,14 +578,14 @@ staticConsistencyCheck _
   , (pcSref' ::  SimpleGlobalRef "_PC") <- knownSimpleGlobalRef @"_PC"
   , (pcRepr :: WI.BaseTypeRepr (WI.BaseBVType 32)) <- globalRefRepr pcGref
   , Just Refl <- testEquality pcSref pcSref'
-  , gpr13GRef <- knownGlobalRef @"GPR13"
+  , gpr13GRef <- knownGlobalRef @"_R13"
   , gpr13Ref' <- knownGPRRef @13
   , gpr13GRef' <- knownGPRGlobalRef @13
   , Nothing <- testEquality pcGref gpr13GRef
   , Just Refl <- testEquality $([e| knownGlobalRef @"_PC" |]) pcGref
   , Just Refl <- testEquality gpr13GRef (GPRRef gpr13Ref')
   , Just Refl <- testEquality gpr13GRef' gpr13GRef
-  , simd25Ref <- knownGlobalRef @"SIMD25"
+  , simd25Ref <- knownGlobalRef @"_V25"
   , simd25Ref' <- knownSIMDRef @25
   , Just Refl <- testEquality simd25Ref (SIMDRef simd25Ref')
   , memRef <- knownGlobalRef @"__Memory"
@@ -681,18 +603,18 @@ consistencyCheck =
     checkEq :: GlobalRef s -> Maybe ()
     checkEq gr = do
       gr' <- lookupGlobalRefSymbol (globalRefSymbol gr)
-      Refl <- deepTestRefEquality gr gr'
+      Refl <- testEquality gr gr'
       case gr of
-        SIMDRef simdRef -> withSIMDRef simdRef $ \symb n -> do
-          gr'' <- lookupGlobalRefSymbol symb
-          Refl <- deepTestRefEquality gr gr''
+        SIMDRef simdRef -> withSIMDRef simdRef $ \n -> do
+          gr'' <- lookupGlobalRefSymbol (mkIndexedSymbol (knownSymbol @"_V") n)
+          Refl <- testEquality gr gr''
           Refl <- testEquality (mkSIMDRef n) simdRef
-          Refl <- deepTestRefEquality (mkSIMDGlobalRef n) gr
+          Refl <- testEquality (mkSIMDGlobalRef n) gr
           return ()
-        GPRRef gprRef -> withGPRRef gprRef $ \symb n -> do
-          gr'' <- lookupGlobalRefSymbol symb
-          Refl <- deepTestRefEquality gr gr''
+        GPRRef gprRef -> withGPRRef gprRef $ \n -> do
+          gr'' <- lookupGlobalRefSymbol (mkIndexedSymbol (knownSymbol @"_R") n)
+          Refl <- testEquality gr gr''
           Refl <- testEquality (mkGPRRef n) gprRef
-          Refl <- deepTestRefEquality (mkGPRGlobalRef n) gr
+          Refl <- testEquality (mkGPRGlobalRef n) gr
           return ()
         _ -> return ()

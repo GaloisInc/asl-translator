@@ -108,7 +108,7 @@ type Function arch globalReads globalWrites init tps =
   GenFunction arch globalReads globalWrites globalReads globalWrites init tps
 
 type Instruction arch globalReads globalWrites init =
-  GenFunction arch globalReads globalWrites G.GlobalsCtx G.GlobalsCtx init Ctx.EmptyCtx
+  GenFunction arch globalReads globalWrites G.StructGlobalsCtx G.StructGlobalsCtx init Ctx.EmptyCtx
 
 -- | This type alias is a constraint relating the 'globals' (base types) to the
 -- actual return type in terms of Crucible types
@@ -181,7 +181,7 @@ functionToCrucible defs sig = do
 
 instructionToCrucible :: forall arch globalReads globalWrites init ret
                        . HasLogCfg
-                      => ReturnsGlobals ret G.GlobalsCtx Ctx.EmptyCtx
+                      => ReturnsGlobals ret G.StructGlobalsCtx Ctx.EmptyCtx
                       => Definitions arch
                       -> FunctionSignature globalReads globalWrites init Ctx.EmptyCtx
                       -> CFH.HandleAllocator
@@ -197,10 +197,10 @@ instructionToCrucible defs sig hdlAlloc stmts = do
     Right r -> return $ r
 
   let
-    projR :: forall tp. Ctx.Index G.GlobalsCtx tp -> Maybe (Ctx.Index globalReads tp)
+    projR :: forall tp. Ctx.Index G.StructGlobalsCtx tp -> Maybe (Ctx.Index globalReads tp)
     projR idx = MapF.lookup idx projReads
 
-    projW :: forall tp. Ctx.Index G.GlobalsCtx tp -> Maybe (Ctx.Index globalWrites tp)
+    projW :: forall tp. Ctx.Index G.StructGlobalsCtx tp -> Maybe (Ctx.Index globalWrites tp)
     projW idx = MapF.lookup idx projWrites
 
   functionToCrucible' G.trackedGlobalReprs G.trackedGlobalReprs projR projW defs sig hdlAlloc stmts

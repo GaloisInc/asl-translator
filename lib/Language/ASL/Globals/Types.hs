@@ -15,20 +15,19 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE IncoherentInstances #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Language.ASL.Globals.Types
   ( Global(..)
   , GlobalDomain(..)
   , GlobalsType
-  , KnownIndex(..)
-  , HasGlobalsType(..)
-  , IsGlobalOf
   , domainSingleton
   , domainUnbounded
   , asSingleton
   , mkGlobalsTypeInstDecls
-  , mkHasGlobalsTypeInstDecls
-  , mkKnownIndexInstDecls
   , mkAllGlobalSymsT
   , mkTypeFromGlobals
   , mkTypeFromReprs
@@ -37,6 +36,17 @@ module Language.ASL.Globals.Types
   , mkGlobalsE
   , mkSymbolE
   , mkSymbolT
+
+  -- statically calculating indexes
+  , KnownIndex
+  , knownIndex
+  , withKnownIndex
+  , NotMemberOf
+  , DistinctIn
+  , DistinctCtx
+  , ForallCtx
+  , mapForallCtx
+  , forallUpTo
   ) where
 
 import           GHC.Natural ( naturalFromInteger )
@@ -46,10 +56,16 @@ import           Control.Applicative ( Const(..) )
 import           Control.Monad ( forM, foldM )
 import           Control.Monad.Except ( throwError )
 import qualified Control.Monad.Except as ME
+import           Control.Monad.Identity
 
 import           GHC.TypeNats ( KnownNat )
+import           Data.Type.Equality
+import           Data.Constraint as Constraint
+import           Data.Proxy
+
 import           Data.Parameterized.Some ( Some(..), viewSome )
 import           Data.Parameterized.Ctx ( type (<+>) )
+import           Data.Parameterized.Classes
 import           Data.Parameterized.Context ( EmptyCtx, (::>), Assignment, empty, pattern (:>) )
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
@@ -57,6 +73,7 @@ import qualified Data.Parameterized.TraversableFC as FC
 import           Data.Parameterized.Map ( MapF )
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair
+import           Data.Parameterized.WithRepr
 
 import           Data.Void
 import           Data.Maybe ( catMaybes )
@@ -71,6 +88,9 @@ import           Data.Parameterized.Classes
 import qualified What4.Interface as WI
 import qualified What4.Concrete as WI
 
+-- from this package
+import           Data.Parameterized.CtxFuns
+
 import qualified Lang.Crucible.CFG.Expr as CCE
 import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.Types as CT
@@ -81,6 +101,7 @@ import           Language.ASL.Types
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as TH
 
+import           Unsafe.Coerce
 
 -- | A 'Global' represents each piece of the global ASL state.
 data Global tp =
@@ -92,14 +113,12 @@ data Global tp =
     , gbDomain :: GlobalDomain tp
     -- ^ The known domain of this global variable
     -- Every update to this value needs to check that this domain has been respected.
-    , gbGroupName :: Maybe T.Text
-    -- ^ Either "SIMD" or "GPR". This global will be accessed via this name plus an index.
     }
 
 instance TestEquality Global where
-  testEquality (Global nm tp dm gn) (Global nm' tp' dm' gn') =
+  testEquality (Global nm tp dm) (Global nm' tp' dm') =
     case testEquality tp tp' of
-      Just Refl | nm == nm' && dm == dm' && gn == gn' -> Just Refl
+      Just Refl | nm == nm' && dm == dm' -> Just Refl
       _ -> Nothing
 
 data GlobalDomain tp =
@@ -240,23 +259,15 @@ genCond mkerr globalsMap lookup sig = do
 -- | The type-level mapping from name of each global to its type
 type family GlobalsType (s :: Symbol) :: WI.BaseType
 
-class KnownIndex (ctx :: Ctx.Ctx k) (s :: k) where
-  knownIndex :: Ctx.Index ctx s
-
-class HasGlobalsType (s :: Symbol) where
-  hasGlobalsType :: CT.SymbolRepr s -> (KnownRepr WI.BaseTypeRepr (GlobalsType s) => a) -> a
-
-type IsGlobalOf ctx s = (KnownIndex ctx s, HasGlobalsType s, KnownSymbol s)
-
 -- Template haskell for reifying the types and names from 'Language.ASL.Globals.Types'
 
 mkGlobalsGen :: forall a
               . (a -> a -> TH.Q a)
              -> TH.Q a
-             -> Some (Ctx.Assignment Global)
              -> (forall (ctx :: Ctx.Ctx WI.BaseType) (tp :: WI.BaseType). Ctx.Index ctx tp -> Global tp -> TH.Q a)
+             -> Some (Ctx.Assignment Global)
              -> TH.Q a
-mkGlobalsGen comb mkinit (Some gbs) mkelem = do
+mkGlobalsGen comb mkinit mkelem (Some gbs) = do
   elems <- Ctx.traverseWithIndex go gbs
   init <- mkinit
   FC.foldlMFC (\b (Const a) -> comb b a) init elems
@@ -264,13 +275,13 @@ mkGlobalsGen comb mkinit (Some gbs) mkelem = do
     go :: Ctx.Index ctx tp -> Global tp -> TH.Q (Const a tp)
     go idx gb = Const <$> mkelem idx gb
 
-mkGlobalsE :: Some (Ctx.Assignment Global)
-           -> (forall (ctx :: Ctx.Ctx WI.BaseType) (tp :: WI.BaseType). Ctx.Index ctx tp -> Global tp -> TH.Q TH.Exp)
+mkGlobalsE :: (forall (ctx :: Ctx.Ctx WI.BaseType) (tp :: WI.BaseType). Ctx.Index ctx tp -> Global tp -> TH.Q TH.Exp)
+           -> Some (Ctx.Assignment Global)
            -> TH.Q TH.Exp
 mkGlobalsE = mkGlobalsGen (\b a -> [e| $(return b) Ctx.:> $(return a) |]) [e| Ctx.empty |]
 
-mkGlobalsT :: Some (Ctx.Assignment Global)
-           -> (forall (ctx :: Ctx.Ctx WI.BaseType) (tp :: WI.BaseType). Ctx.Index ctx tp -> Global tp -> TH.Q TH.Type)
+mkGlobalsT :: (forall (ctx :: Ctx.Ctx WI.BaseType) (tp :: WI.BaseType). Ctx.Index ctx tp -> Global tp -> TH.Q TH.Type)
+           -> Some (Ctx.Assignment Global)
            -> TH.Q TH.Type
 mkGlobalsT = mkGlobalsGen (\b a -> [t| $(return b) Ctx.::> $(return a) |]) [t| Ctx.EmptyCtx |]
 
@@ -283,7 +294,7 @@ mkSymbolE :: T.Text -> TH.Q TH.Exp
 mkSymbolE nm = [e| CT.knownSymbol :: CT.SymbolRepr $(mkSymbolT nm) |]
 
 mkGlobalsDecls' :: (forall ctx tp. Ctx.Index ctx tp -> Global tp -> TH.DecsQ) -> Some (Ctx.Assignment Global) -> TH.DecsQ
-mkGlobalsDecls' f gbs = mkGlobalsGen (\b a -> return $ b ++ a) (return []) gbs f
+mkGlobalsDecls' f = mkGlobalsGen (\b a -> return $ b ++ a) (return []) f
 
 mkGlobalsDecls :: (forall tp. Global tp -> TH.DecsQ) -> Some (Ctx.Assignment Global) -> TH.DecsQ
 mkGlobalsDecls f = mkGlobalsDecls' (\_ -> f)
@@ -292,20 +303,6 @@ mkGlobalsTypeInstDecls :: Some (Ctx.Assignment Global) -> TH.DecsQ
 mkGlobalsTypeInstDecls = mkGlobalsDecls $ \gb ->
   [d| type instance GlobalsType $(mkSymbolT (gbName gb)) = $(mkTypeFromRepr (gbType gb)) |]
 
-mkHasGlobalsTypeInstDecls :: Some (Ctx.Assignment Global) -> TH.DecsQ
-mkHasGlobalsTypeInstDecls = mkGlobalsDecls $ \gb ->
-  [d| instance HasGlobalsType $(mkSymbolT (gbName gb)) where
-        hasGlobalsType _ f = f
-  |]
-
-mkKnownIndexInstDecls :: Some (Ctx.Assignment Global) -> TH.Q TH.Type -> TH.DecsQ
-mkKnownIndexInstDecls gbs ctxE = go gbs
-  where
-   go :: Some (Ctx.Assignment Global) -> TH.DecsQ
-   go = mkGlobalsDecls' $ \idx gb ->
-     [d| instance KnownIndex $(ctxE) $(mkSymbolT (gbName gb)) where
-           knownIndex = $(liftIndex idx)
-     |]
 
 liftIndex :: Ctx.Index ctx tp -> TH.Q TH.Exp
 liftIndex idx = [e| Ctx.natIndexProxy $(liftIndexNatRepr idx) |]
@@ -317,11 +314,10 @@ liftIndexNumT :: Ctx.Index ctx tp -> TH.Q TH.Type
 liftIndexNumT idx = TH.litT (TH.numTyLit(fromIntegral $ Ctx.indexVal idx))
 
 mkAllGlobalSymsT :: Some (Ctx.Assignment Global) -> TH.Q TH.Type
-mkAllGlobalSymsT gbs = mkGlobalsT gbs $ \_ gb -> mkSymbolT (gbName gb)
+mkAllGlobalSymsT = mkGlobalsT $ \_ gb -> mkSymbolT (gbName gb)
 
-
--- mkAllGlobalSymsE :: Some (Ctx.Assignment Global) -> TH.Q TH.Exp
--- mkAllGlobalSymsE gbs = mkGlobalsE gbs $ \_ gb -> mkSymbolE (gbName gb)
+mkTypeFromGlobals :: Some (Ctx.Assignment Global) -> TH.Q TH.Type
+mkTypeFromGlobals = mkGlobalsT $ \_ gb -> mkTypeFromRepr (gbType gb)
 
 mkTypeFromRepr :: WI.BaseTypeRepr tp -> TH.Q TH.Type
 mkTypeFromRepr repr = case repr of
@@ -351,8 +347,123 @@ mkTypeFromReprs reprs = case Ctx.viewAssign reprs of
 --   Ctx.AssignEmpty -> [e| Ctx.empty |]
 --   Ctx.AssignExtend reprs' repr -> [e| $(mkExprFromReprs reprs') Ctx.:> $(mkExprFromRepr repr) |]
 
-mkTypeFromGlobals :: Some (Ctx.Assignment Global) -> TH.Q TH.Type
-mkTypeFromGlobals (Some globals) = mkTypeFromReprs $ FC.fmapFC gbType globals
+
 
 -- mkReprFromGlobals :: Some (Ctx.Assignment Global) -> TH.Q TH.Exp
 -- mkReprFromGlobals (Some globals) = mkExprFromReprs $ FC.fmapFC gbType globals
+
+
+-- | If a type appears exactly once in the given known context, we can compute its index.
+
+class KnownIndex ctx tp where
+  knownIndex :: Ctx.Index ctx tp
+
+instance DistinctIn ctx tp => KnownIndex ctx tp where
+  knownIndex = distinctInIndex
+
+type DistinctCtx ctx = ForallCtx (DistinctIn ctx) ctx
+
+withKnownIndex :: forall ctx tp f
+                . DistinctCtx ctx
+               => Ctx.Index ctx tp
+               -> (KnownIndex ctx tp => f)
+               -> f
+withKnownIndex idx f = withForallCtx (Proxy @(DistinctIn ctx)) idx f
+
+class NeqT a b where
+  neq :: NeqTRepr a b
+
+data NeqTRepr a b where
+  NeqTRepr :: ((a == b) ~ False) => NeqTRepr a b
+
+instance ((a == b) ~ False) => NeqT a b where
+  neq = NeqTRepr
+
+-- | Proof that the given type is not present in the context.
+data NotMemberOfProof ctx s where
+  NotMemberEmpty :: NotMemberOfProof Ctx.EmptyCtx s
+  NotMemberCons :: forall ctx s s'
+                 . NeqT s s'
+                => NotMemberOfProof ctx s'
+                -> NotMemberOfProof (ctx Ctx.::> s) s'
+
+class NotMemberOf ctx s where
+  notMemberOfProof :: NotMemberOfProof ctx s
+  notMemberOfSize :: Proxy s -> Ctx.Size ctx
+
+instance NotMemberOf Ctx.EmptyCtx s where
+  notMemberOfProof = NotMemberEmpty
+  notMemberOfSize _ = Ctx.zeroSize
+
+instance (NeqT s s', NotMemberOf ctx s') => NotMemberOf (ctx Ctx.::> s) s' where
+  notMemberOfProof = NotMemberCons notMemberOfProof
+  notMemberOfSize s = Ctx.incSize (notMemberOfSize s)
+
+-- | Proof that the given type is in the context exactly once
+data DistinctInProof ctx tp where
+  DistinctInHere :: NotMemberOfProof ctx tp -> DistinctInProof (ctx Ctx.::> tp) tp
+  DistinctInThere :: forall ctx tp tp'
+                   . NeqT tp' tp
+                  => DistinctInProof ctx tp
+                  -> DistinctInProof (ctx Ctx.::> tp') tp
+
+class DistinctIn ctx tp where
+  distinctInProof :: DistinctInProof ctx tp
+  distinctInIndex :: Ctx.Index ctx tp
+
+instance  NotMemberOf ctx tp => DistinctIn (ctx Ctx.::> tp) tp where
+  distinctInProof = DistinctInHere notMemberOfProof
+  distinctInIndex = Ctx.nextIndex $ notMemberOfSize (Proxy @tp)
+
+instance (NeqT tp' tp, DistinctIn ctx tp) => DistinctIn (ctx Ctx.::> tp') tp where
+  distinctInProof = DistinctInThere distinctInProof
+  distinctInIndex = Ctx.skipIndex $ distinctInIndex
+
+data CurryC c tp where
+  CurryC :: () :- c tp -> CurryC c tp
+
+class ForallCtx c ctx where
+  forallCtxProof :: Ctx.Assignment (CurryC c) ctx
+
+instance ForallCtx c Ctx.EmptyCtx where
+  forallCtxProof = Ctx.empty
+
+instance (c tp, ForallCtx c ctx) => ForallCtx c (ctx Ctx.::> tp) where
+  forallCtxProof = forallCtxProof :> (CurryC (Sub Dict))
+
+forallCtxSize :: forall c ctx
+               . ForallCtx c ctx
+              => Proxy c
+              -> Ctx.Size ctx
+forallCtxSize _ = Ctx.size (forallCtxProof :: Ctx.Assignment (CurryC c) ctx)
+
+withForallCtx :: forall c ctx tp f
+               . ForallCtx c ctx
+              => Proxy c
+              -> Ctx.Index ctx tp
+              -> (c tp => f)
+              -> f
+withForallCtx _ idx f =
+  let
+     CurryC witness = (forallCtxProof :: Ctx.Assignment (CurryC c) ctx) Ctx.! idx
+   in f \\ witness
+
+mapForallCtx :: forall ctx c f g
+              . ForallCtx c ctx
+             => Proxy c
+             -> (forall tp. c tp => f tp -> g tp)
+             -> Ctx.Assignment f ctx
+             -> Ctx.Assignment g ctx
+mapForallCtx c f asn = runIdentity $
+  Ctx.traverseWithIndex (\idx a -> withForallCtx c idx $ return $ f a) asn
+
+
+forallUpTo :: forall ctx c n maxn
+            . ForallCtx c (CtxUpTo maxn)
+           => Proxy c
+           -> Proxy maxn
+           -> NR.NatRepr n
+           -> (n <= maxn) :- c n
+forallUpTo c _ n = Sub $
+  withForallCtx c (natUpToIndex (Proxy @maxn) (forallCtxSize c) n) $
+  Dict

@@ -23,7 +23,9 @@ module Language.ASL.Globals.Definitions
   , simdGlobals'
   , forSome
   , MaxGPR
+  , AllGPRBaseType
   , MaxSIMD
+  , AllSIMDBaseType
   , maxGPRRepr
   , maxSIMDRepr
   ) where
@@ -42,6 +44,7 @@ import           Data.Parameterized.Context ( EmptyCtx, (::>), Assignment, empty
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
 import qualified Data.Parameterized.TraversableFC as FC
+
 
 import           Data.Maybe ( catMaybes )
 import           Data.List ( intercalate )
@@ -70,7 +73,12 @@ import qualified Language.Haskell.TH.Syntax as TH
 type MaxGPR = 14
 type MaxSIMD = 31
 
-type MemoryBaseType = WI.BaseArrayType (EmptyCtx ::> WI.BaseBVType 32) (WI.BaseBVType 8)
+type ArrayBaseType idxsz valsz = WI.BaseArrayType(EmptyCtx ::> WI.BaseBVType idxsz) (WI.BaseBVType valsz)
+
+
+type MemoryBaseType = ArrayBaseType 32 8
+type AllGPRBaseType = ArrayBaseType 4 32
+type AllSIMDBaseType = ArrayBaseType 8 128
 
 maxGPRRepr :: NR.NatRepr MaxGPR
 maxGPRRepr = NR.knownNat
@@ -133,12 +141,10 @@ simpleGlobals' =
 trackedGlobals' :: Some (Assignment Global)
 trackedGlobals' =
   forSome simpleGlobals' $ \simpleGlobals'' ->
-  forSome allGPRsGlobal $ \allGPRsGlobal' ->
-  forSome allSIMDsGlobal $ \allSIMDsGlobal' ->
   Some $ simpleGlobals''
   -- the registers
-  :> allGPRsGlobal'
-  :> allSIMDsGlobal'
+  :> gprGlobal
+  :> simdGlobal
   :> memoryGlobal
 
 -- | All 'Global's with GPRs and SIMDs expanded.
@@ -146,39 +152,35 @@ flatTrackedGlobals' :: Some (Assignment Global)
 flatTrackedGlobals' =
   forSome simpleGlobals' $ \simpleGlobals'' ->
   forSome gprGlobals' $ \gprGlobals'' ->
-  forSome simdGlobals' $ \simdGlobals' ->
+  forSome simdGlobals' $ \simdGlobals'' ->
   Some $
   (simpleGlobals''
   <++> gprGlobals''
-  <++> simdGlobals') :> memoryGlobal
+  <++> simdGlobals'') :> memoryGlobal
 
 memoryGlobal :: Global MemoryBaseType
 memoryGlobal =
   def "__Memory" (WI.BaseArrayRepr (empty :> WI.BaseBVRepr (WI.knownNat @32))
     (WI.BaseBVRepr (WI.knownNat @8))) domainUnbounded
 
-gprGlobals' :: Some (Assignment Global)
-gprGlobals' = Ctx.fromList $ map mkReg [0..14]
-  where
-    mkReg :: Integer -> Some (Global)
-    mkReg i = Some $ Global ("GPR" <> T.pack (show i)) (WI.BaseBVRepr (NR.knownNat @32)) domainUnbounded (Just ("GPR"))
+gprGlobal :: Global AllGPRBaseType
+gprGlobal = def "GPRS" (knownRepr :: WI.BaseTypeRepr AllGPRBaseType) domainUnbounded
 
-allGPRsGlobal :: Some Global
-allGPRsGlobal = case gprGlobals' of
-  Some asn -> Some $ Global "GPRS" (WI.BaseStructRepr (FC.fmapFC gbType asn)) domainUnbounded Nothing
+gprGlobals' :: Some (Assignment Global)
+gprGlobals' = Ctx.fromList $
+  map (\i -> Some $ def ("_R" <> (T.pack $ show i))
+        (knownRepr :: WI.BaseTypeRepr (WI.BaseBVType 32)) domainUnbounded) [0 .. (NR.intValue maxGPRRepr)]
+
+simdGlobal :: Global AllSIMDBaseType
+simdGlobal = def "SIMDS" (knownRepr :: WI.BaseTypeRepr AllSIMDBaseType) domainUnbounded
 
 simdGlobals' :: Some (Assignment Global)
-simdGlobals' = Ctx.fromList $ map mkReg [0..31]
-  where
-    mkReg :: Integer -> Some (Global)
-    mkReg i = Some $ Global ("SIMD" <> T.pack (show i)) (WI.BaseBVRepr (NR.knownNat @128)) domainUnbounded (Just ("SIMD"))
-
-allSIMDsGlobal :: Some Global
-allSIMDsGlobal = case simdGlobals' of
-  Some asn -> Some $ Global "SIMDS" (WI.BaseStructRepr (FC.fmapFC gbType asn)) domainUnbounded Nothing
+simdGlobals' = Ctx.fromList $
+  map (\i -> Some $ def ("_V" <> (T.pack $ show i))
+        (knownRepr :: WI.BaseTypeRepr (WI.BaseBVType 128)) domainUnbounded) [0 .. (NR.intValue maxSIMDRepr)]
 
 def :: T.Text -> WI.BaseTypeRepr tp -> GlobalDomain tp -> Global tp
-def nm repr dom = Global nm repr dom Nothing
+def nm repr dom = Global nm repr dom
 
 noval :: T.Text -> Global (WI.BaseStructType EmptyCtx)
 noval nm = def nm WI.knownRepr domainUnbounded

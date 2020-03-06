@@ -10,6 +10,9 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE CPP #-}
 
 -- Collection of type-level functions
 module Data.Parameterized.CtxFuns
@@ -17,15 +20,11 @@ module Data.Parameterized.CtxFuns
   , NatToSymbol
   , IndexedSymbol
   , CtxReplicate
-  , GeqProofRepr(..)
-  , withGeqProofRepr
   , mkNatSymbol
   , mkAppendSymbol
   , mkIndexedSymbol
-  , upToProofRepr
   , replicatedCtxPrf
-  , boundedNatToIndex
-  , boundedNatUpToIndex
+  , natUpToIndex
   -- copied from SemMC
   , TyFun
   , Apply
@@ -33,9 +32,7 @@ module Data.Parameterized.CtxFuns
   , applyMapContext
   , mapContextSize
   , mapContextIndex
-  , mapContextSizeRev
-  , getIndexApplied
-  , IndexApplied(..)
+  , PairF(..)
   ) where
 
 import           GHC.TypeLits
@@ -86,42 +83,42 @@ type family CtxUpTo (n :: Nat) :: Ctx Nat where
   CtxUpTo n = CtxUpTo (n - 1) ::> n
 
 
--- Helper type to make this proof work.
-data AssignmentUpTo f (n :: Nat) where
-  AssignmentUpToZero :: f 0 -> AssignmentUpTo f 0
-  AssignmentUpToRest :: AssignmentUpTo f n -> f (n + 1) -> AssignmentUpTo f (n + 1)
+testNatIndex :: forall maxn n m
+              . Proxy maxn
+             -> NR.NatRepr n
+             -> Index (CtxUpTo maxn) m
+             -> Maybe (n :~: m)
+testNatIndex _ n idx = case (indexVal idx == (fromIntegral $ NR.intValue n)) of
+  True -> Just (unsafeCoerce (Refl :: n :~: n))
+  False -> Nothing
 
-upToProofReprStep :: GeqProofRepr n m -> AssignmentUpTo (GeqProofRepr n) m
-upToProofReprStep (GeqProofRepr n m) = case NR.isZeroOrGT1 m of
-  Left Refl -> AssignmentUpToZero $ GeqProofRepr n m
-  Right NR.LeqProof
-   | NR.LeqProof <- NR.leqSub (NR.leqProof m n) (NR.leqProof (NR.knownNat @1) m)
-   , asn <- upToProofReprStep (GeqProofRepr n (NR.decNat m))
-   , Refl <- NR.minusPlusCancel m (NR.knownNat @1)
-   -> AssignmentUpToRest asn $ GeqProofRepr n m
+natUpToIndex :: forall n maxn
+              . n <= maxn
+             => Proxy maxn
+             -> Size (CtxUpTo maxn)
+             -> NR.NatRepr n
+             -> Index (CtxUpTo maxn) n
+natUpToIndex _ sz n
+  | Just (Some idx) <- intIndex (fromIntegral $ NR.intValue n) sz
+  , Just Refl <- testNatIndex (Proxy @maxn) n idx
+  = idx
+natUpToIndex _ _ _ = error $ "boundedNatUpToIndex: impossible"
 
-upToProofRepr' :: NR.NatRepr n -> AssignmentUpTo (GeqProofRepr n) n
-upToProofRepr' n = upToProofReprStep (GeqProofRepr n n)
-
-assignmentFromUpTo :: AssignmentUpTo f n -> Assignment f (CtxUpTo n)
-assignmentFromUpTo asn = case asn of
-  AssignmentUpToZero a -> Ctx.empty :> a
-  AssignmentUpToRest asnUT a | Refl <- ctxUpToStep asnUT -> assignmentFromUpTo asnUT :> a
-
--- | The main result: an 'Assignment' of proofs about the consistency of each element.
-upToProofRepr :: NR.NatRepr n -> Assignment (GeqProofRepr n) (CtxUpTo n)
-upToProofRepr n = assignmentFromUpTo (upToProofRepr' n)
-
--- FIXME: I'm not sure why this isn't provable.
-ctxUpToStep :: f n -> CtxUpTo (n + 1) :~: (CtxUpTo n ::> (n + 1))
-ctxUpToStep _ = unsafeCoerce (Refl :: CtxUpTo n :~: CtxUpTo n)
 
 type family CtxReplicate k (n :: Nat) where
   CtxReplicate k 0 = EmptyCtx
   CtxReplicate k n = CtxReplicate k (n - 1) ::> k
 
-ctxReplicateStep :: forall k f n. f n -> CtxReplicate k (n + 1) :~: (CtxReplicate k n ::> k)
-ctxReplicateStep _ = unsafeCoerce (Refl :: CtxReplicate k n :~: CtxReplicate k n)
+#ifdef UNSAFE_OPS
+replicatedCtxPrf :: forall k n tp
+                  . NR.NatRepr n
+                 -> Size (CtxReplicate k n)
+                 -> Index (CtxReplicate k n) tp
+                 -> tp :~: k
+replicatedCtxPrf n sz idx = unsafeCoerce (Refl :: tp :~: tp)
+#else
+_ctxReplicateStep :: forall k f n. f n -> CtxReplicate k (n + 1) :~: (CtxReplicate k n ::> k)
+_ctxReplicateStep _ = unsafeCoerce (Refl :: CtxReplicate k n :~: CtxReplicate k n)
 
 noEmptyIndex :: Index EmptyCtx tp -> Void
 noEmptyIndex = error "impossible"
@@ -135,53 +132,13 @@ replicatedCtxPrf n sz idx =
   case NR.isZeroOrGT1 n of
     Left Refl -> absurd $ noEmptyIndex idx
     Right NR.LeqProof
-      | Refl <- ctxReplicateStep @k (NR.decNat n)
+      | Refl <- _ctxReplicateStep @k (NR.decNat n)
       , Refl <- NR.minusPlusCancel n (NR.knownNat @1)
       -> case viewIndex sz idx of
            IndexViewLast sz' -> Refl
            IndexViewInit idx' -> replicatedCtxPrf (NR.decNat n) (decSize sz) idx'
+#endif
 
-
-data GeqProofRepr (maxn :: Nat) (n :: Nat)  where
-  GeqProofRepr :: forall maxn n. (n <= maxn) => NR.NatRepr maxn -> NR.NatRepr n -> GeqProofRepr maxn n
-
-deriving instance Show (GeqProofRepr maxn n)
-deriving instance Eq (GeqProofRepr maxn n)
-
-instance ShowF (GeqProofRepr maxn) where
-  showF vnr = show vnr
-
-instance TestEquality (GeqProofRepr maxn) where
-  testEquality (GeqProofRepr _ nr) (GeqProofRepr _ nr') = testEquality nr nr'
-
-instance OrdF (GeqProofRepr maxn) where
-  compareF (GeqProofRepr _ nr) (GeqProofRepr _ nr') = compareF nr nr'
-
-withGeqProofRepr :: forall n maxn a
-                  . GeqProofRepr maxn n
-                 -> (n <= maxn => NR.LeqProof n maxn -> NR.NatRepr maxn -> NR.NatRepr n -> a)
-                 -> a
-withGeqProofRepr (GeqProofRepr maxn n) f = f (NR.leqProof n maxn) maxn n
-
-
-boundedNatToIndex :: forall ctx n
-                   . Size ctx
-                  -> GeqProofRepr (CtxSize ctx - 1) n
-                  -> Some (Index ctx)
-boundedNatToIndex sz vnr@(GeqProofRepr _ nr) =
-  case intIndex (fromIntegral $ NR.natValue nr) sz of
-    Just idx -> idx
-    _ -> error $ "boundedNatToIndex: impossible" ++ show vnr
-
-boundedNatUpToIndex :: forall n m
-                     . GeqProofRepr n m
-                    -> Index (CtxUpTo n) m
-boundedNatUpToIndex vnr@(GeqProofRepr maxnr nr) =
-  let
-    prfs = upToProofRepr maxnr
-  in case intIndex (fromIntegral $ NR.natValue nr) (Ctx.size prfs) of
-    Just (Some idx) | Just Refl <- testEquality (upToProofRepr maxnr ! idx) vnr -> idx
-    _ -> error $ "boundedNatUpToIndex: impossible" ++ show vnr
 
 -- Clagged from TyMap
 data TyFun :: k1 -> k2 -> Type
@@ -190,92 +147,6 @@ type family Apply (f :: TyFun k1 k2 -> Type) (x :: k1) :: k2
 type family MapContext (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1) :: Ctx.Ctx k2 where
   MapContext f Ctx.EmptyCtx = Ctx.EmptyCtx
   MapContext f (xs Ctx.::> x) = MapContext f xs Ctx.::> Apply f x
-
-data MapContextSzRepr f ctx fctx where
-  MapContextSzReprEmpty :: MapContextSzRepr f EmptyCtx EmptyCtx
-  MapContextSzReprCons :: MapContextSzRepr f ctx fctx
-                       -> Size (ctx ::> tp)
-                       -> MapContextSzRepr f (ctx ::> tp) (fctx ::> Apply f tp)
-
-getSizeFromRepr :: MapContextSzRepr f ctx fctx -> Size ctx
-getSizeFromRepr repr = case repr of
-  MapContextSzReprEmpty -> zeroSize
-  MapContextSzReprCons _ sz -> sz
-
-
-getPrfFromRepr :: MapContextSzRepr f ctx fctx -> MapContext f ctx :~: fctx
-getPrfFromRepr repr = case repr of
-  MapContextSzReprCons repr' _ | Refl <- getPrfFromRepr repr' -> Refl
-  MapContextSzReprEmpty -> Refl
-
-type family TailCtx (xs :: Ctx k) :: Ctx k where
-  TailCtx (xs ::> _) = xs
-
-type family HeadCtx (xs :: Ctx k) :: k where
-  HeadCtx (_ ::> x) = x
-
-
-mapContextToSzRepr :: forall (f :: TyFun k1 k2 -> Type) ctx
-                  . Proxy f
-                 -> Proxy ctx
-                 -> Size (MapContext f ctx)
-                 -> MapContextSzRepr f ctx (MapContext f ctx)
-mapContextToSzRepr pf pctx sz = case Ctx.viewSize sz of
-  ZeroSize | Refl <- mapContextEmpty pf pctx -> MapContextSzReprEmpty
-  IncSize sz' -> step sz'
-  where
-    step :: forall fctx ftp
-          . MapContext f ctx ~ (fctx Ctx.::> ftp)
-         => Size fctx
-         -> MapContextSzRepr f ctx (MapContext f ctx)
-    step sz'
-      | Refl <- mapContextExpand pf (Proxy @ctx)
-      , repr <- mapContextToSzRepr pf (Proxy @(TailCtx ctx)) sz'
-      , sz_tailctx <- getSizeFromRepr repr
-      = MapContextSzReprCons repr (incSize sz_tailctx)
-
--- proves that an index type is the result of some 'Apply'
-data IndexApplied f ctx ftp where
-  IndexApplied :: Index ctx tp -> IndexApplied f ctx (Apply f tp)
-
-skipIndexApplied :: IndexApplied f ctx ftp -> IndexApplied f (ctx ::> u) ftp
-skipIndexApplied (IndexApplied idx) = IndexApplied (skipIndex idx)
-
--- | From a 'MapContext' we can dervive an equivalent 'Index' in the range
--- context. The 'IndexApplied' datatype retains the proof that the type of the
--- 'Index' must be the result of the 'Apply' in the mapped context.
-getIndexApplied :: forall f ctx ftp
-                 . Proxy f
-                -> Proxy ctx
-                -> Size (MapContext f ctx)
-                -> Index (MapContext f ctx) ftp
-                -> IndexApplied f ctx ftp
-getIndexApplied pf pctx sz idx
- | szRepr <- mapContextToSzRepr pf pctx sz
- = case viewIndex sz idx of
-     IndexViewLast sz'
-       | Refl <- mapContextExpand pf pctx
-      -> IndexApplied $ lastIndex $ getSizeFromRepr szRepr
-     IndexViewInit idx'
-       | Refl <- mapContextExpand pf pctx
-       , idxAp <- getIndexApplied pf (Proxy @(TailCtx ctx)) (decSize sz) idx'
-      -> skipIndexApplied idxAp
-
--- injectivity assumptions about how 'MapContext' affects the structure of a context.
-mapContextExpand :: forall f ctx fctx ftp
-                  . MapContext f ctx ~ (fctx Ctx.::> ftp)
-                 => Proxy f
-                 -> Proxy ctx
-                 -> ctx :~: (TailCtx ctx ::> HeadCtx ctx)
-mapContextExpand _ = unsafeCoerce (Refl :: TailCtx ctx ::> HeadCtx ctx :~: TailCtx ctx ::> HeadCtx ctx)
-
-
-mapContextEmpty :: MapContext f ctx ~ Ctx.EmptyCtx
-                => Proxy f
-                -> Proxy ctx
-                -> ctx :~: Ctx.EmptyCtx
-mapContextEmpty _ = unsafeCoerce (Refl :: (Ctx.EmptyCtx :~: Ctx.EmptyCtx))
-
 
 applyMapContext :: forall (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1)
                         (g :: k2 -> Type) (h :: k1 -> Type)
@@ -287,16 +158,53 @@ applyMapContext p1 f asn = case Ctx.viewAssign asn of
   Ctx.AssignExtend asn' x -> applyMapContext p1 f asn' Ctx.:> f x
 -- fin
 
--- proofs about maps
-mapContextSize :: Proxy f -> Size ctx -> Size (MapContext f ctx)
+
+-- the mapped context has the same size/shape, so indexes and sizes
+-- are portable between them.
+#ifdef UNSAFE_OPS
+mapContextSize :: Proxy f
+               -> Size ctx
+               -> Size (MapContext f ctx)
+mapContextSize _ sz = unsafeCoerce sz
+
+mapContextIndex :: Proxy f
+                -> Size ctx
+                -> Index ctx tp
+                -> Index (MapContext f ctx) (Apply f tp)
+mapContextIndex _ _ idx = unsafeCoerce idx
+#else
+mapContextSize :: Proxy f
+               -> Size ctx
+               -> Size (MapContext f ctx)
 mapContextSize pf sz = case viewSize sz of
   ZeroSize -> zeroSize
   IncSize sz' -> incSize (mapContextSize pf sz')
 
-mapContextSizeRev :: forall ctx f. Proxy f -> Proxy ctx -> Size (MapContext f ctx) -> Size ctx
-mapContextSizeRev pf pctx sz = getSizeFromRepr $ mapContextToSzRepr pf pctx sz
-
-mapContextIndex :: Proxy f -> Size ctx -> Index ctx tp -> Index (MapContext f ctx) (Apply f tp)
+mapContextIndex :: Proxy f
+                -> Size ctx
+                -> Index ctx tp
+                -> Index (MapContext f ctx) (Apply f tp)
 mapContextIndex pf sz idx = case viewIndex sz idx of
   IndexViewLast sz' -> lastIndex (mapContextSize pf sz)
   IndexViewInit idx' -> skipIndex (mapContextIndex pf (decSize sz) idx')
+#endif
+
+data PairF (t1 :: k -> *) (t2 :: k -> *) (t :: k) where
+  PairF :: !(a t) -> !(b t) -> PairF a b t
+
+-- instance (KnownRepr t1 e1, KnownRepr t2 e2) => KnownRepr (PairF t1 t2) '(e1, e2) where
+--   knownRepr = PairF knownRepr knownRepr
+
+-- type family Fst k :: a where
+--   Fst '(a, b) = a
+
+-- type family Snd k :: b where
+--   Snd '(a, b) = b
+
+-- data FstWrapper :: TyFun (a, b) a -> Type
+
+-- type instance Apply FstWrapper k = Fst k
+
+-- data SndWrapper :: TyFun (a, b) b -> Type
+
+-- type instance Apply SndWrapper k = Snd k
