@@ -106,284 +106,53 @@ boolean __UnpredictableBehavior;
 
 // de-muxing the general registers into distinct globals
 
-type GPRStruct is (
-  bits(32) R0,
-  bits(32) R1,
-  bits(32) R2,
-  bits(32) R3,
-  bits(32) R4,
-  bits(32) R5,
-  bits(32) R6,
-  bits(32) R7,
-  bits(32) R8,
-  bits(32) R9,
-  bits(32) R10,
-  bits(32) R11,
-  bits(32) R12,
-  bits(32) R13,
-  bits(32) R14
-)
+type regidx = bits(4);
+array bits(32) GPRS[regidx];
 
-GPRStruct GPRS;
+// overriden by the translator
+GPR_Internal_Set(regidx idx, bits(32) value)
+  GPRS[idx] = value;
+  return;
 
-demuxRSet(integer n, bits(32) value)
-    case n of
-        when 0
-            GPRS.R0 = value;
-        when 1
-            GPRS.R1 = value;
-        when 2
-            GPRS.R2 = value;
-        when 3
-            GPRS.R3 = value;
-        when 4
-            GPRS.R4 = value;
-        when 5
-            GPRS.R5 = value;
-        when 6
-            GPRS.R6 = value;
-        when 7
-            GPRS.R7 = value;
-        when 8
-            GPRS.R8 = value;
-        when 9
-            GPRS.R9 = value;
-        when 10
-            GPRS.R10 = value;
-        when 11
-            GPRS.R11 = value;
-        when 12
-            GPRS.R12 = value;
-        when 13
-            GPRS.R13 = value;
-        when 14
-            GPRS.R14 = value;
-    return;
-
-bits(32) demuxRGet(integer n)
-    case n of
-        when 0
-            return GPRS.R0;
-        when 1
-            return GPRS.R1;
-        when 2
-            return GPRS.R2;
-        when 3
-            return GPRS.R3;
-        when 4
-            return GPRS.R4;
-        when 5
-            return GPRS.R5;
-        when 6
-            return GPRS.R6;
-        when 7
-            return GPRS.R7;
-        when 8
-            return GPRS.R8;
-        when 9
-            return GPRS.R9;
-        when 10
-            return GPRS.R10;
-        when 11
-            return GPRS.R11;
-        when 12
-            return GPRS.R12;
-        when 13
-            return GPRS.R13;
-        when 14
-            return GPRS.R14;
+// overriden by the translator
+bits(32) GPR_Internal_Get(regidx idx)
+  return GPRS[idx];
 
 _R[integer n] = bits(32) value
     assert n >= 0 && n <= 14;
-    demuxRSet(n, value);
+    bits(4) idx = Zeros(4);
+    idx = idx + n;
+    GPR_Internal_Set(idx, value);
 
 bits(32) _R[integer n]
     assert n >= 0 && n <= 14;
-    return demuxRGet(n);
+    bits(4) idx = Zeros(4);
+    idx = idx + n;
+    return GPR_Internal_Get(idx);
 
-// de-muxing the vector registers into distinct globals
+type simdidx = bits(8);
+array bits(128) SIMDS[simdidx];
 
-type SIMDStruct is (
-  bits(128) V0,
-  bits(128) V1,
-  bits(128) V2,
-  bits(128) V3,
-  bits(128) V4,
-  bits(128) V5,
-  bits(128) V6,
-  bits(128) V7,
-  bits(128) V8,
-  bits(128) V9,
-  bits(128) V10,
-  bits(128) V11,
-  bits(128) V12,
-  bits(128) V13,
-  bits(128) V14,
-  bits(128) V15,
-  bits(128) V16,
-  bits(128) V17,
-  bits(128) V18,
-  bits(128) V19,
-  bits(128) V20,
-  bits(128) V21,
-  bits(128) V22,
-  bits(128) V23,
-  bits(128) V24,
-  bits(128) V25,
-  bits(128) V26,
-  bits(128) V27,
-  bits(128) V28,
-  bits(128) V29,
-  bits(128) V30,
-  bits(128) V31
-)
-
-SIMDStruct SIMDS;
-
-demuxVSet(integer n, bits(128) value)
-    case n of
-        when 0
-            SIMDS.V0 = value;
-        when 1
-            SIMDS.V1 = value;
-        when 2
-            SIMDS.V2 = value;
-        when 3
-            SIMDS.V3 = value;
-        when 4
-            SIMDS.V4 = value;
-        when 5
-            SIMDS.V5 = value;
-        when 6
-            SIMDS.V6 = value;
-        when 7
-            SIMDS.V7 = value;
-        when 8
-            SIMDS.V8 = value;
-        when 9
-            SIMDS.V9 = value;
-        when 10
-            SIMDS.V10 = value;
-        when 11
-            SIMDS.V11 = value;
-        when 12
-            SIMDS.V12 = value;
-        when 13
-            SIMDS.V13 = value;
-        when 14
-            SIMDS.V14 = value;
-        when 15
-            SIMDS.V15 = value;
-        when 16
-            SIMDS.V16 = value;
-        when 17
-            SIMDS.V17 = value;
-        when 18
-            SIMDS.V18 = value;
-        when 19
-            SIMDS.V19 = value;
-        when 20
-            SIMDS.V20 = value;
-        when 21
-            SIMDS.V21 = value;
-        when 22
-            SIMDS.V22 = value;
-        when 23
-            SIMDS.V23 = value;
-        when 24
-            SIMDS.V24 = value;
-        when 25
-            SIMDS.V25 = value;
-        when 26
-            SIMDS.V26 = value;
-        when 27
-            SIMDS.V27 = value;
-        when 28
-            SIMDS.V28 = value;
-        when 29
-            SIMDS.V29 = value;
-        when 30
-            SIMDS.V30 = value;
-        when 31
-            SIMDS.V31 = value;
+// overriden by the translator
+SIMD_Internal_Set(simdidx idx, bits(128) value)
+    SIMDS[idx] = value;
     return;
 
-
-bits(128) demuxVGet(integer n)
-    case n of
-        when 0
-            return SIMDS.V0;
-        when 1
-            return SIMDS.V1;
-        when 2
-            return SIMDS.V2;
-        when 3
-            return SIMDS.V3;
-        when 4
-            return SIMDS.V4;
-        when 5
-            return SIMDS.V5;
-        when 6
-            return SIMDS.V6;
-        when 7
-            return SIMDS.V7;
-        when 8
-            return SIMDS.V8;
-        when 9
-            return SIMDS.V9;
-        when 10
-            return SIMDS.V10;
-        when 11
-            return SIMDS.V11;
-        when 12
-            return SIMDS.V12;
-        when 13
-            return SIMDS.V13;
-        when 14
-            return SIMDS.V14;
-        when 15
-            return SIMDS.V15;
-        when 16
-            return SIMDS.V16;
-        when 17
-            return SIMDS.V17;
-        when 18
-            return SIMDS.V18;
-        when 19
-            return SIMDS.V19;
-        when 20
-            return SIMDS.V20;
-        when 21
-            return SIMDS.V21;
-        when 22
-            return SIMDS.V22;
-        when 23
-            return SIMDS.V23;
-        when 24
-            return SIMDS.V24;
-        when 25
-            return SIMDS.V25;
-        when 26
-            return SIMDS.V26;
-        when 27
-            return SIMDS.V27;
-        when 28
-            return SIMDS.V28;
-        when 29
-            return SIMDS.V29;
-        when 30
-            return SIMDS.V30;
-        when 31
-            return SIMDS.V31;
+// overriden by the translator
+bits(128) SIMD_Internal_Get(simdidx idx)
+  return SIMDS[idx];
 
 _V[integer n] = bits(128) value
     assert n >= 0 && n <= 31;
-    demuxVSet(n, value);
+    bits(8) idx = Zeros(8);
+    idx = idx + n;
+    SIMD_Internal_Set(idx, value);
 
 bits(128) _V[integer n]
     assert n >= 0 && n <= 31;
-    return demuxVGet(n);
-
+    bits(8) idx = Zeros(8);
+    idx = idx + n;
+    return SIMD_Internal_Get(idx);
 
 bits(32) _PC;
 

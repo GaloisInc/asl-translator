@@ -546,95 +546,24 @@
     (QualifiedIdentifier Any __UnpredictableBehavior)
     (TypeRef
       (QualifiedIdentifier Any boolean)))
-  (DefTypeStruct
-    (QualifiedIdentifier Any GPRStruct)
-    (list
-      (SymDecl
-        R0
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        R1
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        R2
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        R3
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        R4
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        R5
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        R6
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        R7
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        R8
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        R9
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        R10
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        R11
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        R12
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        R13
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        R14
-        (TypeFun
-          bits
-          (ExprLitNat 32)))))
-  (DefVariable
-    (QualifiedIdentifier Any GPRS)
-    (TypeRef
-      (QualifiedIdentifier Any GPRStruct)))
+  (DefTypeAlias
+    regidx
+    (TypeFun
+      bits
+      (ExprLitNat 4)))
+  (DefArray
+    GPRS
+    (TypeFun
+      bits
+      (ExprLitNat 32))
+    (IxTypeRef regidx))
   (DefCallable
-    (QualifiedIdentifier Any demuxRSet)
+    (QualifiedIdentifier Any GPR_Internal_Set)
     (list
       (SymDecl
-        n
+        idx
         (TypeRef
-          (QualifiedIdentifier Any integer)))
+          (QualifiedIdentifier Any regidx)))
       (SymDecl
         value
         (TypeFun
@@ -644,213 +573,24 @@
     (Just
       (StmtBlock
         (list
-          (StmtCase
+          (StmtAssign
+            (LValArrayIndex
+              (LValVarRef
+                (QualifiedIdentifier Any GPRS))
+              (list
+                (SliceSingle
+                  (ExprVarRef
+                    (QualifiedIdentifier Any idx)))))
             (ExprVarRef
-              (QualifiedIdentifier Any n))
-            (list
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 0))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any GPRS))
-                        R0)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 1))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any GPRS))
-                        R1)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 2))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any GPRS))
-                        R2)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 3))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any GPRS))
-                        R3)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 4))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any GPRS))
-                        R4)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 5))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any GPRS))
-                        R5)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 6))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any GPRS))
-                        R6)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 7))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any GPRS))
-                        R7)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 8))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any GPRS))
-                        R8)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 9))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any GPRS))
-                        R9)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 10))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any GPRS))
-                        R10)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 11))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any GPRS))
-                        R11)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 12))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any GPRS))
-                        R12)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 13))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any GPRS))
-                        R13)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 14))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any GPRS))
-                        R14)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))))
+              (QualifiedIdentifier Any value)))
           (StmtReturn Nothing)))))
   (DefCallable
-    (QualifiedIdentifier Any demuxRGet)
+    (QualifiedIdentifier Any GPR_Internal_Get)
     (list
       (SymDecl
-        n
+        idx
         (TypeRef
-          (QualifiedIdentifier Any integer))))
+          (QualifiedIdentifier Any regidx))))
     (Just
       (ReturnType
         (list
@@ -860,190 +600,15 @@
     (Just
       (StmtBlock
         (list
-          (StmtCase
-            (ExprVarRef
-              (QualifiedIdentifier Any n))
-            (list
-              (CaseAltWhen
+          (StmtReturn
+            (Just
+              (ExprIndex
+                (ExprVarRef
+                  (QualifiedIdentifier Any GPRS))
                 (list
-                  (CasePatternNat 0))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any GPRS))
-                          R0))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 1))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any GPRS))
-                          R1))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 2))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any GPRS))
-                          R2))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 3))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any GPRS))
-                          R3))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 4))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any GPRS))
-                          R4))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 5))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any GPRS))
-                          R5))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 6))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any GPRS))
-                          R6))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 7))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any GPRS))
-                          R7))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 8))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any GPRS))
-                          R8))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 9))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any GPRS))
-                          R9))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 10))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any GPRS))
-                          R10))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 11))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any GPRS))
-                          R11))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 12))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any GPRS))
-                          R12))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 13))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any GPRS))
-                          R13))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 14))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any GPRS))
-                          R14))))))))))))
+                  (SliceSingle
+                    (ExprVarRef
+                      (QualifiedIdentifier Any idx)))))))))))
   (DefSetter
     (QualifiedIdentifier Any _R)
     (Just
@@ -1074,11 +639,30 @@
                 (ExprVarRef
                   (QualifiedIdentifier Any n))
                 (ExprLitNat 14))))
+          (StmtVarDeclInit
+            (SymDecl
+              idx
+              (TypeFun
+                bits
+                (ExprLitNat 4)))
+            (ExprCall
+              (QualifiedIdentifier Any Zeros)
+              (list
+                (ExprLitNat 4))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any idx))
+            (ExprBinOp
+              "+"
+              (ExprVarRef
+                (QualifiedIdentifier Any idx))
+              (ExprVarRef
+                (QualifiedIdentifier Any n))))
           (StmtCall
-            (QualifiedIdentifier Any demuxRSet)
+            (QualifiedIdentifier Any GPR_Internal_Set)
             (list
               (ExprVarRef
-                (QualifiedIdentifier Any n))
+                (QualifiedIdentifier Any idx))
               (ExprVarRef
                 (QualifiedIdentifier Any value))))))))
   (DefGetter
@@ -1110,187 +694,50 @@
                 (ExprVarRef
                   (QualifiedIdentifier Any n))
                 (ExprLitNat 14))))
+          (StmtVarDeclInit
+            (SymDecl
+              idx
+              (TypeFun
+                bits
+                (ExprLitNat 4)))
+            (ExprCall
+              (QualifiedIdentifier Any Zeros)
+              (list
+                (ExprLitNat 4))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any idx))
+            (ExprBinOp
+              "+"
+              (ExprVarRef
+                (QualifiedIdentifier Any idx))
+              (ExprVarRef
+                (QualifiedIdentifier Any n))))
           (StmtReturn
             (Just
               (ExprCall
-                (QualifiedIdentifier Any demuxRGet)
+                (QualifiedIdentifier Any GPR_Internal_Get)
                 (list
                   (ExprVarRef
-                    (QualifiedIdentifier Any n))))))))))
-  (DefTypeStruct
-    (QualifiedIdentifier Any SIMDStruct)
-    (list
-      (SymDecl
-        V0
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V1
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V2
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V3
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V4
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V5
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V6
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V7
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V8
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V9
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V10
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V11
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V12
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V13
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V14
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V15
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V16
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V17
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V18
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V19
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V20
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V21
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V22
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V23
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V24
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V25
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V26
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V27
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V28
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V29
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V30
-        (TypeFun
-          bits
-          (ExprLitNat 128)))
-      (SymDecl
-        V31
-        (TypeFun
-          bits
-          (ExprLitNat 128)))))
-  (DefVariable
-    (QualifiedIdentifier Any SIMDS)
-    (TypeRef
-      (QualifiedIdentifier Any SIMDStruct)))
+                    (QualifiedIdentifier Any idx))))))))))
+  (DefTypeAlias
+    simdidx
+    (TypeFun
+      bits
+      (ExprLitNat 8)))
+  (DefArray
+    SIMDS
+    (TypeFun
+      bits
+      (ExprLitNat 128))
+    (IxTypeRef simdidx))
   (DefCallable
-    (QualifiedIdentifier Any demuxVSet)
+    (QualifiedIdentifier Any SIMD_Internal_Set)
     (list
       (SymDecl
-        n
+        idx
         (TypeRef
-          (QualifiedIdentifier Any integer)))
+          (QualifiedIdentifier Any simdidx)))
       (SymDecl
         value
         (TypeFun
@@ -1300,434 +747,24 @@
     (Just
       (StmtBlock
         (list
-          (StmtCase
+          (StmtAssign
+            (LValArrayIndex
+              (LValVarRef
+                (QualifiedIdentifier Any SIMDS))
+              (list
+                (SliceSingle
+                  (ExprVarRef
+                    (QualifiedIdentifier Any idx)))))
             (ExprVarRef
-              (QualifiedIdentifier Any n))
-            (list
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 0))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V0)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 1))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V1)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 2))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V2)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 3))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V3)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 4))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V4)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 5))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V5)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 6))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V6)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 7))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V7)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 8))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V8)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 9))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V9)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 10))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V10)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 11))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V11)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 12))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V12)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 13))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V13)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 14))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V14)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 15))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V15)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 16))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V16)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 17))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V17)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 18))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V18)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 19))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V19)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 20))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V20)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 21))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V21)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 22))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V22)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 23))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V23)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 24))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V24)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 25))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V25)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 26))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V26)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 27))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V27)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 28))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V28)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 29))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V29)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 30))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V30)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 31))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtAssign
-                      (LValMember
-                        (LValVarRef
-                          (QualifiedIdentifier Any SIMDS))
-                        V31)
-                      (ExprVarRef
-                        (QualifiedIdentifier Any value))))))))
+              (QualifiedIdentifier Any value)))
           (StmtReturn Nothing)))))
   (DefCallable
-    (QualifiedIdentifier Any demuxVGet)
+    (QualifiedIdentifier Any SIMD_Internal_Get)
     (list
       (SymDecl
-        n
+        idx
         (TypeRef
-          (QualifiedIdentifier Any integer))))
+          (QualifiedIdentifier Any simdidx))))
     (Just
       (ReturnType
         (list
@@ -1737,394 +774,15 @@
     (Just
       (StmtBlock
         (list
-          (StmtCase
-            (ExprVarRef
-              (QualifiedIdentifier Any n))
-            (list
-              (CaseAltWhen
+          (StmtReturn
+            (Just
+              (ExprIndex
+                (ExprVarRef
+                  (QualifiedIdentifier Any SIMDS))
                 (list
-                  (CasePatternNat 0))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V0))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 1))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V1))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 2))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V2))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 3))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V3))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 4))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V4))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 5))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V5))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 6))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V6))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 7))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V7))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 8))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V8))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 9))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V9))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 10))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V10))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 11))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V11))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 12))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V12))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 13))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V13))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 14))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V14))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 15))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V15))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 16))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V16))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 17))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V17))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 18))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V18))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 19))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V19))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 20))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V20))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 21))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V21))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 22))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V22))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 23))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V23))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 24))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V24))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 25))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V25))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 26))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V26))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 27))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V27))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 28))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V28))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 29))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V29))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 30))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V30))))))
-              (CaseAltWhen
-                (list
-                  (CasePatternNat 31))
-                Nothing
-                (StmtBlock
-                  (list
-                    (StmtReturn
-                      (Just
-                        (ExprMember
-                          (ExprVarRef
-                            (QualifiedIdentifier Any SIMDS))
-                          V31))))))))))))
+                  (SliceSingle
+                    (ExprVarRef
+                      (QualifiedIdentifier Any idx)))))))))))
   (DefSetter
     (QualifiedIdentifier Any _V)
     (Just
@@ -2155,11 +813,30 @@
                 (ExprVarRef
                   (QualifiedIdentifier Any n))
                 (ExprLitNat 31))))
+          (StmtVarDeclInit
+            (SymDecl
+              idx
+              (TypeFun
+                bits
+                (ExprLitNat 8)))
+            (ExprCall
+              (QualifiedIdentifier Any Zeros)
+              (list
+                (ExprLitNat 8))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any idx))
+            (ExprBinOp
+              "+"
+              (ExprVarRef
+                (QualifiedIdentifier Any idx))
+              (ExprVarRef
+                (QualifiedIdentifier Any n))))
           (StmtCall
-            (QualifiedIdentifier Any demuxVSet)
+            (QualifiedIdentifier Any SIMD_Internal_Set)
             (list
               (ExprVarRef
-                (QualifiedIdentifier Any n))
+                (QualifiedIdentifier Any idx))
               (ExprVarRef
                 (QualifiedIdentifier Any value))))))))
   (DefGetter
@@ -2191,13 +868,32 @@
                 (ExprVarRef
                   (QualifiedIdentifier Any n))
                 (ExprLitNat 31))))
+          (StmtVarDeclInit
+            (SymDecl
+              idx
+              (TypeFun
+                bits
+                (ExprLitNat 8)))
+            (ExprCall
+              (QualifiedIdentifier Any Zeros)
+              (list
+                (ExprLitNat 8))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any idx))
+            (ExprBinOp
+              "+"
+              (ExprVarRef
+                (QualifiedIdentifier Any idx))
+              (ExprVarRef
+                (QualifiedIdentifier Any n))))
           (StmtReturn
             (Just
               (ExprCall
-                (QualifiedIdentifier Any demuxVGet)
+                (QualifiedIdentifier Any SIMD_Internal_Get)
                 (list
                   (ExprVarRef
-                    (QualifiedIdentifier Any n))))))))))
+                    (QualifiedIdentifier Any idx))))))))))
   (DefVariable
     (QualifiedIdentifier Any _PC)
     (TypeFun

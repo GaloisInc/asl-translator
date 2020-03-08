@@ -2609,6 +2609,59 @@ arithmeticOverrides expr ty = case expr of
       tp -> X.throw $ ExpectedIntegerType e tp
   _ -> Nothing
 
+mkRegisterGetCall :: T.Text
+                  -> T.Text
+                  -> CT.TypeRepr idxtp
+                  -> WT.BaseTypeRepr valtp
+                  -> AS.Expr
+                  -> Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData)
+mkRegisterGetCall nm globalsName idxtp valuetp idxExpr = do
+  Some idx <- translateExpr overrides idxExpr
+  Refl <- assertAtomType idxExpr idxtp  idx
+  globals <- MS.gets tsGlobals
+  Just (Some gprs) <- return $ Map.lookup globalsName globals
+  gprsAtom <- (liftGenerator $ CCG.readGlobal gprs) >>= mkAtom
+  let gprsType = CCG.typeOfAtom gprsAtom
+  let uf = UF nm UFCached valuetp
+             (Ctx.empty
+              Ctx.:> gprsType
+              Ctx.:> idxtp)
+             (Ctx.empty
+              Ctx.:> (CCG.AtomExpr gprsAtom)
+              Ctx.:> (CCG.AtomExpr idx))
+  atom <- mkAtom (CCG.App (CCE.ExtensionApp uf))
+  return (Some atom, TypeBasic)
+
+mkRegisterSetCall :: T.Text
+                  -> T.Text
+                  -> CT.TypeRepr idxtp
+                  -> CT.TypeRepr valtp
+                  -> AS.Expr
+                  -> AS.Expr
+                  -> Generator h s arch ret ()
+mkRegisterSetCall nm globalsName idxtp valuetp idxExpr valueExpr = do
+  Some idx <- translateExpr overrides idxExpr
+  Refl <- assertAtomType idxExpr idxtp  idx
+  Some value <- translateExpr overrides valueExpr
+  Refl <- assertAtomType valueExpr valuetp value
+  globals <- MS.gets tsGlobals
+  Just (Some gprs) <- return $ Map.lookup globalsName globals
+  gprsAtom <- (liftGenerator $ CCG.readGlobal gprs) >>= mkAtom
+  let gprsType = CCG.typeOfAtom gprsAtom
+  Just Refl <- return $ toFromBaseProof gprsType
+  let uf = UF nm UFCached (asBaseType' gprsType)
+             (Ctx.empty
+              Ctx.:> gprsType
+              Ctx.:> idxtp
+              Ctx.:> valuetp)
+             (Ctx.empty
+              Ctx.:> (CCG.AtomExpr gprsAtom)
+              Ctx.:> (CCG.AtomExpr idx)
+              Ctx.:> (CCG.AtomExpr value))
+  liftGenerator $ CCG.writeGlobal gprs (CCG.App (CCE.ExtensionApp uf))
+
+
+
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
   where overrideStmt :: forall h s ret . AS.Stmt -> Maybe (Generator h s arch ret ())
@@ -2658,6 +2711,18 @@ overrides = Overrides {..}
           AS.StmtCall (AS.QualifiedIdentifier _ nm) [_]
             | nm `elem` ["print", "putchar"] -> Just $ do
               return ()
+          AS.StmtCall (AS.QualifiedIdentifier _ "GPR_Internal_Set") [idxExpr, valueExpr] ->
+            Just $ mkRegisterSetCall "gpr_set" "GPRS"
+              (CT.BVRepr (NR.knownNat @4))
+              (CT.BVRepr (NR.knownNat @32))
+              idxExpr
+              valueExpr
+          AS.StmtCall (AS.QualifiedIdentifier _ "SIMD_Internal_Set") [idxExpr, valueExpr] ->
+            Just $ mkRegisterSetCall "simd_set" "SIMDS"
+              (CT.BVRepr (NR.knownNat @8))
+              (CT.BVRepr (NR.knownNat @128))
+              idxExpr
+              valueExpr
           AS.StmtCall (AS.QualifiedIdentifier _ "Mem_Internal_Set") [addrExpr, szExpr, valueExpr] -> Just $ do
             Some addr <- translateExpr overrides addrExpr
             Refl <- assertAtomType addrExpr (CT.BVRepr (WT.knownNat @32)) addr
@@ -2718,6 +2783,16 @@ overrides = Overrides {..}
                       WT.NatCaseLT _ ->
                         throwTrace $ UnexpectedBitvectorLength (CT.BVRepr lenRepr) (CT.BVRepr bvRepr)
                 _ -> throwTrace $ RequiredConcreteValue lenE (staticEnvMapVals env)
+            AS.ExprCall (AS.QualifiedIdentifier _ "GPR_Internal_Get") [idxExpr] ->
+              Just $ mkRegisterGetCall "gpr_get" "GPRS"
+                (CT.BVRepr (NR.knownNat @4))
+                (WT.BaseBVRepr (NR.knownNat @32)) idxExpr
+
+            AS.ExprCall (AS.QualifiedIdentifier _ "SIMD_Internal_Get") [idxExpr] ->
+              Just $ mkRegisterGetCall "simd_get" "SIMDS"
+                (CT.BVRepr (NR.knownNat @8))
+                (WT.BaseBVRepr (NR.knownNat @128)) idxExpr
+
             AS.ExprCall (AS.QualifiedIdentifier _ "Mem_Internal_Get") [addrExpr, szExpr] -> Just $ do
               Some addr <- translateExpr overrides addrExpr
               Refl <- assertAtomType addrExpr (CT.BVRepr (WT.knownNat @32)) addr

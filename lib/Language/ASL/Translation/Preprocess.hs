@@ -495,6 +495,7 @@ computeIdxType :: AS.IndexType -> SigM ext f (Some WT.BaseTypeRepr)
 computeIdxType ixt = case ixt of
   AS.IxTypeRange _ _ -> return $ Some WT.BaseIntegerRepr
   AS.IxTypeRef "regidx" -> return $ Some (WT.BaseBVRepr (WT.knownNat @4))
+  AS.IxTypeRef "simdidx" -> return $ Some (WT.BaseBVRepr (WT.knownNat @8))
   AS.IxTypeRef nm -> error $ "Unsupported index type: " ++ show nm
 
 buildSigState :: ASLSpec -> LogCfg -> IO (SigEnv, SigState)
