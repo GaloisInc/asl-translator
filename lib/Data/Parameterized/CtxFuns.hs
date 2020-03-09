@@ -33,6 +33,7 @@ module Data.Parameterized.CtxFuns
   , mapContextSize
   , mapContextIndex
   , PairF(..)
+  , unzipPairF
   ) where
 
 import           GHC.TypeLits
@@ -191,6 +192,14 @@ mapContextIndex pf sz idx = case viewIndex sz idx of
 
 data PairF (t1 :: k -> *) (t2 :: k -> *) (t :: k) where
   PairF :: !(a t) -> !(b t) -> PairF a b t
+
+unzipPairF :: Ctx.Assignment (PairF a b) ctx -> (Ctx.Assignment a ctx, Ctx.Assignment b ctx)
+unzipPairF asn = case Ctx.viewAssign asn of
+  Ctx.AssignEmpty -> (Ctx.empty, Ctx.empty)
+  Ctx.AssignExtend asn' (PairF a b) ->
+    let
+      (asna, asnb) = unzipPairF asn'
+    in (asna Ctx.:> a, asnb Ctx.:> b)
 
 -- instance (KnownRepr t1 e1, KnownRepr t2 e2) => KnownRepr (PairF t1 t2) '(e1, e2) where
 --   knownRepr = PairF knownRepr knownRepr

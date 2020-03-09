@@ -17,5 +17,9 @@ main :: IO ()
 main = do
   Some r <- liftIO $ newIONonceGenerator
   sym <- liftIO $ B.newExprBuilder B.FloatRealRepr NoBuilderData r
-  _ <- ASL.getFormulas sym Map.empty
+  putStrLn "Reading function formulas.."
+  _ <- ASL.getFunctionFormulas sym Map.empty
+  putStrLn "Reading instruction formulas.."
+  _ <- ASL.getInstructionFormulas sym Map.empty
+  putStrLn "Success!"
   return ()

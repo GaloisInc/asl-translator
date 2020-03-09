@@ -48,6 +48,7 @@ import qualified Control.Monad.Except as E
 import           Control.Monad.IO.Class
 import qualified Control.Monad.Fail as MF
 
+import           Data.Either ( partitionEithers )
 import           Data.Map ( Map )
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -117,7 +118,8 @@ import           Util.Log ( MonadLog(..), logIntToLvl, logMsgStr )
 data TranslatorOptions = TranslatorOptions
   { optVerbosity :: Integer
   , optNumberOfInstructions :: Maybe Int
-  , optFilters :: Filters
+  , optTranslationMode :: TranslationMode
+  , optSimulationMode :: SimulationMode
   , optCollectAllExceptions :: Bool
   , optCollectExpectedExceptions :: Bool
   , optTranslationDepth :: TranslationDepth
@@ -134,8 +136,10 @@ data FilePathConfig = FilePathConfig
   , fpRegs :: FilePath
   , fpSupport :: FilePath
   , fpExtraDefs :: FilePath
-  , fpOutput :: FilePath
-  , fpNormOutput :: FilePath
+  , fpOutFuns :: FilePath
+  , fpOutInstrs :: FilePath
+  , fpNormFuns :: FilePath
+  , fpNormInstrs :: FilePath
   , fpDataRoot :: FilePath
   }
 
@@ -156,15 +160,18 @@ defaultFilePaths = FilePathConfig
   , fpRegs = "arm_regs.sexpr"
   , fpSupport = "support.sexpr"
   , fpExtraDefs = "extra_defs.sexpr"
-  , fpOutput = "./output/formulas.what4"
-  , fpNormOutput = "./output/formulas-norm.what4"
+  , fpOutFuns = "./output/functions.what4"
+  , fpOutInstrs = "./output/instructions.what4"
+  , fpNormFuns = "./output/functions-norm.what4"
+  , fpNormInstrs = "./output/instructions-norm.what4"
   }
 
 defaultOptions :: Log.LogCfg -> TranslatorOptions
 defaultOptions logCfg = TranslatorOptions
   { optVerbosity = 1
   , optNumberOfInstructions = Nothing
-  , optFilters = (fromJust $ getTranslationMode "Arch32") noFilter
+  , optTranslationMode = TranslateAArch32
+  , optSimulationMode = SimulateAll
   , optCollectAllExceptions = False
   , optCollectExpectedExceptions = True
   , optTranslationDepth = TranslateRecursive
@@ -172,7 +179,7 @@ defaultOptions logCfg = TranslatorOptions
   , optFilePaths = defaultFilePaths
   , optLogCfg = logCfg
   , optParallel = False
-  , optNormalizeMode = NoNormalize
+  , optNormalizeMode = NormalizeNone
   }
 
 
@@ -188,9 +195,18 @@ defaultStatOptions = StatOptions
 data TranslationDepth = TranslateRecursive
                       | TranslateShallow
 
-data NormalizeMode = OnlyNormalize
-                   | TranslateAndNormalize
-                   | NoNormalize
+data TranslationMode = TranslateAArch32
+                     | TranslateInstruction (T.Text, T.Text)
+
+data SimulationMode = SimulateAll
+                    | SimulateFunctions
+                    | SimulateInstructions
+                    | SimulateInstruction (T.Text, T.Text)
+                    | SimulateNone
+
+data NormalizeMode = NormalizeAll
+                   | NormalizeFunctions
+                   | NormalizeNone
  deriving (Eq, Show)
 
 runWithFilters :: HasCallStack => TranslatorOptions -> IO (SigMap arch)
@@ -207,45 +223,73 @@ runWithFilters opts = do
 
 data BuilderData t = NoBuilderData
 
-optFormulaOutputFilePath :: TranslatorOptions -> FilePath
-optFormulaOutputFilePath opts = fpOutput (optFilePaths opts)
-
-optNormFormulaOutputFilePath :: TranslatorOptions -> FilePath
-optNormFormulaOutputFilePath opts = fpNormOutput (optFilePaths opts)
-
 readAndNormalize :: TranslatorOptions -> IO ()
 readAndNormalize opts = do
-  let out = optFormulaOutputFilePath opts
-  logMsgIO opts 0 $ "Reading formulas from: " ++ out
-  sexpr <- T.readFile (optFormulaOutputFilePath opts) >>= FS.parseSExpr
+  let
+    FilePathConfig { fpOutFuns, fpOutInstrs, fpNormFuns, fpNormInstrs, ..} = optFilePaths opts
+
+  logMsgIO opts 0 $ "Reading functions from: " ++ fpOutFuns
+  funsexpr <- T.readFile fpOutFuns >>= FS.parseSExpr
+  minstsexpr <- case optNormalizeMode opts of
+    NormalizeFunctions -> return Nothing
+    _ -> do
+      logMsgIO opts 0 $ "Reading instructions from: " ++ fpOutInstrs
+      Just <$> (T.readFile fpOutInstrs >>= FS.parseSExpr)
   logMsgIO opts 0 $ "Normalizing formulas.."
-  sexpr' <- FS.normalizeSymFnEnv sexpr
-  let outnorm = optNormFormulaOutputFilePath opts
-  logMsgIO opts 0 $ "Writing normalized formulas to: " ++ outnorm
-  txt <- return $ FS.printSExpr $ sexpr'
-  T.writeFile outnorm txt
+  (funsexpr', minstsexpr') <- FS.normalizeSymFnEnv funsexpr minstsexpr
+
+  logMsgIO opts 0 $ "Writing normalized formulas to: " ++ fpNormFuns
+  T.writeFile fpNormFuns (FS.printSExpr $ funsexpr')
+  case minstsexpr' of
+    Just instsexpr' -> do
+      logMsgIO opts 0 $ "Writing normalized instructions to: " ++ fpNormInstrs
+      T.writeFile fpNormInstrs (FS.printSExpr $ instsexpr')
+    Nothing -> return ()
+
+
+
+simulateInstructions :: TranslatorOptions -> Bool
+simulateInstructions (optSimulationMode -> smode) = case smode of
+  SimulateAll -> True
+  SimulateInstructions -> True
+  SimulateInstruction _ -> True
+  _ -> False
+
+simulateFunctions :: TranslatorOptions -> Bool
+simulateFunctions (optSimulationMode -> smode) = case smode of
+  SimulateAll -> True
+  SimulateFunctions -> True
+  _ -> False
+
 
 serializeFormulas :: TranslatorOptions -> SigMap arch -> IO ()
 serializeFormulas opts (sFormulaPromises -> promises) = do
-  formulas <- reverse <$> mapM getFormula promises
-  let out = optFormulaOutputFilePath opts
-  sexpr <- return $ FS.assembleSymFnEnv formulas
-  logMsgIO opts 0 $ "Writing formulas to: " ++ out
-  txt <- return $ FS.printSExpr $ sexpr
-  T.writeFile out txt
-  logMsgIO opts 0 $ "Serialization successful."
-  case optNormalizeMode opts of
-    TranslateAndNormalize -> do
-      readAndNormalize opts
-      when (optCheckSerialization opts) $ checkSerialization opts (optNormFormulaOutputFilePath opts)
-    NoNormalize -> do
-      when (optCheckSerialization opts) $ checkSerialization opts out
-    x -> error $ "Unexpected normalization mode: " ++ show x
+  let
+    FilePathConfig { fpOutFuns, fpOutInstrs, fpNormFuns, fpNormInstrs, ..} = optFilePaths opts
+
+  (instrs, funs) <- (partitionEithers . reverse) <$> mapM getFormula promises
+
+  when (simulateFunctions opts) $
+    doSerialize fpOutFuns funs
+  when (simulateInstructions opts) $
+    doSerialize fpOutInstrs instrs
   where
-    getFormula :: (T.Text, IO (Either SimulationException FS.SExpr)) -> IO FS.SExpr
-    getFormula (name, getresult) = getresult >>= \case
-      Left err -> X.throw err
-      Right result -> return result
+    doSerialize :: FilePath -> [FS.SExpr] -> IO ()
+    doSerialize out sexprs = do
+      logMsgIO opts 0 $ "Writing formulas to: " ++ out
+      allsexpr <- return $ FS.assembleSymFnEnv sexprs
+      txt <- return $ FS.printSExpr $ allsexpr
+      T.writeFile out txt
+      logMsgIO opts 0 $ "Serialization successful."
+      when (optCheckSerialization opts) $ do
+        checkSerialization opts out
+
+    getFormula :: (ElemKey, IO FS.SExpr) -> IO (Either FS.SExpr FS.SExpr)
+    getFormula (key, getresult) = do
+      result <- getresult
+      case key of
+        KeyInstr _ -> return $ Left result
+        KeyFun _ -> return $ Right result
 
 checkSerialization :: TranslatorOptions -> FilePath -> IO ()
 checkSerialization opts fp = do
@@ -253,10 +297,12 @@ checkSerialization opts fp = do
   Some r <- liftIO $ newIONonceGenerator
   sym <- liftIO $ B.newExprBuilder B.FloatRealRepr NoBuilderData r
   sexpr <- T.readFile fp >>= FS.parseSExpr
-  _ <- FS.deserializeSymFnEnv sym Map.empty (FS.filteredFunctionMaker sym validUninterpFunction) sexpr
+  _ <- FS.deserializeSymFnEnv sym Map.empty (functionMaker sym) sexpr
   logMsgIO opts 0 $ "Deserializing successful."
   return ()
 
+functionMaker :: WI.IsSymExprBuilder sym => sym -> FS.FunctionMaker sym
+functionMaker sym = FS.filteredFunctionMaker validUninterpFunction (FS.uninterpFunctionMaker sym)
 
 validUninterpFunction :: T.Text -> Bool
 validUninterpFunction nm =
@@ -446,7 +492,6 @@ mkUndefBVUF n
   = ("UNDEFINED_bitvector_" <> T.pack (show n), (Some Ctx.empty, Some (WI.BaseBVRepr nr)))
 
 
-
 addUFS :: [(T.Text, ((Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr)))] -> SigMapM arch ()
 addUFS sigs = do
   Just ufs <- withOnlineBackend (KeyFun "memory") $ \sym -> do
@@ -454,7 +499,7 @@ addUFS sigs = do
       let symbol = U.makeSymbol (T.unpack name)
       symFn <- WI.freshTotalUninterpFn sym symbol argTs retT
       return $ (name, SomeSymFn symFn)
-  mapM_ (\(name, SomeSymFn symFn) -> addFormula name symFn) ufs
+  mapM_ (\(name, SomeSymFn symFn) -> addFormula (KeyFun name) symFn) ufs
 
 -- Extremely vague measure of function body size
 measureStmts :: [AS.Stmt] -> Int
@@ -495,20 +540,21 @@ maybeSimulateFunction :: InstructionIdent
                       -> Maybe (AC.Function arch globalReads globalWrites init tps)
                       -> SigMapM arch ()
 maybeSimulateFunction _ _ Nothing = return ()
-maybeSimulateFunction fromInstr name (Just func) =
- isKeySimFilteredOut fromInstr (KeyFun name) >>= \case
-   False -> simulateGenFunction name (\cfg -> U.SomeSome <$> ASL.simulateFunction cfg func)
-   True -> mkUninterpretedFun (KeyFun name) (AC.funcSig func)
+maybeSimulateFunction fromInstr name (Just func) = do
+  let key = KeyFun name
+  isKeySimFilteredOut fromInstr key >>= \case
+    False -> simulateGenFunction key (\cfg -> U.SomeSome <$> ASL.simulateFunction cfg func)
+    True -> mkUninterpretedFun key (AC.funcSig func)
 
 maybeSimulateInstruction :: InstructionIdent
                          -> Maybe (AC.Instruction arch globalReads globalWrites init)
                          -> SigMapM arch ()
 maybeSimulateInstruction _ Nothing = return ()
-maybeSimulateInstruction ident (Just instr) =
- isKeySimFilteredOut ident (KeyInstr ident) >>= \case
-   False -> simulateGenFunction (T.pack $ iOpName ident) (\cfg -> U.SomeSome <$> ASL.simulateInstruction cfg instr)
-   True -> mkUninterpretedFun (KeyInstr ident) (AC.funcSig instr)
-
+maybeSimulateInstruction ident (Just instr) = do
+  let key = KeyInstr ident
+  isKeySimFilteredOut ident key >>= \case
+    False -> simulateGenFunction key (\cfg -> U.SomeSome <$> ASL.simulateInstruction cfg instr)
+    True -> mkUninterpretedFun key (AC.funcSig instr)
 
 mkUninterpretedFun :: ElemKey -> FunctionSignature globalReads globalWrites init tps -> SigMapM arch ()
 mkUninterpretedFun key sig = do
@@ -517,17 +563,16 @@ mkUninterpretedFun key sig = do
      let retT = funcSigBaseRepr sig
      let argTs = funcSigAllArgsRepr sig
      SomeSymFn <$> WI.freshTotalUninterpFn sym symbol argTs retT
-  addFormula (T.pack $ prettyKey key) symFn
+  addFormula key symFn
 
 data SomeSymFn where
   SomeSymFn :: B.ExprSymFn scope args ret -> SomeSymFn
 
-addFormula :: T.Text -> B.ExprSymFn scope args ret -> SigMapM arch ()
-addFormula name' symFn = do
-  let name = "uf." <> name'
+addFormula :: ElemKey -> B.ExprSymFn scope args ret -> SigMapM arch ()
+addFormula key symFn = do
   let serializedSymFn = FS.serializeSymFn symFn
-  let result = return (Right serializedSymFn)
-  MSS.modify $ \st -> st { sFormulaPromises = (name, result) : (sFormulaPromises st) }
+  let result = return serializedSymFn
+  MSS.modify $ \st -> st { sFormulaPromises = (key, result) : (sFormulaPromises st) }
 
 data SimulationException where
   SimulationDeserializationFailure :: String -> T.Text -> SimulationException
@@ -627,22 +672,25 @@ doSimulation opts handleAllocator name p = do
 
 -- | Simulate the given crucible CFG, and if it is a function add it to
 -- the formula map.
-simulateGenFunction :: T.Text
+simulateGenFunction :: ElemKey
                     -> (forall scope. ASL.SimulatorConfig scope -> IO (U.SomeSome (B.ExprSymFn scope)))
                     -> SigMapM arch ()
-simulateGenFunction name p = do
+simulateGenFunction key p = do
   opts <- MSS.gets sOptions
   halloc <- MSS.gets sHandleAllocator
- 
 
   let doSim = doSimulation opts halloc name p
   getresult <- case optParallel opts of
     True -> forkedResult doSim
-    False -> (return . Right) <$> liftIO doSim
-  MSS.modify $ \st -> st { sFormulaPromises = (name, getresult) : (sFormulaPromises st) }
+    False -> (return) <$> liftIO doSim
+  MSS.modify $ \st -> st { sFormulaPromises = (key, getresult) : (sFormulaPromises st) }
   where
+    name = case key of
+      KeyInstr ident -> T.pack $ iOpName ident
+      KeyFun nm -> nm
+
     forkedResult :: IO FS.SExpr
-                 -> SigMapM arch (IO (Either SimulationException FS.SExpr))
+                 -> SigMapM arch (IO FS.SExpr)
     forkedResult f = do
       opts <- MSS.gets sOptions
       liftIO $ do
@@ -652,7 +700,7 @@ simulateGenFunction name p = do
           Left ex -> do
             logMsgIO opts (-1) $ show ex
             IO.throwTo tid ex
-          Right result -> putMVar mvar (Right result)
+          Right result -> putMVar mvar result
         return (takeMVar mvar)
 
 getASL :: TranslatorOptions -> IO (ASLSpec)
@@ -880,7 +928,7 @@ data SigMap arch where
             , funDeps :: Map.Map T.Text (Set.Set T.Text)
             , sOptions :: TranslatorOptions
             , sHandleAllocator :: CFH.HandleAllocator
-            , sFormulaPromises :: [(T.Text, IO (Either SimulationException FS.SExpr))]
+            , sFormulaPromises :: [(ElemKey, IO FS.SExpr)]
             } -> SigMap arch
 
 getInstructionMap :: [AS.Instruction] -> Map.Map String (AS.Instruction, AS.InstructionEncoding)
@@ -960,22 +1008,39 @@ catchIO k f = do
       Left r -> return (Just r)
       Right err -> (\_ -> Nothing) <$> collectExcept k err
 
-getTranslationMode :: String -> Maybe (Filters -> Filters)
+optFilters :: TranslatorOptions -> Filters
+optFilters opts =
+  addTranslationFilter (optTranslationMode opts)  $
+  addSimulationFilter (optSimulationMode opts) noFilter
+
+addTranslationFilter :: TranslationMode -> (Filters -> Filters)
+addTranslationFilter tmode = case tmode of
+  TranslateAArch32 -> translateArch32
+  TranslateInstruction (instr, enc) -> translateOnlyInstr (instr, enc)
+
+addSimulationFilter :: SimulationMode -> (Filters -> Filters)
+addSimulationFilter smode = case smode of
+  SimulateAll -> simulateAll
+  SimulateFunctions -> simulateFunctionsFilter
+  SimulateInstructions -> simulateInstructionsFilter
+  SimulateInstruction (instr, enc) -> simulateOnlyInstr  (instr, enc)
+  SimulateNone -> simulateNone
+
+getTranslationMode :: String -> Maybe (TranslationMode)
 getTranslationMode mode = case mode of
-  "all" -> return $ translateAll
-  "noArch64" -> return $ translateNoArch64
-  "Arch32" -> return $ translateArch32
+  "AArch32" -> return $ TranslateAArch32
   _ -> case List.splitOn "/" mode of
-    [instr, enc] -> return $ translateOnlyInstr (T.pack instr, T.pack enc)
+    [instr, enc] -> return $ TranslateInstruction (T.pack instr, T.pack enc)
     _ -> fail ""
 
-getSimulationMode :: String -> Maybe (Filters -> Filters)
+getSimulationMode :: String -> Maybe (SimulationMode)
 getSimulationMode mode = case mode of
-  "all" -> return $ simulateAll
-  "instructions" -> return $ simulateInstructions
-  "none" -> return $ simulateNone
+  "all" -> return $ SimulateAll
+  "instructions" -> return $ SimulateInstructions
+  "functions" -> return $ SimulateFunctions
+  "none" -> return $ SimulateNone
   _ -> case List.splitOn "/" mode of
-    [instr, enc] -> return $ simulateOnlyInstr (T.pack instr, T.pack enc)
+    [instr, enc] -> return $ SimulateInstruction (T.pack instr, T.pack enc)
     _ -> fail ""
 
 noFilter :: Filters
@@ -1017,10 +1082,16 @@ simulateAll f =
     , instrSimFilter = \_ -> True
     }
 
-simulateInstructions :: Filters -> Filters
-simulateInstructions f =
+simulateInstructionsFilter :: Filters -> Filters
+simulateInstructionsFilter f =
   f { funSimFilter = \_ _ -> False
     , instrSimFilter = \_ -> True
+    }
+
+simulateFunctionsFilter :: Filters -> Filters
+simulateFunctionsFilter f =
+  f { funSimFilter = \_ _ -> True
+    , instrSimFilter = \_ -> False
     }
 
 simulateOnlyInstr :: (T.Text, T.Text) -> Filters -> Filters

@@ -39,8 +39,10 @@ main = do
       usage
       exitFailure
     Just (opts', statOpts) -> case optNormalizeMode opts' of
-      OnlyNormalize -> ASL.readAndNormalize opts'
-      _ -> runTranslator opts' statOpts
+      NormalizeNone -> runTranslator opts' statOpts
+      _ -> Log.withLogging "main" (logEventConsumer opts') $ do
+        let opts = opts' { optLogCfg = Log.getLogCfg }
+        ASL.readAndNormalize opts
   where
     applyOption (Just (opts, statOpts)) arg = case arg of
       Left f -> do
@@ -117,27 +119,40 @@ arguments =
   , Option "p" ["parallel"] (NoArg (Left (\opts -> Just $ opts { optParallel = True  })))
     "Run symbolic simulation concurrently with multiple threads."
 
-  , Option "o" ["output-formulas"]
-    (ReqArg (\f -> Left (\opts -> Just $ opts { optFilePaths = (optFilePaths opts){ fpOutput = f} })) "PATH")
-   "Path to serialized formulas."
+  , Option [] ["output-functions"]
+    (ReqArg (\f -> Left (\opts -> Just $ opts { optFilePaths = (optFilePaths opts){ fpOutFuns = f} })) "PATH")
+   "Path to serialized function formulas."
+
+  , Option [] ["output-instructions"]
+    (ReqArg (\f -> Left (\opts -> Just $ opts { optFilePaths = (optFilePaths opts){ fpOutInstrs = f} })) "PATH")
+   "Path to serialized instruction formulas."
+
+  , Option [] ["output-norm-functions"]
+    (ReqArg (\f -> Left (\opts -> Just $ opts { optFilePaths = (optFilePaths opts){ fpNormFuns = f} })) "PATH")
+   "Path to serialized function formulas."
+
+  , Option [] ["output-norm-instructions"]
+    (ReqArg (\f -> Left (\opts -> Just $ opts { optFilePaths = (optFilePaths opts){ fpNormInstrs = f} })) "PATH")
+   "Path to serialized instruction formulas."
+
+
   , Option [] ["report-expected-exceptions"] (NoArg (Right (\opts -> Just $ opts {reportKnownExceptions = True })))
     "Print collected exceptions for known issues thrown during translation (requires collect-exceptions or collect-expected-exceptions)"
 
   , Option [] ["translation-mode"] (ReqArg (\mode -> Left (\opts -> do
-      task <- ASL.getTranslationMode mode
-      return $ opts { optFilters = task (optFilters opts) })) "TRANSLATION_MODE")
+      tmode <- ASL.getTranslationMode mode
+      return $ opts { optTranslationMode = tmode })) "TRANSLATION_MODE")
     ("Filter instructions according to TRANSLATION_MODE: \n" ++
-     "all - translate all instructions.\n" ++
-     "noArch64 - translate T16, T32 and A32 instructions.\n" ++
-     "Arch32 (default) - translate T32 and A32 instructions.\n" ++
+     "Arch32 (default) - translate T16, T32 and A32 instructions.\n" ++
      "<INSTRUCTION>/<ENCODING> - translate a single instruction/encoding pair.")
 
   , Option [] ["simulation-mode"] (ReqArg (\mode -> Left (\opts -> do
-      task <- ASL.getSimulationMode mode
-      return $ opts { optFilters = task (optFilters opts) })) "SIMULATION_MODE")
+      smode <- ASL.getSimulationMode mode
+      return $ opts { optSimulationMode = smode })) "SIMULATION_MODE")
     ("Filter instructions and functions for symbolic simulation according to SIMULATION_MODE: \n" ++
      "all (default) - simulate all successfully translated instructions and functions. \n" ++
      "instructions - simulate only instructions. \n" ++
+     "functions - simulate only functions. \n" ++
      "none - do not perform any symbolic execution.")
 
   , Option [] ["no-dependencies"] (NoArg (Left (\opts -> Just $ opts { optTranslationDepth = TranslateShallow } )))
@@ -149,15 +164,15 @@ arguments =
   , Option "n" ["normalize-mode"]
     (ReqArg (\mode -> Left (\opts -> do
       nmode <- case mode of
-        "only-normalize" -> return $ OnlyNormalize
-        "normalize" -> return $ TranslateAndNormalize
-        "no-normalize" -> return $ NoNormalize
+        "all" -> return $ NormalizeAll
+        "only-funs" -> return $ NormalizeFunctions
+        "none" -> return $ NormalizeNone
         _ -> fail ""
       return $ opts { optNormalizeMode = nmode })) "NORMALIZE_MODE")
-    ("Normalize the resulting formula environment according to NORMALIZE_MODE: \n" ++
-     "only-normalize - skip all translation/simulation steps and normalize the existing formulas file. \n" ++
-     "normalize (default) - normalize the resulting formulas after translation/simulation.\n" ++
-     "no-normalize - do not normalize")
+    ("Read in the formula environment and normalize according to NORMALIZE_MODE: \n" ++
+     "all - normalize both the instruction and function formulas files \n" ++
+     "only-funs - only normalize the function formulas file. \n" ++
+     "none (default) - do not normalize")
   ]
 
 

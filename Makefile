@@ -1,4 +1,4 @@
-.PHONY: default genarm unzip archive all tests clean realclean deepclean
+.PHONY: default genarm normalize unzip archive all tests clean realclean deepclean
 default: all
 
 ASL_PARSER = ./submodules/arm-asl-parser
@@ -31,24 +31,27 @@ ${ASL_PARSER}/asl-parsed/%.sexpr:
 SPEC_FILES = arm_defs.sexpr arm_instrs.sexpr support.sexpr arm_regs.sexpr extra_defs.sexpr
 SOURCE_FILES = $(SPEC_FILES:%.sexpr=${PARSED}/%.sexpr)
 
-./output/formulas.what4: ${SOURCE_FILES} ${HS_SOURCES}
-	cabal v2-build asl-translator
-	cabal v2-run asl-translator-exec -- --output-formulas="./output/formulas.what4" --asl-spec="${PARSED}/" --parallel
 
-./output/testformula.what4: ${SOURCE_FILES} ${HS_SOURCES}
+./output/functions.what4 ./output/instructions.what4: ${SOURCE_FILES} ${HS_SOURCES}
 	cabal v2-build asl-translator
-	cabal v2-run asl-translator-exec -- --output-formulas="$@" --asl-spec="${PARSED}/" --parallel --translation-mode=aarch32_ADC_i_A/aarch32_ADC_i_A1_A
+	cabal v2-run asl-translator-exec -- --output-functions="./output/functions.what4" --output-instructions="./output/instructions.what4" --asl-spec="${PARSED}/" --parallel
+
+./output/functions-norm.what4 ./output/instructions-norm.what4: ./output/functions.what4 ./output/instructions.what4
+	cabal v2-build asl-translator
+	cabal v2-run asl-translator-exec -- --output-norm-functions="./output/functions-norm.what4" --output-norm-instructions="./output/instructions-norm.what4" --normalize-mode=all
 
 unzip:
 	gzip --uncompress --stdout $< > ./output/formulas.what4
 	touch $@
 
-./archived/formulas.what4.gz: ./output/formulas.what4
+./archived/%.what4.gz: ./output/%.what4
 	gzip --best --stdout $< > $@
 
-genarm: ./output/formulas.what4
+genarm: ./output/functions.what4 ./output/instructions.what4
 
-archive: ./archived/formulas.what4.gz
+normalize: ./output/functions-norm.what4 ./output/instructions-norm.what4
+
+archive: ./archived/functions-norm.what4.gz ./archived/instructions-norm.what4.gz
 
 all:
 	cabal v2-build asl-translator

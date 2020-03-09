@@ -22,10 +22,13 @@ module Language.ASL.Formulas.Serialize
   , deserializeSymFn
   , deserializeSymFnEnv'
   , deserializeSymFnEnv
+  , getSymFnEnv
   , FunctionMaker
   , envFunctionMaker
   , filteredFunctionMaker
   , uninterpFunctionMaker
+  , lazyFunctionMaker
+  , composeMakers
   , SExpr
   , NamedSymFnEnv
   ) where
@@ -41,10 +44,12 @@ import           Control.Monad.IO.Class ( MonadIO(..) )
 import qualified Data.Text as T
 import           Data.Map.Ordered (OMap)
 import qualified Data.Map.Ordered as OMap
+import           Data.Proxy
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.SCargot.Repr.Rich as SE
+import qualified Data.IORef as IO
 
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.TraversableFC as FC
@@ -187,15 +192,29 @@ deserializeSigEnv sexpr = case sexpr of
       _ -> badSExpr sexpr'
 
 -- Make a function out of a formal name and an expected signature
-type FunctionMaker m sym = forall args ret. T.Text -> FunSig args ret -> m (WI.SymFn sym args ret)
+data FunctionMaker sym where
+  FunctionMaker :: sym ->
+    (forall args ret m
+     . (MonadIO m, MonadFail m)
+    => T.Text -> FunSig args ret
+    -> m (Either String (WI.SymFn sym args ret)))
+    -> FunctionMaker sym
 
+makeFunction :: MonadFail m => MonadIO m => FunctionMaker sym -> T.Text -> FunSig args ret -> m (WI.SymFn sym args ret)
+makeFunction (FunctionMaker sym f) nm sig = f nm sig >>= \case
+  Left err -> fail err
+  Right result -> return result
+
+symFromMaker :: FunctionMaker sym -> sym
+symFromMaker (FunctionMaker sym _) = sym
 
 deserializeSymFnBindingEnv :: forall m sym
-                            . MonadFail m => sym
-                           -> FunctionMaker m sym
+                            . MonadFail m
+                           => MonadIO m
+                           => FunctionMaker sym
                            -> SExpr
                            -> m (SExpr, Map T.Text (WPD.SomeSymFn sym))
-deserializeSymFnBindingEnv _sym mkfun sexpr = case sexpr of
+deserializeSymFnBindingEnv fnmaker sexpr = case sexpr of
   S.L [ S.L [ S.A (WP.AId "SigEnv"), sigEnvSexpr ]
       , S.L [ S.A (WP.AId "SymFn"), symFnSexpr ]
       ] -> do
@@ -206,7 +225,7 @@ deserializeSymFnBindingEnv _sym mkfun sexpr = case sexpr of
   where
     go :: (T.Text, SomeSome FunSig) -> m (T.Text, WPD.SomeSymFn sym)
     go (nm, SomeSome funsig) = do
-      symFn <- mkfun nm funsig
+      symFn <- makeFunction fnmaker nm funsig
       return $ (nm, WPD.SomeSymFn symFn)
 
 -- Mapping formal handles to functions
@@ -215,30 +234,31 @@ type SymFnEnv sym = Map T.Text (SomeSome (WI.SymFn sym))
 deserializeSymFn' :: (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
                  => MonadFail m
                  => MonadIO m
-                 => sym
-                 -> FunctionMaker m sym
+                 => FunctionMaker sym
                  -> SExpr
                  -> m (SomeSome (WI.SymFn sym))
-deserializeSymFn' sym mkfun sexpr = do
-  (symFnSexpr, symFnEnv) <- deserializeSymFnBindingEnv sym mkfun sexpr
+deserializeSymFn' fnmaker sexpr = do
+  (symFnSexpr, symFnEnv) <- deserializeSymFnBindingEnv fnmaker sexpr
   let
     mklookup nm = return $ Map.lookup nm symFnEnv
-    pcfg = (WPD.defaultConfig sym){ WPD.cSymFnLookup = mklookup }
+    pcfg = (WPD.defaultConfig (symFromMaker fnmaker)){ WPD.cSymFnLookup = mklookup }
   WPD.SomeSymFn symFn <- liftIO $ do
     WPD.deserializeSymFnWithConfig pcfg symFnSexpr >>= \case
       Left err -> throwErr (err ++ "\n" ++ show symFnSexpr)
       Right result -> return result
   return $ SomeSome symFn
 
-fnMakerFromEnv :: (MonadFail m, WI.IsSymExprBuilder sym)
+fnMakerFromEnv :: forall sym
+                . WI.IsSymExprBuilder sym
                => sym
                -> SymFnEnv sym
-               -> FunctionMaker m sym
-fnMakerFromEnv sym env formalName sig = case Map.lookup formalName env of
-  Just (SomeSome symFn) -> do
-    Refl <- matchSigs sym sig symFn
-    return symFn
-  Nothing -> throwErr $ "Missing expected formal function in environment: " ++ T.unpack formalName
+               -> FunctionMaker sym
+fnMakerFromEnv sym env  = FunctionMaker sym $ \formalName sig ->
+  case Map.lookup formalName env of
+    Just (SomeSome symFn) -> do
+      Refl <- matchSigs sym sig symFn
+      return $ Right symFn
+    Nothing -> return $ Left $ "Missing expected formal function in environment: " ++ T.unpack formalName
 
 deserializeSymFn :: (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
                  => MonadFail m
@@ -247,7 +267,7 @@ deserializeSymFn :: (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
                  -> SymFnEnv sym
                  -> SExpr
                  -> m (SomeSome (WI.SymFn sym))
-deserializeSymFn sym env sexpr = deserializeSymFn' sym (fnMakerFromEnv sym env) sexpr
+deserializeSymFn sym env sexpr = deserializeSymFn' (fnMakerFromEnv sym env) sexpr
 
 -- Mapping informal (externally-visible) function names to functions
 type NamedSymFnEnv sym = Map T.Text (SomeSome (WI.SymFn sym))
@@ -276,6 +296,16 @@ lookupFnSig sym env sig = case Map.lookup (fsName sig) env of
     return $ Just symFn
   _ -> return Nothing
 
+getSymFnEnv :: forall m. MonadFail m => SExpr -> m [(T.Text, SExpr)]
+getSymFnEnv = \case
+  S.L [ S.A (AId "SymFnEnv"), S.L symFnSExprs ] -> mapM go symFnSExprs
+  x -> badSExpr x
+  where
+    go :: SExpr -> m (T.Text, SExpr)
+    go = \case
+      S.L [ S.A (AStr nm), symFnSExpr ] -> return (nm, symFnSExpr)
+      x -> badSExpr x
+
 deserializeSymFnEnv' :: forall sym m env
                      . (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
                     => MonadFail m
@@ -283,24 +313,21 @@ deserializeSymFnEnv' :: forall sym m env
                     => sym
                     -> env
                     -> (T.Text -> SomeSome (WI.SymFn sym) -> env -> m env)
-                    -> (env -> FunctionMaker m sym)
+                    -> (env -> FunctionMaker sym)
                     -> SExpr
                     -> m ([(T.Text, SomeSome (WI.SymFn sym))], env)
-deserializeSymFnEnv' sym env extendenv mkFun sexpr = case sexpr of
-  S.L [ S.A (AId "SymFnEnv")
-      , S.L symFnSExprs ] -> do
-    (env', symFns) <- foldM go (env, []) symFnSExprs
-    return $ (reverse $ symFns, env')
+deserializeSymFnEnv' sym env extendenv mkFun sexpr = do
+  symFnSExprs <- getSymFnEnv sexpr
+  (env', symFns) <- foldM go (env, []) symFnSExprs
+  return $ (reverse $ symFns, env')
   where
     go :: (env, [(T.Text, SomeSome (WI.SymFn sym))])
-       -> SExpr
+       -> (T.Text, SExpr)
        -> m (env, [(T.Text, SomeSome (WI.SymFn sym))])
-    go (env', symFns) = \case
-      S.L [ S.A (AStr nm), symFnSExpr ] -> do
-        symFn <- deserializeSymFn' sym (mkFun env') symFnSExpr
-        env'' <- extendenv nm symFn env'
-        return $ (env'', (nm, symFn) : symFns)
-      x -> badSExpr x
+    go (env', symFns) (nm, symFnSExpr) = do
+      symFn <- deserializeSymFn' (mkFun env') symFnSExpr
+      env'' <- extendenv nm symFn env'
+      return $ (env'', (nm, symFn) : symFns)
 
 deserializeSymFnEnv :: forall sym m env
                      . (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
@@ -308,32 +335,70 @@ deserializeSymFnEnv :: forall sym m env
                     => MonadIO m
                     => sym
                     -> NamedSymFnEnv sym
-                    -> FunctionMaker m sym
+                    -> FunctionMaker sym
                     -> SExpr
                     -> m [(T.Text, SomeSome (WI.SymFn sym))]
 deserializeSymFnEnv sym env mkuninterp sexpr =
   fst <$> deserializeSymFnEnv' sym env (\nm symfn env -> return $ Map.insert nm symfn env) mkFun sexpr
   where
-    mkFun :: NamedSymFnEnv sym -> FunctionMaker m sym
-    mkFun env' formalName sig = lookupFnSig sym env' sig >>= \case
-      Just symFn -> return symFn
-      Nothing -> mkuninterp formalName sig
+    mkFun :: NamedSymFnEnv sym -> FunctionMaker sym
+    mkFun env' = envFunctionMaker sym env `composeMakers` uninterpFunctionMaker sym
 
-envFunctionMaker :: (WI.IsSymExprBuilder sym, MonadFail m)
+composeMakers :: FunctionMaker sym -> FunctionMaker sym -> FunctionMaker sym
+composeMakers (FunctionMaker _ f1) (FunctionMaker sym f2) = FunctionMaker sym $ \nm sig ->
+  f1 nm sig >>= \case
+    Left _ -> f2 nm sig
+    Right result -> return $ Right result
+
+envFunctionMaker :: (WI.IsSymExprBuilder sym)
                  => sym
-                 -> FunctionMaker m sym
                  -> NamedSymFnEnv sym
-                 -> FunctionMaker m sym
-envFunctionMaker sym mkFun env formalName sig = lookupFnSig sym env sig >>= \case
-      Just symFn -> return symFn
-      Nothing -> mkFun formalName sig
+                 -> FunctionMaker sym
+envFunctionMaker sym env = FunctionMaker sym $ \_nm sig ->
+  lookupFnSig sym env sig >>= \case
+      Just symFn -> return $ Right symFn
+      Nothing -> return $ Left $ "Missing function for signature: " ++ show sig
 
-uninterpFunctionMaker :: forall sym m. (WI.IsSymExprBuilder sym, MonadIO m) => sym -> FunctionMaker m sym
-uninterpFunctionMaker sym _formalName sig = do
-  liftIO $ WI.freshTotalUninterpFn sym (U.makeSymbol (T.unpack (fsName sig))) (fsArgs sig) (fsRet sig)
+type LazySymFnEnv sym = (Map T.Text SExpr, IO.IORef (Map T.Text (SomeSome (WI.SymFn sym))))
 
-filteredFunctionMaker :: (WI.IsSymExprBuilder sym, MonadFail m, MonadIO m) => sym -> (T.Text -> Bool) -> FunctionMaker m sym
-filteredFunctionMaker sym f formalName sig = do
-  when (not $ f $ fsName sig) $
-    fail $ "Unexpected uninterpreted function: " ++ show sig
-  uninterpFunctionMaker sym formalName sig
+lazyFunctionMaker :: (WI.IsSymExprBuilder sym, sym ~ WB.ExprBuilder t st fs, ShowF (WB.SymExpr sym))
+                  => sym
+                  -> LazySymFnEnv sym
+                  -> FunctionMaker sym
+lazyFunctionMaker sym (env, ref) = do
+  FunctionMaker sym $ \formalName sig -> do
+    nmedEnv <- liftIO $ IO.readIORef ref
+    lookupFnSig sym nmedEnv sig >>= \case
+      Just symFn -> return $ Right symFn
+      Nothing -> case Map.lookup (fsName sig) env of
+        Just sexpr -> do
+          let recursiveMaker = lazyFunctionMaker sym (env, ref) `composeMakers` uninterpFunctionMaker sym
+          SomeSome symFn <- deserializeSymFn' recursiveMaker sexpr
+          Refl <- matchSigs sym sig symFn
+          Right <$> (liftIO $ expandSymFn sym symFn)
+        _ -> return $ Left $ "Missing function in environment for: " ++ show sig
+
+expandSymFn :: sym ~ WB.ExprBuilder t st fs
+            => sym
+            -> WB.ExprSymFn t args ret
+            -> IO (WB.ExprSymFn t args ret)
+expandSymFn sym symFn = case WB.symFnInfo symFn of
+  WB.DefinedFnInfo args expr _ -> WI.definedFn sym (WB.symFnName symFn) args expr (\_ -> True)
+  _ -> return symFn
+
+parserFunctionMaker :: forall sym. WI.IsSymExprBuilder sym => sym -> FunctionMaker sym
+parserFunctionMaker sym = FunctionMaker sym $ \_nm sig -> do
+  Right <$> (liftIO $ WI.freshTotalUninterpFn sym (U.makeSymbol (T.unpack (fsName sig))) (fsArgs sig) (fsRet sig))
+
+uninterpFunctionMaker :: forall sym. WI.IsSymExprBuilder sym => sym -> FunctionMaker sym
+uninterpFunctionMaker sym = FunctionMaker sym $ \_nm sig -> do
+  Right <$> (liftIO $ WI.freshTotalUninterpFn sym (U.makeSymbol (T.unpack (fsName sig))) (fsArgs sig) (fsRet sig))
+
+filteredFunctionMaker :: WI.IsSymExprBuilder sym
+                      => (T.Text -> Bool)
+                      -> FunctionMaker sym
+                      -> FunctionMaker sym
+filteredFunctionMaker filt (FunctionMaker sym f) = FunctionMaker sym $ \formalName sig -> do
+  case (not $ filt $ fsName sig) of
+    True -> return $ Left $ "Unexpected uninterpreted function: " ++ show sig
+    False -> f formalName sig

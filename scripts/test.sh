@@ -13,16 +13,17 @@ cabal v2-update
 # First check that we can parse in the archived 
 # formulas
 cabal v2-test asl-translator-formula-test
-cabal v2-clean
 
 # For the sake of making CI work, we
 # reduce the set of instructions here
 ./submodules/dismantle/scripts/minify-asl.sh
 
+cabal v2-build asl-translator-exec
+
 rm -f ./archived/formulas.what4.gz
 rm -f ./output/formulas.what4
 
-cabal v2-test asl-translator-genarm-test
+cabal v2-run asl-translator-exec
 cabal v2-test asl-translator-formula-test
 
 ./submodules/dismantle/scripts/deminify-asl.sh

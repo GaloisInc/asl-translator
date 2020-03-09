@@ -3,7 +3,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module Language.ASL.Formulas
-    ( getFormulas
+    ( getFunctionFormulas
+    , getInstructionFormulas
     , FS.NamedSymFnEnv
     ) where
 
@@ -12,21 +13,34 @@ import qualified Data.Text as T
 import           Data.Parameterized.Classes
 
 import qualified What4.Interface as WI
-
-import qualified What4.Serialize.Parser as WP
-import qualified What4.Utils.Log as U
 import           What4.Utils.Util ( SomeSome(..) )
 
 import           Language.ASL.Formulas.Attach
 import qualified Language.ASL.Formulas.Serialize as FS
 
-formulas :: T.Text
-formulas = decodeSrc $(attachFormulasSrc "./output/formulas.what4" "./archived/formulas.what4.gz")
+functionFormulas :: T.Text
+functionFormulas = decodeSrc $(attachFormulasSrc "./output/functions-norm.what4" "./archived/functions-norm.what4.gz")
 
-getFormulas :: (WI.IsSymExprBuilder sym,
-                WI.IsExprBuilder sym,
-                ShowF (WI.SymExpr sym))
-             => sym -> FS.NamedSymFnEnv sym -> IO [(T.Text, SomeSome (WI.SymFn sym))]
-getFormulas sym env = do
-  sexpr <- FS.parseSExpr formulas
+instructionFormulas :: T.Text
+instructionFormulas = decodeSrc $(attachFormulasSrc "./output/instructions-norm.what4" "./archived/instructions-norm.what4.gz")
+
+genGetFormulas :: (WI.IsSymExprBuilder sym,
+                  WI.IsExprBuilder sym,
+                  ShowF (WI.SymExpr sym))
+               => T.Text -> sym -> FS.NamedSymFnEnv sym -> IO [(T.Text, SomeSome (WI.SymFn sym))]
+genGetFormulas src sym env  = do
+  sexpr <- FS.parseSExpr src
   FS.deserializeSymFnEnv sym env (FS.uninterpFunctionMaker sym) sexpr
+
+getFunctionFormulas :: (WI.IsSymExprBuilder sym,
+                       WI.IsExprBuilder sym,
+                       ShowF (WI.SymExpr sym))
+                    => sym -> FS.NamedSymFnEnv sym -> IO [(T.Text, SomeSome (WI.SymFn sym))]
+getFunctionFormulas sym = genGetFormulas functionFormulas sym
+
+getInstructionFormulas :: (WI.IsSymExprBuilder sym,
+                          WI.IsExprBuilder sym,
+                          ShowF (WI.SymExpr sym))
+                       => sym -> FS.NamedSymFnEnv sym -> IO [(T.Text, SomeSome (WI.SymFn sym))]
+getInstructionFormulas sym = genGetFormulas instructionFormulas sym
+
