@@ -416,7 +416,7 @@ withSIMDRef (SIMDRef' n) f = f n
 mkSIMDRef :: forall n. n <= MaxSIMD => NR.NatRepr n -> SIMDRef n
 mkSIMDRef n = (SIMDRef' n) \\ natToSIMD n
 
-knownSIMDRef :: forall n. IsSIMD n => KnownNat n => SIMDRef n
+knownSIMDRef :: forall n. n <= MaxSIMD => KnownNat n => SIMDRef n
 knownSIMDRef = mkSIMDRef @n NR.knownNat
 
 instance TestEquality SIMDRef where
@@ -436,16 +436,16 @@ memoryGlobalRef = MemoryRef
 
 
 
-mkGPRGlobalRef :: forall n. IsGPR n => NR.NatRepr n -> GlobalRef (IndexedSymbol "_R" n)
+mkGPRGlobalRef :: forall n. n <= MaxGPR => NR.NatRepr n -> GlobalRef (IndexedSymbol "_R" n)
 mkGPRGlobalRef n = GPRRef (mkGPRRef n)
 
-knownGPRGlobalRef :: forall n. IsGPR n => KnownNat n => GlobalRef (IndexedSymbol "_R" n)
+knownGPRGlobalRef :: forall n. n <= MaxGPR => KnownNat n => GlobalRef (IndexedSymbol "_R" n)
 knownGPRGlobalRef = mkGPRGlobalRef @n NR.knownNat
 
-mkSIMDGlobalRef :: forall n. IsSIMD n => NR.NatRepr n -> GlobalRef (IndexedSymbol "_V" n)
+mkSIMDGlobalRef :: forall n. n <= MaxSIMD => NR.NatRepr n -> GlobalRef (IndexedSymbol "_V" n)
 mkSIMDGlobalRef n = SIMDRef (mkSIMDRef n)
 
-knownSIMDGlobalRef :: forall n. IsSIMD n => KnownNat n => GlobalRef (IndexedSymbol "_V" n)
+knownSIMDGlobalRef :: forall n. n <= MaxSIMD => KnownNat n => GlobalRef (IndexedSymbol "_V" n)
 knownSIMDGlobalRef = mkSIMDGlobalRef @n NR.knownNat
 
 instance TestEquality GlobalRef where
