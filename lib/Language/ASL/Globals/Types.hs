@@ -36,7 +36,8 @@ module Language.ASL.Globals.Types
   , mkGlobalsE
   , mkSymbolE
   , mkSymbolT
-
+  , forallSymbols
+  , forallNats
   -- statically calculating indexes
   , KnownIndex
   , knownIndex
@@ -303,6 +304,24 @@ mkGlobalsDecls f = mkGlobalsDecls' (\_ -> f)
 mkGlobalsTypeInstDecls :: Some (Ctx.Assignment Global) -> TH.DecsQ
 mkGlobalsTypeInstDecls = mkGlobalsDecls $ \gb ->
   [d| type instance GlobalsType $(mkSymbolT (gbName gb)) = $(mkTypeFromRepr (gbType gb)) |]
+
+forallGen :: (forall tp. f tp -> TH.Q TH.Type)
+          -> TH.Q TH.Type
+          -> Ctx.Assignment f ctx
+          -> TH.DecsQ
+forallGen mktype inst asn = case Ctx.viewAssign asn of
+  Ctx.AssignEmpty -> return []
+  Ctx.AssignExtend asn' a -> do
+    decl <- [d| instance $(inst) $(mktype a) |]
+    decls <- forallGen mktype inst asn'
+    return $ decl ++ decls
+
+forallSymbols :: TH.Q TH.Type -> Ctx.Assignment CT.SymbolRepr ctx -> TH.DecsQ
+forallSymbols = forallGen (\symb -> mkSymbolT (CT.symbolRepr symb))
+
+forallNats ::  TH.Q TH.Type -> Ctx.Assignment NR.NatRepr ctx -> TH.DecsQ
+forallNats = forallGen (\nr -> TH.litT (TH.numTyLit (NR.intValue nr)))
+
 
 
 liftIndex :: Ctx.Index ctx tp -> TH.Q TH.Exp

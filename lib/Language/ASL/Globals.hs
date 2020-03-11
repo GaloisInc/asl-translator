@@ -158,6 +158,15 @@ import qualified Language.Haskell.TH.Syntax as TH
 
 import           Unsafe.Coerce
 
+data GlobalsTypeWrapper :: TyFun Symbol WI.BaseType -> Type
+type instance Apply GlobalsTypeWrapper s = GlobalsType s
+
+data NatToRegSymWrapper :: Symbol -> TyFun Nat Symbol -> Type
+type instance Apply (NatToRegSymWrapper s) n = AppendSymbol s (NatToSymbol n)
+
+data NatToRegTypeWrapper :: Symbol -> TyFun Nat WI.BaseType -> Type
+type instance Apply (NatToRegTypeWrapper s) n = GlobalsType (AppendSymbol s (NatToSymbol n))
+
 -- Types for all untracked globals
 type UntrackedGlobalsCtx = $(mkTypeFromGlobals untrackedGlobals')
 
@@ -166,7 +175,7 @@ $(mkGlobalsTypeInstDecls trackedGlobals')
 $(mkGlobalsTypeInstDecls gprGlobals')
 $(mkGlobalsTypeInstDecls simdGlobals')
 
-
+type GlobalsTypeCtx (sh :: Ctx Symbol) = MapCtx GlobalsTypeWrapper sh
 
 type SimpleGlobalSymsCtx = $(mkAllGlobalSymsT simpleGlobals')
 type SimpleGlobalsCtx = GlobalsTypeCtx SimpleGlobalSymsCtx
@@ -174,19 +183,13 @@ type SimpleGlobalsCtx = GlobalsTypeCtx SimpleGlobalSymsCtx
 type GlobalSymsCtx = $(mkAllGlobalSymsT flatTrackedGlobals')
 type GlobalsCtx = GlobalsTypeCtx GlobalSymsCtx
 
+class KnownIndex GlobalSymsCtx s => IsGlobal s
+
+$(forallSymbols [t| IsGlobal |] (knownRepr :: Ctx.Assignment CT.SymbolRepr GlobalSymsCtx))
+
 type GPRIdxCtx = CtxUpTo MaxGPR
 type GPRSymsCtx = MapCtx (NatToRegSymWrapper "_R") GPRIdxCtx
 type GPRCtx = GlobalsTypeCtx GPRSymsCtx
-
-type SIMDIdxCtx = CtxUpTo MaxSIMD
-type SIMDSymsCtx = MapCtx (NatToRegSymWrapper "_V") SIMDIdxCtx
-type SIMDCtx = GlobalsTypeCtx SIMDSymsCtx
-
-class KnownIndex GlobalSymsCtx s => IsGlobal s
-instance KnownIndex GlobalSymsCtx s => IsGlobal s
-
-class (IsGlobal s, KnownIndex SimpleGlobalSymsCtx s) => IsSimpleGlobal s
-instance (IsGlobal s, KnownIndex SimpleGlobalSymsCtx s) => IsSimpleGlobal s
 
 type GPRConstraints n =
   ( IsGlobal (IndexedSymbol "_R" n)
@@ -196,10 +199,12 @@ type GPRConstraints n =
   )
 
 class GPRConstraints n => IsGPR n
-instance GPRConstraints n => IsGPR n
 
-natToGPR :: forall n. NR.NatRepr n -> (n <= MaxGPR) :- IsGPR n
-natToGPR n = forallUpTo (Proxy @IsGPR) (Proxy @MaxGPR) n
+$(forallNats [t| IsGPR |] (knownRepr :: Ctx.Assignment NR.NatRepr GPRIdxCtx))
+
+type SIMDIdxCtx = CtxUpTo MaxSIMD
+type SIMDSymsCtx = MapCtx (NatToRegSymWrapper "_V") SIMDIdxCtx
+type SIMDCtx = GlobalsTypeCtx SIMDSymsCtx
 
 type SIMDConstraints n =
   ( IsGlobal (IndexedSymbol "_V" n)
@@ -209,7 +214,15 @@ type SIMDConstraints n =
   )
 
 class SIMDConstraints n => IsSIMD n
-instance SIMDConstraints n => IsSIMD n
+
+$(forallNats [t| IsSIMD |] (knownRepr :: Ctx.Assignment NR.NatRepr SIMDIdxCtx))
+
+class (IsGlobal s, KnownIndex SimpleGlobalSymsCtx s) => IsSimpleGlobal s
+
+$(forallSymbols [t| IsSimpleGlobal |] (knownRepr :: Ctx.Assignment CT.SymbolRepr SimpleGlobalSymsCtx))
+
+natToGPR :: forall n. NR.NatRepr n -> (n <= MaxGPR) :- IsGPR n
+natToGPR n = forallUpTo (Proxy @IsGPR) (Proxy @MaxGPR) n
 
 natToSIMD :: forall n. NR.NatRepr n -> (n <= MaxSIMD) :- IsSIMD n
 natToSIMD n = forallUpTo (Proxy @IsSIMD) (Proxy @MaxSIMD) n
@@ -229,16 +242,6 @@ _testDistinct f = f
 type StructGlobalSymsCtx = SimpleGlobalSymsCtx ::> "GPRS" ::> "SIMDS" ::> "__Memory"
 type StructGlobalsCtx = GlobalsTypeCtx StructGlobalSymsCtx
 
-data GlobalsTypeWrapper :: TyFun Symbol WI.BaseType -> Type
-type instance Apply GlobalsTypeWrapper s = GlobalsType s
-
-data NatToRegSymWrapper :: Symbol -> TyFun Nat Symbol -> Type
-type instance Apply (NatToRegSymWrapper s) n = AppendSymbol s (NatToSymbol n)
-
-data NatToRegTypeWrapper :: Symbol -> TyFun Nat WI.BaseType -> Type
-type instance Apply (NatToRegTypeWrapper s) n = GlobalsType (AppendSymbol s (NatToSymbol n))
-
-type GlobalsTypeCtx (sh :: Ctx Symbol) = MapCtx GlobalsTypeWrapper sh
 
 untrackedGlobals :: Assignment Global UntrackedGlobalsCtx
 untrackedGlobals = forSome untrackedGlobals' $ \gbs ->
