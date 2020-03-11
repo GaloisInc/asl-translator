@@ -24,6 +24,7 @@ module Data.Parameterized.CtxFuns
   , mkAppendSymbol
   , mkIndexedSymbol
   , replicatedCtxPrf
+  , natReplicatedIndex
   , natUpToIndex
   -- copied from SemMC
   , TyFun
@@ -117,6 +118,18 @@ natUpToIndex _ _ _ = error $ "boundedNatUpToIndex: impossible"
 type family CtxReplicate k (n :: Nat) where
   CtxReplicate k 0 = EmptyCtx
   CtxReplicate k n = CtxReplicate k (n - 1) ::> k
+
+natReplicatedIndex :: forall n maxn k
+                    . n <= maxn
+                   => NR.NatRepr maxn
+                   -> NR.NatRepr n
+                   -> Size (CtxReplicate k (maxn+1))
+                   -> Index (CtxReplicate k (maxn+1)) k
+natReplicatedIndex maxn n sz
+  | Just (Some idx) <- intIndex (fromIntegral $ NR.intValue n) sz
+  , Refl <- replicatedCtxPrf @k (NR.incNat maxn) sz idx
+  = idx
+natReplicatedIndex _ _ _ = error "natReplicatedIndex: impossible"
 
 #ifdef UNSAFE_OPS
 replicatedCtxPrf :: forall k n tp

@@ -35,7 +35,9 @@ module Language.ASL.Globals
   , GPRRef
   , SIMDRef
   , MaxSIMD
+  , maxSIMDRepr
   , MaxGPR
+  , maxGPRRepr
   -- the BaseType of globals corresponding to their structure of the globals in ASL
   , GlobalsCtx
   -- all tracked globals (with each register set as a single struct)
