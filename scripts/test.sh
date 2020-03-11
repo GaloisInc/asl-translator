@@ -16,6 +16,6 @@ cabal v2-test asl-translator-formula-test
 rm -f ./archived/instructions-norm-lite.what4.gz
 touch ./archived/instructions-norm-lite.what4.gz
 
-make ./output/instructions-norm-lite.what4
+make genarm-lite
 
 cabal v2-test asl-translator-formula-test -f asl-lite

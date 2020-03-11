@@ -21,14 +21,17 @@ import           What4.Utils.Util ( SomeSome(..) )
 import           Language.ASL.Formulas.Attach
 import qualified Language.ASL.Formulas.Serialize as FS
 
+#ifdef ASL_LITE
+functionFormulas :: T.Text
+functionFormulas = decodeSrc $(attachFormulasSrc "./output/functions-norm-lite.what4" "./archived/functions-norm-lite.what4.gz")
 
+instructionFormulas :: T.Text
+instructionFormulas = decodeSrc $(attachFormulasSrc "./output/instructions-norm-lite.what4" "./archived/instructions-norm-lite.what4.gz")
+#else
 functionFormulas :: T.Text
 functionFormulas = decodeSrc $(attachFormulasSrc "./output/functions-norm.what4" "./archived/functions-norm.what4.gz")
 
 instructionFormulas :: T.Text
-#ifdef ASL_LITE
-instructionFormulas = decodeSrc $(attachFormulasSrc "./output/instructions-norm-lite.what4" "./archived/instructions-norm-lite.what4.gz")
-#else
 instructionFormulas = decodeSrc $(attachFormulasSrc "./output/instructions-norm.what4" "./archived/instructions-norm.what4.gz")
 #endif
 

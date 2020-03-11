@@ -43,12 +43,13 @@ attachFormulasSrc fp fallbackfp = do
   useprimary <- TH.runIO $ D.doesFileExist fp
   bs <- case useprimary of
     True -> do
-      TH.qAddDependentFile fp
       t <- TH.runIO $ T.readFile fp
       return $ LBS.toStrict $ GZ.compress $ LBS.fromStrict $ T.encodeUtf8 t
     False -> do
-      TH.qAddDependentFile fallbackfp
+      TH.runIO $ T.writeFile fp T.empty
       TH.runIO $ BS.readFile fallbackfp
+  TH.qAddDependentFile fallbackfp
+  TH.qAddDependentFile fp
   embedByteString bs
 
 embedByteString :: BS.ByteString -> TH.ExpQ
