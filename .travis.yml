@@ -24,7 +24,6 @@ install:
   - git submodule update --init
   - ln -s cabal.project.newbuild cabal.project
   - cabal v2-configure
-  - ./submodules/dismantle/scripts/minify-asl.sh
 
 addons:
   apt:
