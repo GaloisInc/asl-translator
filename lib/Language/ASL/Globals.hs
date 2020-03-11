@@ -61,7 +61,9 @@ module Language.ASL.Globals
   , GPRCtx
   , SIMDCtx
   -- traversal of an assignment over a globals struct which projects a structured view
-  , traverseGlobalsStruct
+  , GlobalsStruct(..)
+  , toGlobalsStruct
+  , flattenGlobalsStruct
   , allGlobalRefs
   , traverseAllGlobals
   , destructGlobals
@@ -484,15 +486,16 @@ simdGlobalRefs =
 simdGlobalRefsSym :: Assignment GlobalRef SIMDSymsCtx
 simdGlobalRefsSym = applyMapCtx (Proxy @(NatToRegSymWrapper "_V")) SIMDRef simdGlobalRefs
 
-traverseGlobalsStruct :: forall f g m
-                       . Monad m
-                      => Assignment f StructGlobalsCtx
-                      -> (forall s. SimpleGlobalRef s -> f (GlobalsType s) -> m (g s))
-                      -> (forall n. GPRRef n -> f (GlobalsType "GPRS") -> m (g (IndexedSymbol "_R" n)))
-                      -> (forall n. SIMDRef n -> f (GlobalsType "SIMDS") -> m (g (IndexedSymbol "_V" n)))
-                      -> (f (GlobalsType "__Memory") -> m (g "__Memory"))
-                      -> m (Assignment g GlobalSymsCtx)
-traverseGlobalsStruct (simples :> gprs :> simds :> mem) fsimple fgprs fsimds fmem = do
+
+flattenGlobalsStruct :: forall f g m
+                      . Monad m
+                     => GlobalsStruct f
+                     -> (forall s. SimpleGlobalRef s -> f (GlobalsType s) -> m (g s))
+                     -> (forall n. GPRRef n -> f (GlobalsType "GPRS") -> m (g (IndexedSymbol "_R" n)))
+                     -> (forall n. SIMDRef n -> f (GlobalsType "SIMDS") -> m (g (IndexedSymbol "_V" n)))
+                     -> (f (GlobalsType "__Memory") -> m (g "__Memory"))
+                     -> m (Assignment g GlobalSymsCtx)
+flattenGlobalsStruct (GlobalsStruct simples gprs simds mem) fsimple fgprs fsimds fmem = do
   simples' <- FC.traverseFC applyFSimple simpleGlobalRefs
   gprs' <- FC.traverseFC (\(GPRRef ref) -> fgprs ref gprs) gprGlobalRefsSym
   simds' <- FC.traverseFC (\(SIMDRef ref) -> fsimds ref simds) simdGlobalRefsSym
@@ -501,6 +504,18 @@ traverseGlobalsStruct (simples :> gprs :> simds :> mem) fsimple fgprs fsimds fme
   where
     applyFSimple :: forall s. SimpleGlobalRef s -> m (g s)
     applyFSimple sref = fsimple sref $ simples Ctx.! (simpleRefIndex sref)
+
+data GlobalsStruct f =
+  GlobalsStruct { sGlobals :: Assignment f SimpleGlobalsCtx
+                , sGPRs :: f (GlobalsType "GPRS")
+                , sSIMDs :: f (GlobalsType "SIMDS")
+                , sMem :: f (GlobalsType "__Memory")
+                }
+
+toGlobalsStruct :: Assignment f StructGlobalsCtx
+                -> GlobalsStruct f
+toGlobalsStruct (simples :> gprs :> simds :> mem) =
+  GlobalsStruct simples gprs simds mem
 
 destructGlobals :: forall f g m
                  . Monad m
@@ -536,24 +551,6 @@ mapToGlobalsType :: Monad m
 mapToGlobalsType f asn = traverseMapCtx (Proxy @GlobalsTypeWrapper) f asn
 
 
--- traverseToGlobalsStruct :: forall f g m
---                          . Monad m
---                         => Assignment f GlobalsSymsCtx
---                         -> (forall s. f s -> m (g (GlobalsType s))
---                         -> (Assignment f GPRSymsCtx -> m (g (GlobalsType "GPRS")))
---                         -> (Assignment f SIMDSymsCtx -> m (g (GlobalsType "SIMDS")))
---                         -> (f "__Memory" -> m (g (GlobalsType "__Memory")))
---                         -> m (Assignment g StructGlobalsCtx)
--- traverseToGlobalsStruct asn fsimple fgprs fsimds fmem = do
---   simples' <- traverseMapCtx (Proxy @(GlobalsTypeWrapper)) fsimple
-
---   where
---     projSimples :: Assignment f SimpleGlobalSymsCtx
---     projSimples = FC.traverseFC (\ref -> asn ! (globalRefSymIndex ref)) $ simpleGlobalRefs
-
-
-
-
 allGlobalRefs :: Assignment GlobalRef GlobalSymsCtx
 allGlobalRefs =
   (FC.fmapFC SimpleGlobalRef simpleGlobalRefs
@@ -578,14 +575,6 @@ ctxSizeRepr :: forall ctx. Size ctx -> NR.NatRepr (CtxSize ctx)
 ctxSizeRepr sz = case viewSize sz of
   ZeroSize -> NR.knownNat
   IncSize sz' -> NR.addNat (NR.knownNat @1) (ctxSizeRepr sz')
-
--- | Index into the set of all tracked globals - pointing to the array that contains all of the GPRs
-gprGlobalIndex :: Index StructGlobalsCtx AllGPRBaseType
-gprGlobalIndex = knownIndex
-
--- | Index into the set of all tracked globals - pointing to the array that contains all of the SIMDs
-simdGlobalIndex :: Index StructGlobalsCtx AllSIMDBaseType
-simdGlobalIndex = knownIndex
 
 testGlobalEq :: forall s s'
               . IsGlobal s
