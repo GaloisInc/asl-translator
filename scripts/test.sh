@@ -9,22 +9,13 @@ if [[ -f "./cabal.project.newbuild" && ! -f "./cabal.project" ]]; then
 fi
 
 cabal v2-update
+cabal v2-build dismantle-arm-xml -f asl-lite
 
-# First check that we can parse in the archived 
-# formulas
 cabal v2-test asl-translator-formula-test
 
-# For the sake of making CI work, we
-# reduce the set of instructions here
-./submodules/dismantle/scripts/minify-asl.sh
+rm -f ./archived/instructions-norm-lite.what4.gz
+touch ./archived/instructions-norm-lite.what4.gz
 
-cabal v2-build asl-translator-exec
+make ./output/instructions-norm-lite.what4
 
-rm -f ./archived/formulas.what4.gz
-rm -f ./output/formulas.what4
-
-cabal v2-run asl-translator-exec
-cabal v2-test asl-translator-formula-test
-
-./submodules/dismantle/scripts/deminify-asl.sh
-git checkout ./archived/
+cabal v2-test asl-translator-formula-test -f asl-lite
