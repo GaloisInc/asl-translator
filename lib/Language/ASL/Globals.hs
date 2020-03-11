@@ -34,6 +34,8 @@ module Language.ASL.Globals
   , SimpleGlobalRef
   , GPRRef
   , SIMDRef
+  , MaxSIMD
+  , MaxGPR
   -- the BaseType of globals corresponding to their structure of the globals in ASL
   , GlobalsCtx
   -- all tracked globals (with each register set as a single struct)
@@ -55,7 +57,14 @@ module Language.ASL.Globals
   -- Structured view of the globals, with registers as arrays
   , StructGlobalSymsCtx
   , StructGlobalsCtx
+  , mapToGlobalsType
+  , GPRCtx
+  , SIMDCtx
+  -- traversal of an assignment over a globals struct which projects a structured view
+  , traverseGlobalsStruct
   , allGlobalRefs
+  , traverseAllGlobals
+  , destructGlobals
 
   -- All specified 'GlobalRefs'
   , simpleGlobalRefs
@@ -164,11 +173,12 @@ type GlobalSymsCtx = $(mkAllGlobalSymsT flatTrackedGlobals')
 type GlobalsCtx = GlobalsTypeCtx GlobalSymsCtx
 
 type GPRIdxCtx = CtxUpTo MaxGPR
-type GPRSymsCtx = MapContext (NatToRegSymWrapper "_R") GPRIdxCtx
+type GPRSymsCtx = MapCtx (NatToRegSymWrapper "_R") GPRIdxCtx
+type GPRCtx = GlobalsTypeCtx GPRSymsCtx
 
 type SIMDIdxCtx = CtxUpTo MaxSIMD
-type SIMDSymsCtx = MapContext (NatToRegSymWrapper "_V") SIMDIdxCtx
-
+type SIMDSymsCtx = MapCtx (NatToRegSymWrapper "_V") SIMDIdxCtx
+type SIMDCtx = GlobalsTypeCtx SIMDSymsCtx
 
 class KnownIndex GlobalSymsCtx s => IsGlobal s
 instance KnownIndex GlobalSymsCtx s => IsGlobal s
@@ -226,7 +236,7 @@ type instance Apply (NatToRegSymWrapper s) n = AppendSymbol s (NatToSymbol n)
 data NatToRegTypeWrapper :: Symbol -> TyFun Nat WI.BaseType -> Type
 type instance Apply (NatToRegTypeWrapper s) n = GlobalsType (AppendSymbol s (NatToSymbol n))
 
-type GlobalsTypeCtx (sh :: Ctx Symbol) = MapContext GlobalsTypeWrapper sh
+type GlobalsTypeCtx (sh :: Ctx Symbol) = MapCtx GlobalsTypeWrapper sh
 
 untrackedGlobals :: Assignment Global UntrackedGlobalsCtx
 untrackedGlobals = forSome untrackedGlobals' $ \gbs ->
@@ -418,6 +428,7 @@ data GlobalRef (s :: Symbol) where
   MemoryRef :: GlobalRef "__Memory"
   -- ^ The distinguished global state variable representing memory.
 
+
 memoryGlobalRef :: GlobalRef "__Memory"
 memoryGlobalRef = MemoryRef
 
@@ -463,39 +474,97 @@ gprGlobalRefs :: Assignment GPRRef GPRIdxCtx
 gprGlobalRefs =
   mapForallCtx (Proxy @(IsGPR)) mkGPRRef (knownRepr :: Assignment NR.NatRepr GPRIdxCtx)
 
+gprGlobalRefsSym :: Assignment GlobalRef GPRSymsCtx
+gprGlobalRefsSym = applyMapCtx (Proxy @(NatToRegSymWrapper "_R")) GPRRef gprGlobalRefs
+
 simdGlobalRefs :: Assignment SIMDRef SIMDIdxCtx
 simdGlobalRefs =
   mapForallCtx (Proxy @(IsSIMD)) mkSIMDRef (knownRepr :: Assignment NR.NatRepr SIMDIdxCtx)
 
-data AllGlobalSig simple gprs simds mem =
-  AllGlobalSig { aSimpleGlobalRefs :: Assignment simple SimpleGlobalSymsCtx
-               , aGPRGlobalRefs :: Assignment gprs GPRIdxCtx
-               , aSIMDGlobalRefs :: Assignment simds SIMDIdxCtx
-               , aMemRef :: mem "__Memory"
-               }
+simdGlobalRefsSym :: Assignment GlobalRef SIMDSymsCtx
+simdGlobalRefsSym = applyMapCtx (Proxy @(NatToRegSymWrapper "_V")) SIMDRef simdGlobalRefs
 
-allGlobalRefsSig :: AllGlobalSig SimpleGlobalRef GPRRef SIMDRef SymbolRepr
-allGlobalRefsSig = AllGlobalSig simpleGlobalRefs gprGlobalRefs simdGlobalRefs knownSymbol
+traverseGlobalsStruct :: forall f g m
+                       . Monad m
+                      => Assignment f StructGlobalsCtx
+                      -> (forall s. SimpleGlobalRef s -> f (GlobalsType s) -> m (g s))
+                      -> (forall n. GPRRef n -> f (GlobalsType "GPRS") -> m (g (IndexedSymbol "_R" n)))
+                      -> (forall n. SIMDRef n -> f (GlobalsType "SIMDS") -> m (g (IndexedSymbol "_V" n)))
+                      -> (f (GlobalsType "__Memory") -> m (g "__Memory"))
+                      -> m (Assignment g GlobalSymsCtx)
+traverseGlobalsStruct (simples :> gprs :> simds :> mem) fsimple fgprs fsimds fmem = do
+  simples' <- FC.traverseFC applyFSimple simpleGlobalRefs
+  gprs' <- FC.traverseFC (\(GPRRef ref) -> fgprs ref gprs) gprGlobalRefsSym
+  simds' <- FC.traverseFC (\(SIMDRef ref) -> fsimds ref simds) simdGlobalRefsSym
+  mem' <- fmem mem
+  return $ (simples' <++> gprs' <++> simds') :> mem'
+  where
+    applyFSimple :: forall s. SimpleGlobalRef s -> m (g s)
+    applyFSimple sref = fsimple sref $ simples Ctx.! (simpleRefIndex sref)
 
-mapAllGlobalRefsSig :: (forall s. IsSimpleGlobal s => simple s -> simple' s)
-                    -> (forall n. IsGPR n => gprs n -> gprs' n)
-                    -> (forall n. IsSIMD n => simds n -> simds' n)
-                    -> (mem "__Memory" -> mem' "__Memory")
-                    -> AllGlobalSig simple gprs simds mem
-                    -> AllGlobalSig simple' gprs' simds' mem'
-mapAllGlobalRefsSig fsimple fgprs fsimds fmem (AllGlobalSig simple gprs simds mem) =
-  AllGlobalSig
-  (mapForallCtx (Proxy @(IsSimpleGlobal)) fsimple simple)
-  (mapForallCtx (Proxy @(IsGPR)) fgprs gprs)
-  (mapForallCtx (Proxy @(IsSIMD)) fsimds simds)
-  (fmem mem)
+destructGlobals :: forall f g m
+                 . Monad m
+                => Assignment f GlobalSymsCtx
+                -> (forall s. f s -> m (g (GlobalsType s)))
+                -> m ( Assignment g SimpleGlobalsCtx
+                     , Assignment g GPRCtx
+                     , Assignment g SIMDCtx
+                     , g (GlobalsType "__Memory")
+                     )
+destructGlobals asn f =
+  let
+    projSimples :: Assignment f SimpleGlobalSymsCtx
+    projSimples = FC.fmapFC (\ref -> asn ! (globalRefSymIndex (SimpleGlobalRef ref))) $ simpleGlobalRefs
+
+    projGPRs :: Assignment f GPRSymsCtx
+    projGPRs = FC.fmapFC (\ref -> asn ! (globalRefSymIndex ref)) $ gprGlobalRefsSym
+
+    projSIMDs :: Assignment f SIMDSymsCtx
+    projSIMDs = FC.fmapFC (\ref -> asn ! (globalRefSymIndex ref)) $ simdGlobalRefsSym
+
+ in do
+    simple <- mapToGlobalsType f projSimples
+    gprs <- mapToGlobalsType f projGPRs
+    simds <- mapToGlobalsType f projSIMDs
+    mem <- f $ asn ! (knownIndex @GlobalSymsCtx @"__Memory")
+    return (simple, gprs, simds, mem)
+
+mapToGlobalsType :: Monad m
+                 => (forall s. f s -> m (g (GlobalsType s)))
+                 -> Assignment f ctx
+                 -> m (Assignment g (MapCtx GlobalsTypeWrapper ctx))
+mapToGlobalsType f asn = traverseMapCtx (Proxy @GlobalsTypeWrapper) f asn
+
+
+-- traverseToGlobalsStruct :: forall f g m
+--                          . Monad m
+--                         => Assignment f GlobalsSymsCtx
+--                         -> (forall s. f s -> m (g (GlobalsType s))
+--                         -> (Assignment f GPRSymsCtx -> m (g (GlobalsType "GPRS")))
+--                         -> (Assignment f SIMDSymsCtx -> m (g (GlobalsType "SIMDS")))
+--                         -> (f "__Memory" -> m (g (GlobalsType "__Memory")))
+--                         -> m (Assignment g StructGlobalsCtx)
+-- traverseToGlobalsStruct asn fsimple fgprs fsimds fmem = do
+--   simples' <- traverseMapCtx (Proxy @(GlobalsTypeWrapper)) fsimple
+
+--   where
+--     projSimples :: Assignment f SimpleGlobalSymsCtx
+--     projSimples = FC.traverseFC (\ref -> asn ! (globalRefSymIndex ref)) $ simpleGlobalRefs
+
+
+
 
 allGlobalRefs :: Assignment GlobalRef GlobalSymsCtx
 allGlobalRefs =
   (FC.fmapFC SimpleGlobalRef simpleGlobalRefs
-  <++> applyMapContext (Proxy @(NatToRegSymWrapper "_R")) GPRRef gprGlobalRefs
-  <++> applyMapContext (Proxy @(NatToRegSymWrapper "_V")) SIMDRef simdGlobalRefs
+  <++> gprGlobalRefsSym
+  <++> simdGlobalRefsSym
   ):> memoryGlobalRef
+
+traverseAllGlobals :: Monad m
+                   => (forall s. GlobalRef s -> m (g (GlobalsType s)))
+                   -> m (Assignment g GlobalsCtx)
+traverseAllGlobals f = traverseMapCtx (Proxy @(GlobalsTypeWrapper)) f allGlobalRefs
 
 knownGlobalRef :: forall s. IsGlobal s => GlobalRef s
 knownGlobalRef = allGlobalRefs ! knownIndex
@@ -533,10 +602,17 @@ globalRefSymbol gr = case gr of
   SIMDRef ref -> withSIMDRef ref $ \n -> mkIndexedSymbol knownSymbol n
   MemoryRef -> CT.knownSymbol
 
-globalRefIndex :: forall s. GlobalRef s -> Index GlobalsCtx (GlobalsType s)
-globalRefIndex gr = withGlobalRef gr $
-  mapContextIndex (Proxy @(GlobalsTypeWrapper))
-    Ctx.knownSize (knownIndex @GlobalSymsCtx @s)
+globalRefIndex :: GlobalRef s -> Index GlobalsCtx (GlobalsType s)
+globalRefIndex gr = mapCtxIndex (Proxy @(GlobalsTypeWrapper)) Ctx.knownSize (globalRefSymIndex gr)
+
+
+globalRefSymIndex :: forall s. GlobalRef s -> Index GlobalSymsCtx s
+globalRefSymIndex gr = withGlobalRef gr $ (knownIndex @GlobalSymsCtx @s)
+
+simpleRefIndex :: forall s. SimpleGlobalRef s -> Index SimpleGlobalsCtx (GlobalsType s)
+simpleRefIndex sref = withSimpleGlobalRef sref $ \_ ->
+  mapCtxIndex (Proxy @(GlobalsTypeWrapper))
+    Ctx.knownSize (knownIndex @SimpleGlobalSymsCtx @s)
 
 globalRefRepr :: forall s. GlobalRef s -> WI.BaseTypeRepr (GlobalsType s)
 globalRefRepr gr =

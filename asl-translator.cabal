@@ -17,6 +17,10 @@ flag unsafe-operations
   Description: Use unsafe operations (e.g. coercions) to improve performance
   Default: True
 
+flag asl-lite
+  Description: Use a trimmed-down set of instructions for the ASL specification (sufficient to disassemble u-boot).
+  Default: True
+
 common shared-properties
   default-language:    Haskell2010
   build-depends:       base >=4.10.0.0 && < 5,
@@ -53,6 +57,9 @@ common shared-properties
 
   if flag(unsafe-operations)
     cpp-options: -DUNSAFE_OPS
+
+  if flag(asl-lite)
+    cpp-options: -DASL_LITE
 
 library
   import:              shared-properties

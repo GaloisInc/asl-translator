@@ -65,23 +65,18 @@ normalizeSymFnEnv :: FS.SExpr -> Maybe FS.SExpr -> IO (FS.SExpr, Maybe FS.SExpr)
 normalizeSymFnEnv funsexpr minstexpr = do
   Some r <- newIONonceGenerator
   sym <- WB.newExprBuilder WB.FloatRealRepr NoBuilderData r
-  putStrLn $ "Parsing and normalizing function environment..."
   NormalizeSymFnEnv env funsexprsrev proxyFns <- deserializeAndNormalize sym funsexpr
-  let normFunSExprs = reverse $ (proxyFns ++ funsexprsrev)
-  putStrLn $ "Finished normalization functions. Serializing."
-  funsexpr' <- return $ FS.assembleSymFnEnv $ map (uncurry FS.mkSymFnEnvEntry) normFunSExprs
+  let normFunSExprs = reverse $ (funsexprsrev)
 
   minstexpr' <- case minstexpr of
     Just instexpr -> do
-      putStrLn $ "Parsing and normalizing instructions.."
       symFnEnv <- FS.getSymFnEnv instexpr
       instrPromises <- forM symFnEnv $ \(nm, instrSexpr) -> forkResult $ do
-        sexprs' <- reserializeInstr (Map.fromList proxyFns) nm instrSexpr
-        return $! map (uncurry FS.mkSymFnEnvEntry) sexprs'
-      instrs <- liftM concat $ mapM (\f -> f >>= return) instrPromises
-      putStrLn $ "Finished normalizing instructions. Serializing..."
-      return $ Just $ FS.assembleSymFnEnv instrs
+        reserializeInstr (Map.fromList proxyFns) nm instrSexpr
+      (instrProxies, instrFuns) <- liftM unzip $ mapM (\f -> f >>= return) instrPromises
+      return $ Just $ FS.assembleSymFnEnv $ map (uncurry FS.mkSymFnEnvEntry) (concat instrFuns ++ instrProxies)
     Nothing -> return Nothing
+  funsexpr' <- return $ FS.assembleSymFnEnv $ map (uncurry FS.mkSymFnEnvEntry) normFunSExprs
 
   return $ (funsexpr', minstexpr')
   where
@@ -109,7 +104,7 @@ forkResult f = do
 reserializeInstr :: Map T.Text FS.SExpr
                  -> T.Text
                  -> FS.SExpr
-                 -> IO [(T.Text, FS.SExpr)]
+                 -> IO ((T.Text, FS.SExpr), [(T.Text, FS.SExpr)])
 reserializeInstr env name sexpr = do
   Some r <- newIONonceGenerator
   sym <- WB.newExprBuilder WB.FloatRealRepr NoBuilderData r
@@ -119,13 +114,13 @@ reserializeInstr env name sexpr = do
                  . sym ~ WB.ExprBuilder t st fs
                 => WI.IsSymExprBuilder sym
                 => sym
-                -> IO [(T.Text, FS.SExpr)]
+                -> IO ((T.Text, FS.SExpr), [(T.Text, FS.SExpr)])
     doSerialize sym = do
       ref <- IO.newIORef (Map.empty :: Map T.Text (SomeSome (WI.SymFn sym)))
       let functionMaker = FS.lazyFunctionMaker sym (env, ref) `FS.composeMakers` FS.uninterpFunctionMaker sym
       SomeSome symFn <- FS.deserializeSymFn' functionMaker sexpr
       (symFn', normSymFns) <- normalizeSymFn sym name symFn
-      return $! (mapMaybe serializeEmbedded normSymFns ++ [(name, FS.serializeSymFn symFn')])
+      return $! ((name, FS.serializeSymFn symFn'), (mapMaybe serializeEmbedded normSymFns))
 
     serializeEmbedded :: SomeSome (EmbeddedSymFn t) -> Maybe (T.Text, FS.SExpr)
     serializeEmbedded (SomeSome eSymFn)

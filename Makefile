@@ -1,4 +1,4 @@
-.PHONY: default genarm normalize unzip archive all tests clean realclean deepclean
+.PHONY: default genarm normalize archive all tests clean realclean deepclean
 default: all
 
 ASL_PARSER = ./submodules/arm-asl-parser
@@ -32,26 +32,40 @@ SPEC_FILES = arm_defs.sexpr arm_instrs.sexpr support.sexpr arm_regs.sexpr extra_
 SOURCE_FILES = $(SPEC_FILES:%.sexpr=${PARSED}/%.sexpr)
 
 
-./output/functions.what4 ./output/instructions.what4: ${SOURCE_FILES} ${HS_SOURCES}
-	cabal v2-build asl-translator
-	cabal v2-run asl-translator-exec -- --output-functions="./output/functions.what4" --output-instructions="./output/instructions.what4" --asl-spec="${PARSED}/" --parallel
+./output/instructions.what4: ${SOURCE_FILES} ${HS_SOURCES}
+	cabal v2-build dismantle-arm-xml -f -asl-lite
+	cabal v2-build asl-translator -f -asl-lite
+	cabal v2-run asl-translator-exec -f -asl-lite -- --output-functions="./output/functions.what4" --output-instructions="./output/instructions.what4" --asl-spec="${PARSED}/" --parallel
 
-./output/functions-norm.what4 ./output/instructions-norm.what4: ./output/functions.what4 ./output/instructions.what4
-	cabal v2-build asl-translator
-	cabal v2-run asl-translator-exec -- --output-norm-functions="./output/functions-norm.what4" --output-norm-instructions="./output/instructions-norm.what4" --normalize-mode=all
+./output/instructions-lite.what4: ${SOURCE_FILES} ${HS_SOURCES}
+	cabal v2-build dismantle-arm-xml -f asl-lite
+	cabal v2-build asl-translator -f asl-lite
+	cabal v2-run asl-translator-exec -f asl-lite -- --output-functions="./output/functions.what4" --output-instructions="./output/instructions-lite.what4" --asl-spec="${PARSED}/" --parallel
 
-unzip:
-	gzip --uncompress --stdout $< > ./output/formulas.what4
-	touch $@
+./output/instructions-norm.what4: ./output/instructions.what4
+	caval v2-build dismantle-arm-xml -f -asl-lite
+	cabal v2-build asl-translator -f -asl-lite
+	cabal v2-run asl-translator-exec -f -asl-lite -- --output-norm-functions="./output/functions-norm.what4" --output-norm-instructions="./output/instructions-norm.what4" --normalize-mode=all
+
+./output/instructions-norm-lite.what4: ./output/functions.what4 ./output/instructions-lite.what4
+	cabal v2-build dismantle-arm-xml -f asl-lite
+	cabal v2-build asl-translator -f asl-lite
+	cabal v2-run asl-translator-exec -f asl-lite -- --output-norm-functions="./output/functions-norm.what4" --output-norm-instructions="./output/instructions-norm-lite.what4" --output-instructions="./output/instructions-lite.what4" --normalize-mode=all
 
 ./archived/%.what4.gz: ./output/%.what4
 	gzip --best --stdout $< > $@
 
-genarm: ./output/functions.what4 ./output/instructions.what4
+genarm: ./output/instructions.what4
 
-normalize: ./output/functions-norm.what4 ./output/instructions-norm.what4
+genlite: ./output/instructions-lite.what4
+
+normalize: ./output/instructions-norm.what4
+
+normalize-lite: ./output/instructions-norm-lite.what4
 
 archive: ./archived/functions-norm.what4.gz ./archived/instructions-norm.what4.gz
+
+archive-lite: ./archived/functions-norm.what4.gz ./archived/instructions-norm-lite.what4.gz
 
 all:
 	cabal v2-build asl-translator

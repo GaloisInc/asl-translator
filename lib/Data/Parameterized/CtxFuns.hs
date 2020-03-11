@@ -28,10 +28,16 @@ module Data.Parameterized.CtxFuns
   -- copied from SemMC
   , TyFun
   , Apply
-  , MapContext
-  , applyMapContext
-  , mapContextSize
-  , mapContextIndex
+  , MapCtx
+  , applyMapCtx
+  , traverseMapCtx
+  , revApplyMapCtx
+  , revTraverseMapCtx
+  , mapCtxSize
+  , mapCtxIndex
+  , IndexApplied(..)
+  , fromMapCtxSize
+  , fromMapCtxIndex
   , PairF(..)
   , unzipPairF
   ) where
@@ -40,6 +46,8 @@ import           GHC.TypeLits
 import           Unsafe.Coerce
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as TH
+
+import           Control.Applicative
 
 import           Data.Maybe ( fromJust )
 import           Data.Proxy
@@ -145,49 +153,143 @@ replicatedCtxPrf n sz idx =
 data TyFun :: k1 -> k2 -> Type
 type family Apply (f :: TyFun k1 k2 -> Type) (x :: k1) :: k2
 
-type family MapContext (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1) :: Ctx.Ctx k2 where
-  MapContext f Ctx.EmptyCtx = Ctx.EmptyCtx
-  MapContext f (xs Ctx.::> x) = MapContext f xs Ctx.::> Apply f x
+type family MapCtx (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1) :: Ctx.Ctx k2 where
+  MapCtx f Ctx.EmptyCtx = Ctx.EmptyCtx
+  MapCtx f (xs Ctx.::> x) = MapCtx f xs Ctx.::> Apply f x
 
-applyMapContext :: forall (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1)
-                        (g :: k2 -> Type) (h :: k1 -> Type)
+applyMapCtx :: forall (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1)
+                 (g :: k2 -> Type) (h :: k1 -> Type)
                . Proxy f -> (forall (x :: k1). h x -> g (Apply f x))
               -> Ctx.Assignment h xs
-              -> Ctx.Assignment g (MapContext f xs)
-applyMapContext p1 f asn = case Ctx.viewAssign asn of
+              -> Ctx.Assignment g (MapCtx f xs)
+applyMapCtx p1 f asn = case Ctx.viewAssign asn of
   Ctx.AssignEmpty -> Ctx.empty
-  Ctx.AssignExtend asn' x -> applyMapContext p1 f asn' Ctx.:> f x
+  Ctx.AssignExtend asn' x -> applyMapCtx p1 f asn' Ctx.:> f x
+
+traverseMapCtx :: forall (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1)
+                  (g :: k2 -> Type) (h :: k1 -> Type) m
+                . Applicative m
+               => Proxy f -> (forall (x :: k1). h x -> m (g (Apply f x)))
+               -> Ctx.Assignment h xs
+               -> m (Ctx.Assignment g (MapCtx f xs))
+traverseMapCtx p1 f asn = case Ctx.viewAssign asn of
+  Ctx.AssignEmpty -> pure Ctx.empty
+  Ctx.AssignExtend asn' x -> liftA2 (:>) (traverseMapCtx p1 f asn') (f x)
+
+revApplyMapCtx :: forall (f :: TyFun k1 k2 -> Type) (xs :: Ctx k1)
+                         (g :: k2 -> Type) (h :: k1 -> Type) w
+                . Proxy f -> (forall (x :: k1). g (Apply f x) -> h x)
+               -> Ctx.Assignment g (MapCtx f xs)
+               -> Ctx.Assignment h xs
+revApplyMapCtx p1 f Ctx.Empty | Refl <- zeroMapCtx p1 (Proxy @xs) = Ctx.empty
+revApplyMapCtx p1 f (rest :> a) | ApplyRepr <- appliedMapCtx p1 (Proxy @xs) (viewCtxRepr (Ctx.size (rest :> a))) =
+  revApplyMapCtx p1 f rest :> f a
+
+revTraverseMapCtx :: forall (f :: TyFun k1 k2 -> Type) (xs :: Ctx k1)
+                            (g :: k2 -> Type) (h :: k1 -> Type) m
+                   . Applicative m
+                  => Proxy f -> (forall (x :: k1). g (Apply f x) -> m (h x))
+                  -> Ctx.Assignment g (MapCtx f xs)
+                  -> m (Ctx.Assignment h xs)
+revTraverseMapCtx p1 f Ctx.Empty | Refl <- zeroMapCtx p1 (Proxy @xs) = pure $ Ctx.empty
+revTraverseMapCtx p1 f (rest :> a)
+  | ApplyRepr <- appliedMapCtx p1 (Proxy @xs) (viewCtxRepr (Ctx.size (rest :> a))) =
+    liftA2 (:>) (revTraverseMapCtx p1 f rest) (f a)
+
 -- fin
 
+data ViewCtxRepr ctx tp where
+  ViewCtxRepr :: ViewCtxRepr (ctx ::> tp) tp
+
+data ApplyRepr f ctx tp where
+  ApplyRepr :: ApplyRepr f (ctx ::> tp) (Apply f tp)
+
+zeroMapCtx :: (MapCtx f ctx) ~ EmptyCtx => Proxy f -> Proxy ctx -> ctx :~: EmptyCtx
+zeroMapCtx _ _ = unsafeCoerce (Refl :: EmptyCtx :~: EmptyCtx)
+
+appliedMapCtx :: Proxy f
+              -> Proxy ctx
+              -> ViewCtxRepr (MapCtx f ctx) tp
+              -> ApplyRepr f ctx tp
+appliedMapCtx _ _  ViewCtxRepr = unsafeCoerce (ApplyRepr)
+
+
+viewCtxRepr :: Size (ctx ::> tp) -> ViewCtxRepr (ctx ::> tp) tp
+viewCtxRepr _ = ViewCtxRepr
+
+headTailProxies :: forall ctx tp. Proxy (ctx ::> tp) -> (Proxy ctx, Proxy tp)
+headTailProxies _ = (Proxy @ctx, Proxy @tp)
+
+
+-- | Witness that an index into a mapped context is the result of some 'Apply'
+data IndexApplied f ctx tp where
+  IndexApplied :: Proxy f -> Ctx.Index ctx tp -> IndexApplied f ctx (Apply f tp)
+
+fromMapCtxIndex :: forall f ctx tp
+                 . Proxy f
+                -> Proxy ctx
+                -> Size (MapCtx f ctx)
+                -> Index (MapCtx f ctx) tp
+                -> IndexApplied f ctx tp
+fromMapCtxIndex f ctx sz idx = case viewIndex sz idx of
+  IndexViewLast sz'
+    |  ApplyRepr <- appliedMapCtx f ctx (viewCtxRepr sz)
+    -> IndexApplied f $ lastIndex (fromMapCtxSize f ctx sz)
+  IndexViewInit idx'
+    | ApplyRepr <- appliedMapCtx f ctx (viewCtxRepr sz)
+    , (ctx', _) <- headTailProxies (Proxy @ctx)
+    -> case fromMapCtxIndex f ctx' (decSize sz) idx' of
+        IndexApplied _ idx'' -> IndexApplied f (skipIndex idx'')
 
 -- the mapped context has the same size/shape, so indexes and sizes
 -- are portable between them.
 #ifdef UNSAFE_OPS
-mapContextSize :: Proxy f
+mapCtxSize :: Proxy f
                -> Size ctx
-               -> Size (MapContext f ctx)
-mapContextSize _ sz = unsafeCoerce sz
+               -> Size (MapCtx f ctx)
+mapCtxSize _ sz = unsafeCoerce sz
 
-mapContextIndex :: Proxy f
+mapCtxIndex :: Proxy f
                 -> Size ctx
                 -> Index ctx tp
-                -> Index (MapContext f ctx) (Apply f tp)
-mapContextIndex _ _ idx = unsafeCoerce idx
+                -> Index (MapCtx f ctx) (Apply f tp)
+mapCtxIndex _ _ idx = unsafeCoerce idx
+
+fromMapCtxSize :: forall f ctx
+                . Proxy f
+               -> Proxy ctx
+               -> Size (MapCtx f ctx)
+               -> Size ctx
+fromMapCtxSize _ _ sz = unsafeCoerce sz
+
+
 #else
-mapContextSize :: Proxy f
+mapCtxSize :: Proxy f
                -> Size ctx
-               -> Size (MapContext f ctx)
-mapContextSize pf sz = case viewSize sz of
+               -> Size (MapCtx f ctx)
+mapCtxSize pf sz = case viewSize sz of
   ZeroSize -> zeroSize
-  IncSize sz' -> incSize (mapContextSize pf sz')
+  IncSize sz' -> incSize (mapCtxSize pf sz')
 
-mapContextIndex :: Proxy f
+mapCtxIndex :: Proxy f
                 -> Size ctx
                 -> Index ctx tp
-                -> Index (MapContext f ctx) (Apply f tp)
-mapContextIndex pf sz idx = case viewIndex sz idx of
-  IndexViewLast sz' -> lastIndex (mapContextSize pf sz)
-  IndexViewInit idx' -> skipIndex (mapContextIndex pf (decSize sz) idx')
+                -> Index (MapCtx f ctx) (Apply f tp)
+mapCtxIndex pf sz idx = case viewIndex sz idx of
+  IndexViewLast sz' -> lastIndex (mapCtxSize pf sz)
+  IndexViewInit idx' -> skipIndex (mapCtxIndex pf (decSize sz) idx')
+
+fromMapCtxSize :: forall f ctx
+                . Proxy f
+               -> Proxy ctx
+               -> Size (MapCtx f ctx)
+               -> Size ctx
+fromMapCtxSize f ctx sz = case viewSize sz of
+  ZeroSize | Refl <- zeroMapCtx f ctx -> zeroSize
+  IncSize sz'
+   | ApplyRepr <- appliedMapCtx f ctx (viewCtxRepr sz)
+   , (ctx', _) <- headTailProxies ctx
+   -> incSize $ fromMapCtxSize f ctx' sz'
 #endif
 
 data PairF (t1 :: k -> *) (t2 :: k -> *) (t :: k) where

@@ -46,6 +46,7 @@ module Language.ASL.Globals.Types
   , DistinctCtx
   , ForallCtx
   , mapForallCtx
+  , traverseForallCtx
   , forallUpTo
   ) where
 
@@ -352,7 +353,6 @@ mkTypeFromReprs reprs = case Ctx.viewAssign reprs of
 -- mkReprFromGlobals :: Some (Ctx.Assignment Global) -> TH.Q TH.Exp
 -- mkReprFromGlobals (Some globals) = mkExprFromReprs $ FC.fmapFC gbType globals
 
-
 -- | If a type appears exactly once in the given known context, we can compute its index.
 
 class KnownIndex ctx tp where
@@ -454,9 +454,17 @@ mapForallCtx :: forall ctx c f g
              -> (forall tp. c tp => f tp -> g tp)
              -> Ctx.Assignment f ctx
              -> Ctx.Assignment g ctx
-mapForallCtx c f asn = runIdentity $
-  Ctx.traverseWithIndex (\idx a -> withForallCtx c idx $ return $ f a) asn
+mapForallCtx c f asn = runIdentity $ traverseForallCtx c (\a -> return $ f a) asn
 
+
+traverseForallCtx :: forall ctx c f g m
+              . ForallCtx c ctx
+             => Applicative m
+             => Proxy c
+             -> (forall tp. c tp => f tp -> m (g tp))
+             -> Ctx.Assignment f ctx
+             -> m (Ctx.Assignment g ctx)
+traverseForallCtx c f asn = Ctx.traverseWithIndex (\idx a -> withForallCtx c idx $ f a) asn
 
 forallUpTo :: forall ctx c n maxn
             . ForallCtx c (CtxUpTo maxn)

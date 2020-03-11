@@ -27,8 +27,10 @@ module Language.ASL.Formulas.Serialize
   , envFunctionMaker
   , filteredFunctionMaker
   , uninterpFunctionMaker
+  , noFunctionMaker
   , lazyFunctionMaker
   , composeMakers
+  , expandSymFn
   , SExpr
   , NamedSymFnEnv
   ) where
@@ -338,11 +340,11 @@ deserializeSymFnEnv :: forall sym m env
                     -> FunctionMaker sym
                     -> SExpr
                     -> m [(T.Text, SomeSome (WI.SymFn sym))]
-deserializeSymFnEnv sym env mkuninterp sexpr =
+deserializeSymFnEnv sym env mkFun' sexpr =
   fst <$> deserializeSymFnEnv' sym env (\nm symfn env -> return $ Map.insert nm symfn env) mkFun sexpr
   where
     mkFun :: NamedSymFnEnv sym -> FunctionMaker sym
-    mkFun env' = envFunctionMaker sym env `composeMakers` uninterpFunctionMaker sym
+    mkFun env' = envFunctionMaker sym env' `composeMakers` mkFun'
 
 composeMakers :: FunctionMaker sym -> FunctionMaker sym -> FunctionMaker sym
 composeMakers (FunctionMaker _ f1) (FunctionMaker sym f2) = FunctionMaker sym $ \nm sig ->
@@ -366,7 +368,7 @@ lazyFunctionMaker :: (WI.IsSymExprBuilder sym, sym ~ WB.ExprBuilder t st fs, Sho
                   -> LazySymFnEnv sym
                   -> FunctionMaker sym
 lazyFunctionMaker sym (env, ref) = do
-  FunctionMaker sym $ \formalName sig -> do
+  FunctionMaker sym $ \_formalName sig -> do
     nmedEnv <- liftIO $ IO.readIORef ref
     lookupFnSig sym nmedEnv sig >>= \case
       Just symFn -> return $ Right symFn
@@ -386,19 +388,18 @@ expandSymFn sym symFn = case WB.symFnInfo symFn of
   WB.DefinedFnInfo args expr _ -> WI.definedFn sym (WB.symFnName symFn) args expr (\_ -> True)
   _ -> return symFn
 
-parserFunctionMaker :: forall sym. WI.IsSymExprBuilder sym => sym -> FunctionMaker sym
-parserFunctionMaker sym = FunctionMaker sym $ \_nm sig -> do
-  Right <$> (liftIO $ WI.freshTotalUninterpFn sym (U.makeSymbol (T.unpack (fsName sig))) (fsArgs sig) (fsRet sig))
-
 uninterpFunctionMaker :: forall sym. WI.IsSymExprBuilder sym => sym -> FunctionMaker sym
 uninterpFunctionMaker sym = FunctionMaker sym $ \_nm sig -> do
   Right <$> (liftIO $ WI.freshTotalUninterpFn sym (U.makeSymbol (T.unpack (fsName sig))) (fsArgs sig) (fsRet sig))
+
+noFunctionMaker :: forall sym. WI.IsSymExprBuilder sym => sym -> FunctionMaker sym
+noFunctionMaker sym = FunctionMaker sym $ \_ _ -> return $ Left "noFunctionMaker called"
 
 filteredFunctionMaker :: WI.IsSymExprBuilder sym
                       => (T.Text -> Bool)
                       -> FunctionMaker sym
                       -> FunctionMaker sym
 filteredFunctionMaker filt (FunctionMaker sym f) = FunctionMaker sym $ \formalName sig -> do
-  case (not $ filt $ fsName sig) of
-    True -> return $ Left $ "Unexpected uninterpreted function: " ++ show sig
-    False -> f formalName sig
+  case (filt $ fsName sig) of
+    True -> f formalName sig
+    False -> return $ Left $ "Unexpected uninterpreted function: " ++ show sig

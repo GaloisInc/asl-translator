@@ -33,7 +33,7 @@ main = do
   Some r <- liftIO $ newIONonceGenerator
   sym <- liftIO $ B.newExprBuilder B.FloatRealRepr NoBuilderData r
   putStrLn $ "Reading formulas..."
-  env <- M.fromList <$> FS.getFormulas sym M.empty
+  env <- M.fromList <$> FS.getFunctionFormulas sym M.empty
   putStrLn $ "Testing " <> formulaName <> " ..."
   case M.lookup (T.pack formulaName) env of
     Nothing -> do

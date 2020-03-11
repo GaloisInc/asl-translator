@@ -54,6 +54,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import           Data.Maybe ( catMaybes, mapMaybe, fromJust )
 import           Data.Monoid
+import           Data.Parameterized.Classes
 import           Data.Parameterized.Nonce
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.TraversableFC as FC
@@ -269,20 +270,35 @@ serializeFormulas opts (sFormulaPromises -> promises) = do
 
   (instrs, funs) <- (partitionEithers . reverse) <$> mapM getFormula promises
 
-  when (simulateFunctions opts) $
-    doSerialize fpOutFuns funs
-  when (simulateInstructions opts) $
-    doSerialize fpOutInstrs instrs
+  Some r <- liftIO $ newIONonceGenerator
+  sym <- liftIO $ B.newExprBuilder B.FloatRealRepr NoBuilderData r
+
+  case (optSimulationMode opts) of
+    SimulateAll -> do
+      fnEnv <- doSerialize sym Map.empty fpOutFuns funs
+      void $ doSerialize sym fnEnv fpOutInstrs instrs
+    SimulateFunctions ->
+      void $ doSerialize sym Map.empty fpOutFuns funs
+    SimulateInstructions ->
+      void $ doSerialize sym Map.empty fpOutInstrs instrs
+    SimulateInstruction _ ->
+      void $ doSerialize sym Map.empty fpOutInstrs instrs
   where
-    doSerialize :: FilePath -> [FS.SExpr] -> IO ()
-    doSerialize out sexprs = do
+    doSerialize :: (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
+                => sym
+                -> FS.NamedSymFnEnv sym
+                -> FilePath
+                -> [FS.SExpr]
+                -> IO (FS.NamedSymFnEnv sym)
+    doSerialize sym env out sexprs = do
       logMsgIO opts 0 $ "Writing formulas to: " ++ out
       allsexpr <- return $ FS.assembleSymFnEnv sexprs
       txt <- return $ FS.printSExpr $ allsexpr
       T.writeFile out txt
       logMsgIO opts 0 $ "Serialization successful."
-      when (optCheckSerialization opts) $ do
-        checkSerialization opts out
+      case (optCheckSerialization opts) of
+        True -> checkSerialization sym opts env out
+        False -> return $ Map.empty
 
     getFormula :: (ElemKey, IO FS.SExpr) -> IO (Either FS.SExpr FS.SExpr)
     getFormula (key, getresult) = do
@@ -291,18 +307,28 @@ serializeFormulas opts (sFormulaPromises -> promises) = do
         KeyInstr _ -> return $ Left result
         KeyFun _ -> return $ Right result
 
-checkSerialization :: TranslatorOptions -> FilePath -> IO ()
-checkSerialization opts fp = do
+checkSerialization :: (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
+                   => sym
+                   -> TranslatorOptions
+                   -> FS.NamedSymFnEnv sym
+                   -> FilePath
+                   -> IO (FS.NamedSymFnEnv sym)
+checkSerialization sym opts env fp = do
   logMsgIO opts 0 $ "Deserializing formulas from: " ++ fp
-  Some r <- liftIO $ newIONonceGenerator
-  sym <- liftIO $ B.newExprBuilder B.FloatRealRepr NoBuilderData r
   sexpr <- T.readFile fp >>= FS.parseSExpr
-  _ <- FS.deserializeSymFnEnv sym Map.empty (functionMaker sym) sexpr
-  logMsgIO opts 0 $ "Deserializing successful."
-  return ()
+  fns <- FS.deserializeSymFnEnv sym env (functionMaker sym opts) sexpr
+  logMsgIO opts 0 $ "Successfully deserialized: " ++ show (length fns) ++ " formulas."
+  return (Map.fromList $ fns)
 
-functionMaker :: WI.IsSymExprBuilder sym => sym -> FS.FunctionMaker sym
-functionMaker sym = FS.filteredFunctionMaker validUninterpFunction (FS.uninterpFunctionMaker sym)
+functionMaker :: WI.IsSymExprBuilder sym
+              => sym
+              -> TranslatorOptions
+              -> FS.FunctionMaker sym
+functionMaker sym opts = case optSimulationMode opts of
+  SimulateAll -> FS.filteredFunctionMaker validUninterpFunction (FS.uninterpFunctionMaker sym)
+  SimulateFunctions -> FS.filteredFunctionMaker validUninterpFunction (FS.uninterpFunctionMaker sym)
+  SimulateInstruction _ -> FS.uninterpFunctionMaker sym
+  SimulateInstructions -> FS.uninterpFunctionMaker sym
 
 validUninterpFunction :: T.Text -> Bool
 validUninterpFunction nm =
@@ -310,6 +336,7 @@ validUninterpFunction nm =
   || "INIT_GLOBAL_" `T.isPrefixOf` nm
   || "read_mem" `T.isPrefixOf` nm
   || "write_mem" `T.isPrefixOf` nm
+  || nm `elem` ["gpr_get", "gpr_set", "simd_get", "simd_set"]
 
 runWithFilters' :: HasCallStack
                 => TranslatorOptions
