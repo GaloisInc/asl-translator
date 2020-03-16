@@ -32,6 +32,7 @@ common shared-properties
                        dismantle-tablegen,
                        hashtables,
                        ilist,
+                       integer-logarithms,
                        bimap,
                        text >= 1 && < 2,
                        mtl,

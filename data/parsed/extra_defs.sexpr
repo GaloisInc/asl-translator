@@ -206,6 +206,40 @@
                     (ExprLitNat 0)
                     (ExprLitNat 0))))))))))
   (DefCallable
+    (QualifiedIdentifier Any integerSizeBound)
+    (list
+      (SymDecl
+        i
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        bv
+        (TypeFun
+          bits
+          (ExprVarRef
+            (QualifiedIdentifier Any N)))))
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtVarDeclInit
+            (SymDecl
+              dummy
+              (TypeFun
+                bits
+                (ExprVarRef
+                  (QualifiedIdentifier Any N))))
+            (ExprBinOp
+              "<<"
+              (ExprCall
+                (QualifiedIdentifier Any Zeros)
+                (list
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))))
+              (ExprVarRef
+                (QualifiedIdentifier Any i))))
+          (StmtReturn Nothing)))))
+  (DefCallable
     (QualifiedIdentifier Any truncate)
     (list
       (SymDecl
@@ -228,6 +262,112 @@
     Nothing)
   (DefCallable
     (QualifiedIdentifier Any getSlice)
+    (list
+      (SymDecl
+        inbv
+        (TypeFun
+          bits
+          (ExprVarRef
+            (QualifiedIdentifier Any N))))
+      (SymDecl
+        signed
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        lo
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        hi
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprVarRef
+              (QualifiedIdentifier Any length))))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtCall
+            (QualifiedIdentifier Any integerSizeBound)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any lo))
+              (ExprVarRef
+                (QualifiedIdentifier Any inbv))))
+          (StmtCall
+            (QualifiedIdentifier Any integerSizeBound)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any hi))
+              (ExprVarRef
+                (QualifiedIdentifier Any inbv))))
+          (StmtReturn
+            (Just
+              (ExprUnknown
+                (TypeFun
+                  bits
+                  (ExprVarRef
+                    (QualifiedIdentifier Any length))))))))))
+  (DefCallable
+    (QualifiedIdentifier Any setSlice)
+    (list
+      (SymDecl
+        basebv
+        (TypeFun
+          bits
+          (ExprVarRef
+            (QualifiedIdentifier Any N))))
+      (SymDecl
+        lo
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        hi
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        asnbv
+        (TypeFun
+          bits
+          (ExprVarRef
+            (QualifiedIdentifier Any length)))))
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprVarRef
+              (QualifiedIdentifier Any N))))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtCall
+            (QualifiedIdentifier Any integerSizeBound)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any lo))
+              (ExprVarRef
+                (QualifiedIdentifier Any basebv))))
+          (StmtCall
+            (QualifiedIdentifier Any integerSizeBound)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any lo))
+              (ExprVarRef
+                (QualifiedIdentifier Any basebv))))
+          (StmtReturn
+            (Just
+              (ExprUnknown
+                (TypeFun
+                  bits
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))))))))))
+  (DefCallable
+    (QualifiedIdentifier Any getSlice2)
     (list
       (SymDecl
         inbv
@@ -301,6 +441,20 @@
                   (QualifiedIdentifier Any lo)))
               (ExprVarRef
                 (QualifiedIdentifier Any length))))
+          (StmtCall
+            (QualifiedIdentifier Any integerSizeBound)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any lo))
+              (ExprVarRef
+                (QualifiedIdentifier Any inbv))))
+          (StmtCall
+            (QualifiedIdentifier Any integerSizeBound)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any hi))
+              (ExprVarRef
+                (QualifiedIdentifier Any inbv))))
           (StmtVarDeclInit
             (SymDecl
               bv
@@ -381,7 +535,7 @@
                   (ExprVarRef
                     (QualifiedIdentifier Any length))))))))))
   (DefCallable
-    (QualifiedIdentifier Any setSlice)
+    (QualifiedIdentifier Any setSlice2)
     (list
       (SymDecl
         basebv
@@ -457,6 +611,20 @@
                   (QualifiedIdentifier Any lo)))
               (ExprVarRef
                 (QualifiedIdentifier Any length))))
+          (StmtCall
+            (QualifiedIdentifier Any integerSizeBound)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any lo))
+              (ExprVarRef
+                (QualifiedIdentifier Any basebv))))
+          (StmtCall
+            (QualifiedIdentifier Any integerSizeBound)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any hi))
+              (ExprVarRef
+                (QualifiedIdentifier Any basebv))))
           (StmtVarDeclInit
             (SymDecl
               bv
@@ -1916,6 +2084,13 @@
               (ExprVarRef
                 (QualifiedIdentifier Any shift))
               (ExprLitNat 0)))
+          (StmtCall
+            (QualifiedIdentifier Any integerSizeBound)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any shift))
+              (ExprVarRef
+                (QualifiedIdentifier Any x))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any shift))
@@ -1992,6 +2167,13 @@
               (ExprVarRef
                 (QualifiedIdentifier Any shift))
               (ExprLitNat 0)))
+          (StmtCall
+            (QualifiedIdentifier Any integerSizeBound)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any shift))
+              (ExprVarRef
+                (QualifiedIdentifier Any x))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any shift))
@@ -2068,6 +2250,13 @@
               (ExprVarRef
                 (QualifiedIdentifier Any shift))
               (ExprLitNat 0)))
+          (StmtCall
+            (QualifiedIdentifier Any integerSizeBound)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any shift))
+              (ExprVarRef
+                (QualifiedIdentifier Any x))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any shift))
@@ -2143,6 +2332,13 @@
               (ExprVarRef
                 (QualifiedIdentifier Any shift))
               (ExprLitNat 0)))
+          (StmtCall
+            (QualifiedIdentifier Any integerSizeBound)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any shift))
+              (ExprVarRef
+                (QualifiedIdentifier Any x))))
           (StmtIf
             (ExprBinOp
               "=="
@@ -2204,6 +2400,13 @@
               (ExprVarRef
                 (QualifiedIdentifier Any shift))
               (ExprLitNat 0)))
+          (StmtCall
+            (QualifiedIdentifier Any integerSizeBound)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any shift))
+              (ExprVarRef
+                (QualifiedIdentifier Any x))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any shift))
@@ -2279,6 +2482,13 @@
               (ExprVarRef
                 (QualifiedIdentifier Any shift))
               (ExprLitNat 0)))
+          (StmtCall
+            (QualifiedIdentifier Any integerSizeBound)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any shift))
+              (ExprVarRef
+                (QualifiedIdentifier Any x))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any shift))

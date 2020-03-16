@@ -27,6 +27,13 @@ boolean UNDEFINED_boolean()
 array [0..0] of bits(N) UNDEFINED_IntArray()
     return array [0..0] of bits(N) UNKNOWN;
 
+// A no-op that provides an explicit upper bound on the number of
+// bits required to represent a given integer.
+
+integerSizeBound(integer i, bits(N) bv)
+  bits(N) dummy = Zeros(N) << i;
+  return;
+
 // Defining slicing with primitive bitvector operations
 
 bits(M) truncate(bits(N) bv, integer M);
@@ -36,13 +43,30 @@ bits(M) truncate(bits(N) bv, integer M);
 // either zero or sign-extended (according to the signed flag) to the
 // target length.
 
+// we represent the low and high bit indexes as a 'bits(N)' to avoid introducing
+// unecessary complexity when stripping integers out of the final translated semantics
+
+
 bits(length) getSlice(bits(N) inbv, boolean signed, integer lo, integer hi)
+    integerSizeBound(lo, inbv);
+    integerSizeBound(hi, inbv);
+    return bits(length) UNKNOWN;
+
+bits(N) setSlice(bits(N) basebv, integer lo, integer hi, bits(length) asnbv)
+    integerSizeBound(lo, basebv);
+    integerSizeBound(lo, basebv);
+    return bits(N) UNKNOWN;
+
+bits(length) getSlice2(bits(N) inbv, boolean signed, integer lo, integer hi)
     assert length <= N;
     assert length >= 1;
     assert hi >= lo;
     assert hi <= length;
     assert lo >= 0;
     assert (hi - lo) <= length;
+
+    integerSizeBound(lo, inbv);
+    integerSizeBound(hi, inbv);
 
     bits(N) bv = inbv;
     // bv = [ bv_(N-1) .. bv_hi(hi) .. bv_lo(lo) .. bv_0](N)
@@ -68,13 +92,16 @@ bits(length) getSlice(bits(N) inbv, boolean signed, integer lo, integer hi)
 // the range we are setting, in which case we simply drop
 // any bits above hi - lo.
 
-bits(N) setSlice(bits(N) basebv, integer lo, integer hi, bits(length) asnbv)
+bits(N) setSlice2(bits(N) basebv, integer lo, integer hi, bits(length) asnbv)
     assert length <= N;
     assert length >= 1;
     assert hi >= lo;
     assert hi <= length;
     assert lo >= 0;
     assert (hi - lo) <= length;
+
+    integerSizeBound(lo, basebv);
+    integerSizeBound(hi, basebv);
 
     bits(length) bv = asnbv;
     // bv = [bv(length) .. bv_hi(hi) .. bv_0(0)](length)
@@ -323,6 +350,8 @@ bits(width) BigEndianReverse (bits(width) value)
 
 (bits(N), bit) LSL_C(bits(N) x, integer shift)
     assert shift > 0;
+    integerSizeBound(shift, x);
+
     shift = if shift > N then N else shift;
     carry_out = x<N - shift>;
     result = LSL(x, shift);
@@ -330,6 +359,8 @@ bits(width) BigEndianReverse (bits(width) value)
 
 bits(N) LSL(bits(N) x, integer shift)
     assert shift >= 0;
+    integerSizeBound(shift, x);
+
     shift = if shift > N then N else shift;
     if shift == 0 then
         result = x;
@@ -339,6 +370,8 @@ bits(N) LSL(bits(N) x, integer shift)
 
 (bits(N), bit) LSR_C(bits(N) x, integer shift)
     assert shift > 0;
+    integerSizeBound(shift, x);
+
     shift = if shift > N then N else shift;
     carry_out = x<shift-1>;
     result = LSR(x, shift);
@@ -346,6 +379,8 @@ bits(N) LSL(bits(N) x, integer shift)
 
 bits(N) LSR(bits(N) x, integer shift)
     assert shift >= 0;
+    integerSizeBound(shift, x);
+
     if shift == 0 then
         result = x;
     else
@@ -354,6 +389,8 @@ bits(N) LSR(bits(N) x, integer shift)
 
 (bits(N), bit) ASR_C(bits(N) x, integer shift)
     assert shift > 0;
+    integerSizeBound(shift, x);
+
     shift = if shift > N then N else shift;
     carry_out = x<shift-1>;
     result = ASR(x, shift);
@@ -361,6 +398,8 @@ bits(N) LSR(bits(N) x, integer shift)
 
 bits(N) ASR(bits(N) x, integer shift)
     assert shift >= 0;
+    integerSizeBound(shift, x);
+
     shift = if shift > N then N else shift;
     if shift == 0 then
         result = x;

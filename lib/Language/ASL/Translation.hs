@@ -1083,6 +1083,40 @@ translatelValSlice ov lv slice asnAtom' constraint = do
   translateAssignment' ov lv result TypeBasic Nothing
 
 
+sbvToInteger :: forall w h s arch ret
+              . 1 WT.<= w
+             => NR.NatRepr w
+             -> CCG.Expr (ASLExt arch) s (CT.BVType w)
+             -> CCG.Expr (ASLExt arch) s CT.IntegerType
+sbvToInteger w bv =
+  let uf = UF ("sbvToInteger_" <> T.pack (show (WT.intValue w)))
+            UFCached WT.BaseIntegerRepr (Ctx.singleton (CT.BVRepr w)) (Ctx.singleton bv)
+  in CCG.App $ CCE.ExtensionApp uf
+
+integerToBV :: forall w h s arch ret
+                    . 1 WT.<= w
+                   => NR.NatRepr w
+                   -> CCG.Expr (ASLExt arch) s CT.IntegerType
+                   -> CCG.Expr (ASLExt arch) s (CT.BVType w)
+integerToBV w ie =
+  let uf = UF ("integerToBV_" <> T.pack (show (WT.intValue w)))
+            UFCached (WT.BaseBVRepr w) (Ctx.singleton CT.IntegerRepr) (Ctx.singleton ie)
+  in CCG.App $ CCE.ExtensionApp uf
+
+-- Cast an integer to a bitvector, but hint that the bitvector backing
+-- the integer in the final normalized form may have more bits than
+-- the result (which will be truncated).
+integerToBVNoBound :: forall w h s arch ret
+                    . 1 WT.<= w
+                   => NR.NatRepr w
+                   -> CCG.Expr (ASLExt arch) s CT.IntegerType
+                   -> CCG.Expr (ASLExt arch) s (CT.BVType w)
+integerToBVNoBound w ie =
+  let uf = UF ("integerToBVNoBound_" <> T.pack (show (WT.intValue w)))
+            UFCached (WT.BaseBVRepr w) (Ctx.singleton CT.IntegerRepr) (Ctx.singleton ie)
+  in CCG.App $ CCE.ExtensionApp uf
+
+
 -- | Get the "default" value for a given crucible type. We can't use unassigned
 -- registers, as ASL functions occasionally return values uninitialized.
 getDefaultValue :: forall h s arch ret tp
@@ -1822,7 +1856,7 @@ getSliceRange ov slice slicedAtom constraint = do
       case SE.exprToStatic env hi of
         Just (StaticInt hi') | Some (BVRepr hiRepr) <- intToBVRepr (hi'+1) ->
             if | Just WT.LeqProof <- lenRepr `WT.testLeq` hiRepr -> do
-                 intAtom <- mkAtom $ CCG.App (CCE.IntegerToBV hiRepr (CCG.AtomExpr slicedAtom))
+                 intAtom <- mkAtom $ integerToBVNoBound hiRepr (CCG.AtomExpr slicedAtom)
                  return $ SliceRange signed lenRepr hiRepr loAtom hiAtom intAtom
                | otherwise -> throwTrace $ InvalidSymbolicSlice lenRepr hiRepr
         _ -> throwTrace $ RequiredConcreteValue hi (staticEnvMapVals env)
@@ -2047,7 +2081,7 @@ translateBinaryOp ov op e1 e2 tc = do
         let shift = CCG.App $ CCE.IntegerToBV nr (CCG.AtomExpr a2)
         let base = CCG.App $ CCE.BVLit nr 1
         let shifted = CCG.App $ (CCE.BVShl nr base shift)
-        Some <$> mkAtom (CCG.App (CCE.BvToInteger nr shifted))
+        Some <$> mkAtom (sbvToInteger nr shifted)
 
     _ -> X.throw (UnsupportedBinaryOperator op)
 
@@ -2150,7 +2184,7 @@ applyBinOp'' bundle (e1, a1) (e2, a2) =
     CT.BVRepr nr -> do
       case CCG.typeOfAtom a2 of
         CT.IntegerRepr -> do
-            let a2' = CCG.App (CCE.IntegerToBV nr (CCG.AtomExpr a2))
+            let a2' = CCG.App $ CCE.IntegerToBV nr (CCG.AtomExpr a2)
             Some <$> obBV bundle nr (CCG.AtomExpr a1) a2'
         _ -> do
           Refl <- assertAtomType'' e2 (CT.BVRepr nr) a2
@@ -2161,7 +2195,7 @@ applyBinOp'' bundle (e1, a1) (e2, a2) =
     CT.IntegerRepr -> do
       case CCG.typeOfAtom a2 of
         CT.BVRepr nr -> do
-          let a1' = CCG.App (CCE.IntegerToBV nr (CCG.AtomExpr a1))
+          let a1' = CCG.App $ CCE.IntegerToBV nr (CCG.AtomExpr a1)
           Some <$> obBV bundle nr a1' (CCG.AtomExpr a2)
         _ -> do
           Refl <- assertAtomType'' e2 CT.IntegerRepr a2
@@ -2199,7 +2233,7 @@ bvBinOp con (e1, a1) (e2, a2) =
     CT.BVRepr nr -> do
       case CCG.typeOfAtom a2 of
         CT.IntegerRepr -> do
-          let a2' = CCG.App (CCE.IntegerToBV nr (CCG.AtomExpr a2))
+          let a2' = CCG.App $ CCE.IntegerToBV nr (CCG.AtomExpr a2)
           Some <$> mkAtom (CCG.App (con nr (CCG.AtomExpr a1) a2'))
         _ -> do
           Refl <- assertAtomType e2 (CT.BVRepr nr) a2
@@ -2207,13 +2241,16 @@ bvBinOp con (e1, a1) (e2, a2) =
     CT.IntegerRepr -> do
       case CCG.typeOfAtom a2 of
         CT.BVRepr nr -> do
-          let a1' = CCG.App (CCE.IntegerToBV nr (CCG.AtomExpr a1))
+          let a1' = CCG.App $ CCE.IntegerToBV nr (CCG.AtomExpr a1)
           Some <$> mkAtom (CCG.App (con nr a1' (CCG.AtomExpr a2)))
         CT.IntegerRepr -> do
-          let bvrepr = WT.knownNat @64
-          let a1' = CCG.App $ CCE.IntegerToBV bvrepr (CCG.AtomExpr a1)
-          let a2' = CCG.App $ CCE.IntegerToBV bvrepr (CCG.AtomExpr a2)
-          Some <$> mkAtom (CCG.App (CCE.BvToInteger bvrepr (CCG.App (con bvrepr a1' a2'))))
+          -- the de-integerization in the final normalized spec will reverse this
+          -- to just be the given bitvector operation on the actual bitvectors underlying
+          -- the given integers
+          let bvrepr = WT.knownNat @128
+          let a1' = integerToBV bvrepr (CCG.AtomExpr a1)
+          let a2' = integerToBV bvrepr (CCG.AtomExpr a2)
+          Some <$> mkAtom (sbvToInteger bvrepr (CCG.App (con bvrepr a1' a2')))
         _ -> throwTrace (ExpectedBVType e1 (CCG.typeOfAtom a2))
     _ -> throwTrace $ (ExpectedBVType e1 (CCG.typeOfAtom a1))
 
@@ -2452,7 +2489,7 @@ polymorphicBVOverrides expr ty env = case expr of
 
     (Some sbvatom, _) <- translateExpr' overrides argExpr ConstraintNone
     BVRepr snr <- getAtomBVRepr sbvatom
-    satom <- mkAtom $ CCG.App $ CCE.SbvToInteger snr (CCG.AtomExpr sbvatom)
+    satom <- mkAtom $ sbvToInteger snr (CCG.AtomExpr sbvatom)
     Just Refl <- return $ testEquality unr snr
 
     mkAtom' $ CCG.App $ CCE.BaseIte CT.BaseIntegerRepr (CCG.AtomExpr unsigned) (CCG.AtomExpr uatom) (CCG.AtomExpr satom)
@@ -2464,7 +2501,7 @@ polymorphicBVOverrides expr ty env = case expr of
   AS.ExprCall (AS.QualifiedIdentifier _ "SInt") [argExpr] -> Just $ do
     Some atom <- translateExpr overrides argExpr
     BVRepr nr <- getAtomBVRepr atom
-    mkAtom' (CCG.App (CCE.SbvToInteger nr (CCG.AtomExpr atom)))
+    mkAtom' (sbvToInteger nr (CCG.AtomExpr atom))
   AS.ExprCall (AS.QualifiedIdentifier _ "IsZero") [argExpr] -> Just $ do
     (Some atom, _) <- translateExpr' overrides argExpr (ConstraintHint $ HintAnyBVSize)
     BVRepr nr <- getAtomBVRepr atom
