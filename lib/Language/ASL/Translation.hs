@@ -425,6 +425,11 @@ getInitialGlobal :: forall h s arch ret tp
                  . T.Text
                 -> WT.BaseTypeRepr tp
                 -> Generator h s arch ret (CCG.Atom s (CT.BaseToType tp))
+getInitialGlobal "SIMDS_clone" repr = do
+  Some e <- lookupVarRef "SIMDS"
+  a <- mkAtom e
+  Refl <- assertAtomType' (CT.baseToType repr) a
+  return a
 getInitialGlobal nm repr = do
   let uf = UF ("INIT_GLOBAL_" <> nm) UFFresh repr Ctx.empty Ctx.empty
   atom <- mkAtom (CCG.App (CCE.ExtensionApp uf))
@@ -2827,6 +2832,11 @@ overrides = Overrides {..}
 
             AS.ExprCall (AS.QualifiedIdentifier _ "SIMD_Internal_Get") [idxExpr] ->
               Just $ mkRegisterGetCall "simd_get" "SIMDS"
+                (CT.BVRepr (NR.knownNat @8))
+                (WT.BaseBVRepr (NR.knownNat @128)) idxExpr
+
+            AS.ExprCall (AS.QualifiedIdentifier _ "SIMD_clone_Internal_Get") [idxExpr] ->
+              Just $ mkRegisterGetCall "simd_get" "SIMDS_clone"
                 (CT.BVRepr (NR.knownNat @8))
                 (WT.BaseBVRepr (NR.knownNat @128)) idxExpr
 

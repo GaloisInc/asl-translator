@@ -311,6 +311,31 @@ AArch32.MemSingle[bits(32) address, integer size, AccType acctype, boolean wasal
     Mem_Internal_Set(address, size, value);
     return;
 
+// We model _Dclone instead using _Vclone as a simple alias to the original value of SIMDS at the start
+// of the instruction. This function creates _Dclone otherwise, so we remove that initialization code.
+
+CheckAdvSIMDEnabled()
+
+    fpexc_check = TRUE;
+    advsimd = TRUE;
+
+    AArch32.CheckAdvSIMDOrFPEnabled(fpexc_check, advsimd);
+    return;
+
+// Swap out _Dclone for _Vclone by inlining the D getter inside of Din
+
+array bits(128) SIMDS_clone[simdidx];
+
+// overridden by the translator
+bits(128) SIMD_clone_Internal_Get(simdidx idx)
+  return SIMDS_clone[idx];
+
+bits(64) Din[integer n]
+    assert n >= 0 && n <= 31;
+    bits(8) idx = Zeros(8);
+    idx = idx + (n DIV 2);
+    base = (n MOD 2) * 64;
+    return SIMD_clone_Internal_Get(idx)<base+63:base>;
 
 // Since IsExclusiveGlobal is stubbed to be FALSE, this will always be FALSE
 boolean AArch32.ExclusiveMonitorsPass(bits(32) address, integer size)

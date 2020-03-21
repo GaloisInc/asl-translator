@@ -230,7 +230,8 @@ untrackedGlobals' = Some $ empty
   -- this flag is set but never read
   :> noflag "ShouldAdvanceIT"
   -- this is initialized before it is read, so we don't need to track it
-  :> intarraybv @64 "_Dclone"
+  -- the translator assigns this to a copy of SIMDS as its initial value
+  :> def "SIMDS_clone" (knownRepr :: WI.BaseTypeRepr AllSIMDBaseType) domainUnbounded
   -- system registers
   :> bv @32 "CPACR"
   :> bv @32 "CPACR_EL1"

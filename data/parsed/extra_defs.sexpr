@@ -1841,6 +1841,141 @@
                 (QualifiedIdentifier Any value))))
           (StmtReturn Nothing)))))
   (DefCallable
+    (QualifiedIdentifier Any CheckAdvSIMDEnabled)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any fpexc_check))
+            (ExprVarRef
+              (QualifiedIdentifier Any TRUE)))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any advsimd))
+            (ExprVarRef
+              (QualifiedIdentifier Any TRUE)))
+          (StmtCall
+            (QualifiedIdentifier AArch32 CheckAdvSIMDOrFPEnabled)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any fpexc_check))
+              (ExprVarRef
+                (QualifiedIdentifier Any advsimd))))
+          (StmtReturn Nothing)))))
+  (DefArray
+    SIMDS_clone
+    (TypeFun
+      bits
+      (ExprLitNat 128))
+    (IxTypeRef simdidx))
+  (DefCallable
+    (QualifiedIdentifier Any SIMD_clone_Internal_Get)
+    (list
+      (SymDecl
+        idx
+        (TypeRef
+          (QualifiedIdentifier Any simdidx))))
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprLitNat 128)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprIndex
+                (ExprVarRef
+                  (QualifiedIdentifier Any SIMDS_clone))
+                (list
+                  (SliceSingle
+                    (ExprVarRef
+                      (QualifiedIdentifier Any idx)))))))))))
+  (DefGetter
+    (QualifiedIdentifier Any Din)
+    (Just
+      (list
+        (SymDecl
+          n
+          (TypeRef
+            (QualifiedIdentifier Any integer)))))
+    (ReturnType
+      (list
+        (TypeFun
+          bits
+          (ExprLitNat 64))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssert
+            (ExprBinOp
+              "&&"
+              (ExprBinOp
+                ">="
+                (ExprVarRef
+                  (QualifiedIdentifier Any n))
+                (ExprLitNat 0))
+              (ExprBinOp
+                "<="
+                (ExprVarRef
+                  (QualifiedIdentifier Any n))
+                (ExprLitNat 31))))
+          (StmtVarDeclInit
+            (SymDecl
+              idx
+              (TypeFun
+                bits
+                (ExprLitNat 8)))
+            (ExprCall
+              (QualifiedIdentifier Any Zeros)
+              (list
+                (ExprLitNat 8))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any idx))
+            (ExprBinOp
+              "+"
+              (ExprVarRef
+                (QualifiedIdentifier Any idx))
+              (ExprBinOp
+                "DIV"
+                (ExprVarRef
+                  (QualifiedIdentifier Any n))
+                (ExprLitNat 2))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any base))
+            (ExprBinOp
+              "*"
+              (ExprBinOp
+                "MOD"
+                (ExprVarRef
+                  (QualifiedIdentifier Any n))
+                (ExprLitNat 2))
+              (ExprLitNat 64)))
+          (StmtReturn
+            (Just
+              (ExprSlice
+                (ExprCall
+                  (QualifiedIdentifier Any SIMD_clone_Internal_Get)
+                  (list
+                    (ExprVarRef
+                      (QualifiedIdentifier Any idx))))
+                (list
+                  (SliceRange
+                    (ExprBinOp
+                      "+"
+                      (ExprVarRef
+                        (QualifiedIdentifier Any base))
+                      (ExprLitNat 63))
+                    (ExprVarRef
+                      (QualifiedIdentifier Any base)))))))))))
+  (DefCallable
     (QualifiedIdentifier AArch32 ExclusiveMonitorsPass)
     (list
       (SymDecl
