@@ -12,50 +12,50 @@ integer IntMod(integer i1, integer i2)
 integer IntDiv(integer i1, integer i2)
     return primitive(i1 / i2);
 
-// Undefined values. UNKNOWN actually loops back to just calling these, so
-// we need to tie this off somewhere.
 
-bits(N) UNDEFINED_bitvector()
-    return bits(N) UNKNOWN;
+bits(N) integerToSBV(integer i)
+    return uninterpFnN("uf_integerToSBV", 1, N, i);
 
-integer UNDEFINED_integer()
-    return integer UNKNOWN;
-
-boolean UNDEFINED_boolean()
-    return boolean UNKNOWN;
-
-array [0..0] of bits(N) UNDEFINED_IntArray()
-    return array [0..0] of bits(N) UNKNOWN;
-
-// A no-op that provides an explicit upper bound on the number of
-// bits required to represent a given integer.
-
-integerSizeBound(integer i, bits(N) bv)
-  bits(N) dummy = Zeros(N) << i;
-  return;
-
-// Defining slicing with primitive bitvector operations
+integerSizeBoundS(integer i, bits(N) x)
+    bits(N) y = integerToSBV(i);
+    assert (x == y);
+    return;
 
 bits(M) truncate(bits(N) bv, integer M);
+
+// Only usable on statically-known ints (i.e. bitvector lengths)
+integer log2(integer i);
 
 // The target length may be larger than hi - lo, with
 // the expectation that the resulting bitvector must be
 // either zero or sign-extended (according to the signed flag) to the
 // target length.
 
-// we represent the low and high bit indexes as a 'bits(N)' to avoid introducing
-// unecessary complexity when stripping integers out of the final translated semantics
-
 
 bits(length) getSlice(bits(N) inbv, boolean signed, integer lo, integer hi)
-    integerSizeBound(lo, inbv);
-    integerSizeBound(hi, inbv);
-    return bits(length) UNKNOWN;
+    assert length <= N;
+    assert length >= 1;
+    assert hi >= lo;
+    assert hi <= length;
+    assert lo >= 0;
+    assert (hi - lo) <= length;
+
+    bits (N*2) loBits = integerToSBV(lo);
+    bits (N*2) hiBits = integerToSBV(hi);
+    return uninterpFnN("getSlice", 2, N, length, inbv, signed, loBits, hiBits);
+
 
 bits(N) setSlice(bits(N) basebv, integer lo, integer hi, bits(length) asnbv)
-    integerSizeBound(lo, basebv);
-    integerSizeBound(lo, basebv);
-    return bits(N) UNKNOWN;
+    assert length <= N;
+    assert length >= 1;
+    assert hi >= lo;
+    assert hi <= length;
+    assert lo >= 0;
+    assert (hi - lo) <= length;
+
+    bits (N*2) loBits = integerToSBV(lo);
+    bits (N*2) hiBits = integerToSBV(hi);
+    return uninterpFnN("setSlice", 2, N, length, basebv, loBits, hiBits, asnbv);
 
 bits(length) getSlice2(bits(N) inbv, boolean signed, integer lo, integer hi)
     assert length <= N;
@@ -64,9 +64,6 @@ bits(length) getSlice2(bits(N) inbv, boolean signed, integer lo, integer hi)
     assert hi <= length;
     assert lo >= 0;
     assert (hi - lo) <= length;
-
-    integerSizeBound(lo, inbv);
-    integerSizeBound(hi, inbv);
 
     bits(N) bv = inbv;
     // bv = [ bv_(N-1) .. bv_hi(hi) .. bv_lo(lo) .. bv_0](N)
@@ -99,9 +96,6 @@ bits(N) setSlice2(bits(N) basebv, integer lo, integer hi, bits(length) asnbv)
     assert hi <= length;
     assert lo >= 0;
     assert (hi - lo) <= length;
-
-    integerSizeBound(lo, basebv);
-    integerSizeBound(hi, basebv);
 
     bits(length) bv = asnbv;
     // bv = [bv(length) .. bv_hi(hi) .. bv_0(0)](length)
@@ -136,50 +130,31 @@ boolean __UnpredictableBehavior;
 type regidx = bits(4);
 array bits(32) GPRS[regidx];
 
-// overriden by the translator
-GPR_Internal_Set(regidx idx, bits(32) value)
-  GPRS[idx] = value;
-  return;
-
-// overriden by the translator
-bits(32) GPR_Internal_Get(regidx idx)
-  return GPRS[idx];
-
 _R[integer n] = bits(32) value
     assert n >= 0 && n <= 14;
-    bits(4) idx = Zeros(4);
-    idx = idx + n;
-    GPR_Internal_Set(idx, value);
+    bits(37) idx = integerToSBV(n);
+    GPRS = uninterpFn("gpr_set", GPRS, truncate(idx, 4), value);
+    return;
 
 bits(32) _R[integer n]
     assert n >= 0 && n <= 14;
-    bits(4) idx = Zeros(4);
-    idx = idx + n;
-    return GPR_Internal_Get(idx);
+    bits(37) idx = integerToSBV(n);
+    return uninterpFn("gpr_get", GPRS, truncate(idx, 4));
 
 type simdidx = bits(8);
 array bits(128) SIMDS[simdidx];
 
-// overriden by the translator
-SIMD_Internal_Set(simdidx idx, bits(128) value)
-    SIMDS[idx] = value;
-    return;
-
-// overriden by the translator
-bits(128) SIMD_Internal_Get(simdidx idx)
-  return SIMDS[idx];
 
 _V[integer n] = bits(128) value
     assert n >= 0 && n <= 31;
-    bits(8) idx = Zeros(8);
-    idx = idx + n;
-    SIMD_Internal_Set(idx, value);
+    bits(37) idx = integerToSBV(n);
+    SIMDS = uninterpFn("simd_set", SIMDS, truncate(idx, 8), value);
+    return;
 
 bits(128) _V[integer n]
     assert n >= 0 && n <= 31;
-    bits(8) idx = Zeros(8);
-    idx = idx + n;
-    return SIMD_Internal_Get(idx);
+    bits(37) idx = integerToSBV(n);
+    return uninterpFn("simd_get", SIMDS, truncate(idx, 8));
 
 bits(32) _PC;
 
@@ -189,19 +164,6 @@ PC[] = bits(32) value
 
 bits(32) PC[]
     return _PC;
-
-//Consistent treatment for GPRs and PC
-bits(32) RGen[integer n]
-    if n == 15 then
-        return _PC;
-    else
-        return R[n];
-
-RGen[integer n] = bits(32) value
-    if n == 15 then
-        _PC = value;
-    else
-        R[n] = value;
 
 // Allow us to model the internal PC as a 32 bit value
 bits(N) ThisInstrAddr()
@@ -262,17 +224,33 @@ ASLSetUnpredictable()
 
 __RAM(32) __Memory;
 
-// Fake functions used for globals collection.
-// To be overridden by the translator
-
 Mem_Internal_Set(bits(32) address, integer size, bits(8*size) value)
-  __Memory[address] = bits(8) UNKNOWN;
+  case size of
+       when 1
+            __Memory = uninterpFn("write_mem_8", __Memory, address, value);
+       when 2
+            __Memory = uninterpFn("write_mem_16", __Memory, address, value);
+       when 3
+            __Memory = uninterpFn("write_mem_32", __Memory, address, value);
+       when 4
+            __Memory = uninterpFn("write_mem_64", __Memory, address, value);
+       otherwise
+            assert FALSE;
   return;
 
 bits(8*size) Mem_Internal_Get(bits(32) address, integer size)
-  bits(8) somebit = __Memory[address];
-  return bits(8*size) UNKNOWN;
-
+  case size of
+       when 1
+            return uninterpFn("read_mem_8", __Memory, address);
+       when 2
+            return uninterpFn("read_mem_16", __Memory, address);
+       when 3
+            return uninterpFn("read_mem_32", __Memory, address);
+       when 4
+            return uninterpFn("read_mem_64", __Memory, address);
+       otherwise
+            assert FALSE;
+            return bits(8*size) UNKNOWN;
 
 // Overriding memory access functions to short-circuit address translation
 
@@ -312,30 +290,26 @@ AArch32.MemSingle[bits(32) address, integer size, AccType acctype, boolean wasal
     return;
 
 // We model _Dclone instead using _Vclone as a simple alias to the original value of SIMDS at the start
-// of the instruction. This function creates _Dclone otherwise, so we remove that initialization code.
+// of the instruction.
 
 CheckAdvSIMDEnabled()
-
     fpexc_check = TRUE;
     advsimd = TRUE;
 
     AArch32.CheckAdvSIMDOrFPEnabled(fpexc_check, advsimd);
+    SIMDS_clone = SIMDS;
     return;
 
 // Swap out _Dclone for _Vclone by inlining the D getter inside of Din
 
 array bits(128) SIMDS_clone[simdidx];
 
-// overridden by the translator
-bits(128) SIMD_clone_Internal_Get(simdidx idx)
-  return SIMDS_clone[idx];
-
 bits(64) Din[integer n]
     assert n >= 0 && n <= 31;
-    bits(8) idx = Zeros(8);
-    idx = idx + (n DIV 2);
+    bits(37) idx = integerToSBV(n DIV 2);
     base = (n MOD 2) * 64;
-    return SIMD_clone_Internal_Get(idx)<base+63:base>;
+    bits(128) result = uninterpFn("simd_get", SIMDS_clone, truncate(idx, 8));
+    return result<base+63:base>;
 
 // Since IsExclusiveGlobal is stubbed to be FALSE, this will always be FALSE
 boolean AArch32.ExclusiveMonitorsPass(bits(32) address, integer size)
@@ -375,7 +349,7 @@ bits(width) BigEndianReverse (bits(width) value)
 
 (bits(N), bit) LSL_C(bits(N) x, integer shift)
     assert shift > 0;
-    integerSizeBound(shift, x);
+    integerSizeBoundS(shift, x);
 
     shift = if shift > N then N else shift;
     carry_out = x<N - shift>;
@@ -384,7 +358,7 @@ bits(width) BigEndianReverse (bits(width) value)
 
 bits(N) LSL(bits(N) x, integer shift)
     assert shift >= 0;
-    integerSizeBound(shift, x);
+    integerSizeBoundS(shift, x);
 
     shift = if shift > N then N else shift;
     if shift == 0 then
@@ -395,7 +369,7 @@ bits(N) LSL(bits(N) x, integer shift)
 
 (bits(N), bit) LSR_C(bits(N) x, integer shift)
     assert shift > 0;
-    integerSizeBound(shift, x);
+    integerSizeBoundS(shift, x);
 
     shift = if shift > N then N else shift;
     carry_out = x<shift-1>;
@@ -404,7 +378,7 @@ bits(N) LSL(bits(N) x, integer shift)
 
 bits(N) LSR(bits(N) x, integer shift)
     assert shift >= 0;
-    integerSizeBound(shift, x);
+    integerSizeBoundS(shift, x);
 
     if shift == 0 then
         result = x;
@@ -414,7 +388,7 @@ bits(N) LSR(bits(N) x, integer shift)
 
 (bits(N), bit) ASR_C(bits(N) x, integer shift)
     assert shift > 0;
-    integerSizeBound(shift, x);
+    integerSizeBoundS(shift, x);
 
     shift = if shift > N then N else shift;
     carry_out = x<shift-1>;
@@ -423,7 +397,7 @@ bits(N) LSR(bits(N) x, integer shift)
 
 bits(N) ASR(bits(N) x, integer shift)
     assert shift >= 0;
-    integerSizeBound(shift, x);
+    integerSizeBoundS(shift, x);
 
     shift = if shift > N then N else shift;
     if shift == 0 then

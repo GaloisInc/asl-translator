@@ -211,7 +211,7 @@ instance Show (ConstVal tp) where
 instance ShowF ConstVal
 
 data UserType (tp :: WT.BaseType) where
-  UserEnum :: Natural -> UserType WT.BaseIntegerType
+  UserEnum :: 1 <= n => NR.NatRepr n -> UserType (WT.BaseBVType n)
   UserStruct :: Ctx.Assignment (LabeledValue (T.Text, Maybe (Some UserType)) WT.BaseTypeRepr) tps ->
                 UserType (WT.BaseStructType tps)
 
@@ -222,7 +222,7 @@ instance ShowF UserType where
 userTypeRepr :: UserType tp -> WT.BaseTypeRepr tp
 userTypeRepr ut =
   case ut of
-    UserEnum _ -> WT.BaseIntegerRepr
+    UserEnum n -> WT.BaseBVRepr n
     UserStruct tps -> WT.BaseStructRepr (FC.fmapFC projectValue tps)
 
 letInStmt :: [T.Text] -> [AS.Stmt] -> AS.Stmt

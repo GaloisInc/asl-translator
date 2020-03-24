@@ -20,7 +20,7 @@ module Language.ASL.Formulas.Normalize
     ) where
 
 import           Prelude hiding ( fail )
-
+import           GHC.Stack
 import           Math.NumberTheory.Logarithms
 import           GHC.TypeLits
 import           Data.Kind
@@ -32,8 +32,10 @@ import           Control.Monad.Fail
 
 import qualified Control.Monad.Trans.State as MS hiding ( get, put, gets, modify )
 import qualified Control.Monad.Trans.Reader as MR hiding ( reader, local, ask, asks )
+import qualified Control.Monad.Trans.Except as ME
 import qualified Control.Monad.Reader as MR
 import qualified Control.Monad.State as MS
+import qualified Control.Monad.Except as ME
 import qualified Control.Monad.IO.Class as IO
 import qualified Control.Concurrent.MVar as IO
 import qualified Control.Concurrent as IO
@@ -378,11 +380,15 @@ normalizeSymFn sym name symFn = case WB.symFnInfo symFn of
       simplifyInts expr = do
         nfCache <- MS.gets rbNormFieldCache
         expr' <- withSym $ \sym -> normFieldAccs sym nfCache expr
-        case exprDepthBounded 4 expr' of
+        case exprDepthBounded 7 expr' of
           True -> return (expr', True)
           False -> do
-            expr'' <- extractInts expr'
-            return (expr'', False)
+            let doExtract = do
+                  expr'' <- extractInts expr'
+                  return (expr'', False)
+            ME.catchError doExtract $ \case
+              UnboundedInteger _ -> return (expr', True)
+              e -> ME.throwError e
 
       mkSymFnAt :: forall allargs tp
                  . Ctx.Assignment (WB.ExprBoundVar t) allargs
@@ -644,6 +650,9 @@ bvSize :: WB.Expr t (WI.BaseBVType n) -> NR.NatRepr n
 bvSize e = case WI.exprType e of
   WI.BaseBVRepr sz -> sz
 
+bvExpr :: BVExpr t n -> WB.Expr t (WI.BaseBVType n)
+bvExpr (BVExpr e) = e
+
 bvSize' :: BVExpr t n -> NR.NatRepr n
 bvSize' (BVExpr e) = bvSize e
 
@@ -691,6 +700,20 @@ matchSizeToS sym nr e = withBVSize e $ case NR.testNatCases (bvSize e) nr of
   NR.NatCaseEQ -> return $ e
 
 
+
+-- | Either zero-extend or truncate a bitvector to the given width.
+matchSizeToU :: forall sym st fs t n' n
+              . sym ~ WB.ExprBuilder t st fs
+             => 1 <= n
+             => sym
+             -> NR.NatRepr n
+             -> WB.Expr t (WI.BaseBVType n')
+             -> IO (WB.Expr t (WI.BaseBVType n))
+matchSizeToU sym nr e = withBVSize e $ case NR.testNatCases (bvSize e) nr of
+  NR.NatCaseLT NR.LeqProof -> WI.bvZext sym nr e
+  NR.NatCaseGT NR.LeqProof -> WI.bvTrunc sym nr e
+  NR.NatCaseEQ -> return $ e
+
 data WrapInt f g tp where
   WrapIntSimple :: f tp -> g tp -> WrapInt f g tp
   WrapIntInt :: f (WI.BaseBVType n) -> g WI.BaseIntegerType -> WrapInt f g WI.BaseIntegerType
@@ -730,10 +753,10 @@ extractIntBVs subbvs argExprs expr = do
     refreshIntArg :: forall tp'. WB.Expr t tp'
                   -> WrapInt (WB.ExprBoundVar t) (WB.Expr t) tp'
                   -> RebindM t (Const (Some (PairF (WB.ExprBoundVar t) (WB.Expr t))) tp')
-    refreshIntArg argExpr wi = withSym $ \sym -> case wi of
+    refreshIntArg argExpr wi = case wi of
       WrapIntInt bv _ -> do
-        WI.BaseBVRepr n <- return $ WI.exprType (WI.varExpr sym bv)
-        argExpr' <- IO.liftIO $ WI.integerToBV sym argExpr n
+        WI.BaseBVRepr n <- withSym $ \sym -> return $ WI.exprType (WI.varExpr sym bv)
+        argExpr' <- integerToSBV argExpr n
         return $ Const $ Some $ PairF bv argExpr'
       WrapIntSimple bv _ -> return $ Const $ Some $ PairF bv argExpr
 
@@ -742,16 +765,15 @@ extractIntBVs subbvs argExprs expr = do
     refreshIntVar bv = do
       intBounds <- MS.gets rbBVMap
       case WB.bvarType bv of
-        WI.BaseIntegerRepr -> do
-          BVBound n <- case Map.lookup bv intBounds of
-            Just b@(BVBound _) -> return b
-            Just b@(BVUnbounded) -> MR.asks rbDefaultMaxBV
+        WI.BaseIntegerRepr -> case Map.lookup bv intBounds of
+            Just (BVBound n) -> do
+              bv_var <- withSym $ \sym -> WI.freshBoundVar sym (appendToSymbol (WB.bvarName bv) "_asBVar") (WI.BaseBVRepr n)
+              expr' <- withSym $ \sym -> WI.sbvToInteger sym (WI.varExpr sym bv_var)
+              return $ WrapIntInt bv_var expr'
+            Just (BVUnbounded) -> withSym $ \sym -> return $ WrapIntSimple bv (WI.varExpr sym bv)
             _ -> fail $ "Missing bounds for integer variable:"
                    ++ show bv ++ " with bounds: " ++ show intBounds
                    ++ " in expression: \n" ++ showExpr expr
-          bv_var <- withSym $ \sym -> WI.freshBoundVar sym (appendToSymbol (WB.bvarName bv) "_asBVar") (WI.BaseBVRepr n)
-          expr' <- withSym $ \sym -> WI.sbvToInteger sym (WI.varExpr sym bv_var)
-          return $ WrapIntInt bv_var expr'
         _ -> withSym $ \sym -> return $ WrapIntSimple bv (WI.varExpr sym bv)
 
 -- | If the expression is a bitvector, set the bound to its width. Otherwise leave it unchanged.
@@ -760,6 +782,50 @@ withExprBound e f = case WI.exprType e of
   WI.BaseBVRepr _ -> withBVBounds e f
   _ -> f
 
+mkUF :: String
+     -> Ctx.Assignment WI.BaseTypeRepr args
+     -> WI.BaseTypeRepr ret
+     -> RebindM t (WB.ExprSymFn t args ret)
+mkUF nm args ret = do
+  fnCache <- MS.gets rbFnCache
+  case Map.lookup nm fnCache of
+    Just (SomeSome symFn)
+      | Just Refl <- testEquality (WI.fnArgTypes symFn) args
+      , Just Refl <- testEquality (WI.fnReturnType symFn) ret
+      -> return symFn
+    _ -> do
+      symFn <- withSym $ \sym -> do
+        WI.freshTotalUninterpFn sym (WI.safeSymbol nm) args ret
+      MS.modify $ \st -> st { rbFnCache = Map.insert nm (SomeSome symFn) (rbFnCache st) }
+      return symFn
+
+integerToSBV :: forall t n
+              . 1 <= n
+             => WB.Expr t WI.BaseIntegerType
+             -> NR.NatRepr n
+             -> RebindM t (WB.Expr t (WI.BaseBVType n))
+integerToSBV e n = do
+  let nm = "integerToSBV_" ++ show (NR.intValue n)
+  let args = Ctx.empty Ctx.:> WI.BaseIntegerRepr
+  let ret = WI.BaseBVRepr n
+  symFn <- mkUF nm args ret
+  withSym $ \sym -> WI.applySymFn sym symFn (Ctx.singleton e)
+
+
+safeTruncate :: forall t n' n
+              . 1 <= n
+             => WB.Expr t (WI.BaseBVType n')
+             -> NR.NatRepr n
+             -> RebindM t (WB.Expr t (WI.BaseBVType n))
+safeTruncate e n = do
+  WI.BaseBVRepr n' <- return $ WI.exprType e
+  let nm = "safeTruncate_" ++ show (NR.intValue n') ++ "_" ++ show (NR.intValue n)
+  let args = Ctx.empty Ctx.:> WI.BaseBVRepr n'
+  let ret = WI.BaseBVRepr n
+  fnName <- MR.asks rbFunName
+  IO.liftIO $ putStrLn $ T.unpack fnName ++ ": Using safeTruncate to truncate from " ++ show n' ++ " down to " ++ show n ++ " bits."
+  symFn <- mkUF nm args ret
+  withSym $ \sym -> WI.applySymFn sym symFn (Ctx.singleton e)
 
 data BVOp t where
   BVOp :: (forall n
@@ -798,21 +864,30 @@ extractInts' expr =  withExpr "extractInts'" expr $ do
 
     _ | Just (Some (BVExpr bv), Refl) <- asSBVToInteger expr
       , Just (bv1, bv2, BVOp bvOp) <- asBVOp bv
-      , Just (int1, _) <- asIntegerToBV bv1
-      , Just (int2, _) <- asIntegerToBV bv2 -> do
+      , Just (int1, _) <- asIntegerToSBV bv1
+      , Just (int2, _) <- asIntegerToSBV bv2 -> do
           Some bv1' <- extractBitV int1
           Some bv2' <- extractBitV int2
           Pair (BVExpr bv1'') (BVExpr bv2'') <- matchSizes bv1' bv2'
           result <- bvOp bv1'' bv2''
           withSym $ \sym -> WI.sbvToInteger sym result
 
-    _ | Just (SomeSymFn _ _) <- asSymFn (\nm -> nm == "extractBitVinttobv") expr
-        -> return expr
+    _ | Just (SomeSymFn _ (Ctx.Empty Ctx.:> arg)) <- asSymFn (\nm -> nm == "extractBitVinttobv") expr
+      , WI.BaseIntegerRepr <- WI.exprType arg -> case arg of
+          WB.BoundVarExpr bv -> do
+            updateBoundOf bv
+            getUpperBoundOf bv >>= \case
+              BVUnbounded -> do
+                bvExpr <- withSym $ \sym -> return $ WI.varExpr sym bv
+                ME.throwError (UnboundedInteger bvExpr)
+              _ -> return expr
+          _ -> return expr
 
-    _ | Just (expr', AsBVRepr sz) <- asIntegerToBV expr
-        -> fromIntToBV sz expr'
+    _ | Just (expr', AsBVRepr sz) <- asIntegerToSBV expr -> do
+          Some (BVExpr bv) <- extractBitV expr'
+          withSym $ \sym -> extendToS sym sz bv
 
-    _ | Just (expr', AsBVRepr sz) <- asIntegerToBVNoBound expr -> do
+    _ | Just (expr', AsBVRepr sz) <- asIntegerToSBVNoBound expr -> do
           withNoBound $ do
             Some (BVExpr bv) <- extractBitV expr'
             WI.BaseBVRepr sz <- return $ WI.exprType expr
@@ -853,17 +928,6 @@ extractInts' expr =  withExpr "extractInts'" expr $ do
     -- if (n > '11111')
     -- then (bvTrunc (4, n))
 
-    fromIntToBV :: tp ~ WI.BaseBVType n
-                => 1 <= n
-                => NR.NatRepr n
-                -> WB.Expr t WI.BaseIntegerType
-                -> RebindM t (WB.Expr t tp)
-    fromIntToBV sz e =
-      withBounds' sz $ do
-         incBound
-         Some (BVExpr bv) <- extractBitV e
-         withSym $ \sym -> matchSizeToS sym sz bv
-
     normBinOp :: forall tp' tp'' n
                . WB.Expr t tp'
               -> WB.Expr t tp''
@@ -891,7 +955,6 @@ extractInts' expr =  withExpr "extractInts'" expr $ do
     go :: WB.App (WB.Expr t) tp -> RebindM t (WB.Expr t tp)
     go (WB.BVToInteger bv) = normUnOp bv $ WI.bvToInteger
     go (WB.SBVToInteger bv) = normUnOp bv $ WI.sbvToInteger
-    go (WB.IntegerToBV ie sz) = fromIntToBV sz ie
 
     go (WB.BVShl _ e1 e2) = normBinOp e1 e2 WI.bvShl
     go (WB.BVUdiv _ e1 e2) = normBinOp e1 e2 WI.bvUdiv
@@ -988,35 +1051,44 @@ asUNDEFINEDInt expr = do
 
 asSBVToInteger :: WB.Expr t tp
                -> Maybe (Some (BVExpr t), tp :~: WI.BaseIntegerType)
-asSBVToInteger expr = do
-  SomeSymFn _ args <- asSymFn (\nm -> "sbvToInteger_" `T.isPrefixOf` nm) expr
-  case args of
-    (Ctx.Empty Ctx.:> arg)
-      | WI.BaseBVRepr n <- WI.exprType arg
-      , WI.BaseIntegerRepr <- WI.exprType expr -> return $ (Some $ BVExpr arg, Refl)
+asSBVToInteger expr = case asSymFn (\nm -> "sbvToInteger_" `T.isPrefixOf` nm) expr of
+  Just (SomeSymFn _ (Ctx.Empty Ctx.:> arg))
+    | WI.BaseBVRepr n <- WI.exprType arg
+    , WI.BaseIntegerRepr <- WI.exprType expr -> return $ (Some $ BVExpr arg, Refl)
+  _ -> case WB.asApp expr of
+    Just (WB.SBVToInteger e) -> return (Some $ BVExpr e, Refl)
     _ -> fail ""
 
-asIntegerToBV' :: (T.Text -> Bool)
+asIntegerToSBV' :: (T.Text -> Bool)
                -> WB.Expr t tp
                -> Maybe (WB.Expr t WI.BaseIntegerType, AsBVRepr tp)
-asIntegerToBV' f expr = case asSymFn f expr of
+asIntegerToSBV' f expr = case asSymFn f expr of
   Just (SomeSymFn _ (Ctx.Empty Ctx.:> arg))
     | WI.BaseIntegerRepr <- WI.exprType arg
     , WI.BaseBVRepr n <- WI.exprType expr -> return $ (arg, AsBVRepr (bvSize expr))
   Nothing -> fail ""
 
-asIntegerToBV :: WB.Expr t tp
-              -> Maybe (WB.Expr t WI.BaseIntegerType, AsBVRepr tp)
-asIntegerToBV expr = case asIntegerToBV' (\nm -> "integerToBV_" `T.isPrefixOf` nm) expr of
+asIntegerToSBV :: WB.Expr t tp
+               -> Maybe (WB.Expr t WI.BaseIntegerType, AsBVRepr tp)
+asIntegerToSBV expr = case asIntegerToSBV' (\nm -> "uf_integerToSBV_" `T.isPrefixOf` nm) expr of
   Just result -> return result
   _ -> case WB.asApp expr of
     Just (WB.IntegerToBV ie sz) -> return $ (ie, AsBVRepr sz)
     _ -> fail ""
 
-asIntegerToBVNoBound :: WB.Expr t tp
+asIntegerToSBVNoBound :: WB.Expr t tp
                      -> Maybe (WB.Expr t WI.BaseIntegerType, AsBVRepr tp)
-asIntegerToBVNoBound = asIntegerToBV' (\nm -> "integerToBVNoBound_" `T.isPrefixOf` nm)
+asIntegerToSBVNoBound = asIntegerToSBV' (\nm -> "uf_integerToSBVNoBound_" `T.isPrefixOf` nm)
 
+
+exprIsVar :: WB.Expr t tp -> Bool
+exprIsVar e = case e of
+  WB.BoundVarExpr _ -> True
+  _ -> False
+
+intIsBound :: Ctx.Assignment (WB.Expr t) (Ctx.EmptyCtx Ctx.::> WI.BaseIntegerType)
+          -> Bool
+intIsBound (Ctx.Empty Ctx.:> e) = not $ exprIsVar e
 
 -- | Extract a bitvector from an integer expression, assuming it is already
 -- in normal form.
@@ -1030,31 +1102,39 @@ extractBitV' expr = withExpr "extractBitV'" expr $ do
       return $! expr'
     WB.BoundVarExpr bv -> do
       updateBoundOf bv
-      BVBound n <- getUpperBound
-      e <- withSym $ \sym -> do
-        freshIntBV <- WI.freshBoundVar sym WI.emptySymbol WI.BaseIntegerRepr
-        fnBody <- WI.integerToBV sym (WI.varExpr sym freshIntBV) n
-        fn <- WI.definedFn sym
-                (WI.safeSymbol "extractBitVinttobv")
-                (Ctx.empty Ctx.:> freshIntBV)
-                fnBody
-                intIsBound
+      getUpperBoundOf bv >>= \case
+        BVBound n -> do
+          e <- withSym $ \sym -> do
+            freshIntBV <- WI.freshBoundVar sym WI.emptySymbol WI.BaseIntegerRepr
+            fnBody <- WI.integerToBV sym (WI.varExpr sym freshIntBV) n
+            fn <- WI.definedFn sym
+                    (WI.safeSymbol "extractBitVinttobv")
+                    (Ctx.empty Ctx.:> freshIntBV)
+                    fnBody
+                    intIsBound
+            WI.applySymFn sym fn (Ctx.empty Ctx.:> expr)
+          mkSomeBV e
+        BVUnbounded -> ME.throwError (UnboundedInteger expr)
 
-        WI.applySymFn sym fn (Ctx.empty Ctx.:> (WI.varExpr sym bv))
-      mkSomeBV e
+    _ | Just (SomeSymFn _ (Ctx.Empty Ctx.:> arg)) <- asSymFn (\nm -> nm == "extractBitVinttobv") expr
+      , Just (Some (BVExpr bv), _) <- asSBVToInteger arg -> do
+           bv' <- extractInts bv
+           mkSomeBV bv'
 
     _ | Just (Some (BVExpr bv), _) <- asSBVToInteger expr -> do
           bv' <- extractInts bv
           mkSomeBV bv'
     _ | Just _ <- asUNDEFINEDInt expr -> do
-           BVBound n <- getUpperBound
-           bv <- withSym $ \sym -> do
-             fn <- WI.freshTotalUninterpFn sym (WI.safeSymbol ("UNDEFINED_bitvector_" ++ show n)) Ctx.empty (WI.BaseBVRepr n)
-             WI.applySymFn sym fn Ctx.empty
-           mkSomeBV bv
+           getUpperBound >>= \case
+             BVBound n -> do
+               bv <- withSym $ \sym -> do
+                 fn <- WI.freshTotalUninterpFn sym (WI.safeSymbol ("UNDEFINED_bitvector_" ++ show n)) Ctx.empty (WI.BaseBVRepr n)
+                 WI.applySymFn sym fn Ctx.empty
+               mkSomeBV bv
+             BVUnbounded -> ME.throwError (UnboundedInteger expr)
 
     _ -> case WI.asInteger expr of
-      Just i -> mkSomeLitBV i
+      Just i -> mkSomeLitSBV i
       _ -> fail $ "extractBitV: unsupported expression shape: " ++ showExpr expr
   where
     liftBinop :: WB.Expr t WI.BaseIntegerType
@@ -1079,9 +1159,33 @@ extractBitV' expr = withExpr "extractBitV'" expr $ do
     -- BVToInteger so that the sign bit is always correct.
     go (WB.BVToInteger bv) = do
       bv' <- withSym $ \sym -> WI.bvZext sym (NR.incNat (bvSize bv)) bv
-      mkSomeBV bv
+      mkSomeBV bv'
     go (WB.SBVToInteger bv) = mkSomeBV bv
     go (WB.BaseIte _ _ test then_ else_) = liftBinop then_ else_ (\sym -> WI.baseTypeIte sym test)
+
+    go (WB.IntMod a1 b1)
+      | Just b2 <- WI.asInteger b1
+      , b2 >= 2 = do
+          Some a2 <- withNoBound $ extractBitV a1
+          Some (BVExpr b3) <- mkSomeLitSBV b2
+          Pair (BVExpr a3) (BVExpr b4) <- matchSizes a2 (BVExpr b3)
+          withSym $ \sym -> do
+            result <- WI.bvSrem sym a3 b4
+            nr <- return $ NR.decNat (bvSize b3)
+            Just NR.LeqProof <- return $ NR.isPosNat nr
+            (Some . BVExpr) <$> matchSizeToS sym nr result
+
+    go (WB.IntDiv a1 b1)
+      | Just b2 <- WI.asInteger b1
+      , b2 >= 2 = do
+          Some (BVExpr b3) <- mkSomeLitSBV b2
+          Some a2 <- restoreBounds $ do
+            increaseBoundBy (bvSize b3)
+            extractBitV a1
+          Pair (BVExpr a3) (BVExpr b4) <- matchSizes a2 (BVExpr b3)
+          result <- withSym $ \sym -> WI.bvSdiv sym a3 b4
+          truncateToBound result
+
     go (WB.IntMod a1 b1) = liftBinop a1 b1 WI.bvSrem
     go (WB.IntDiv a1 b1) = liftBinop a1 b1 WI.bvSdiv
     go (WB.IntAbs e1) = do
@@ -1106,13 +1210,6 @@ extractBitV' expr = withExpr "extractBitV'" expr $ do
       case WSum.prodRepr pd of
         WI.SemiRingIntegerRepr -> do
           let
-            smul' :: Some (BVExpr t) -> Some (BVExpr t) -> RebindM t (Some (BVExpr t))
-            smul' (Some a1) (Some b1) = bvMul a1 b1
-
-            mkBV e_int = do
-              Some e_bv <- extractBitV e_int
-              return $ Some e_bv
-
             smul :: WB.Expr t WI.BaseIntegerType
                  -> WB.Expr t WI.BaseIntegerType
                  -> RebindM t (WB.Expr t WI.BaseIntegerType)
@@ -1132,36 +1229,25 @@ extractBitV' expr = withExpr "extractBitV'" expr $ do
           extractBitV result
 
     -- for addition, we require one extra bit for each additional term
-    -- for example, given i + j + k under a 32-bit bound, we require both i and j
-    -- to be representable with 31 bits, and then k to be representable with 30 bits.
+    -- for example, given i + j + k under a 32-bit bound, we require i, j and k to
+    -- be representable with 30 bits each.
 
     go (WB.SemiRingSum sm) =
       case WSum.sumRepr sm of
         WI.SemiRingIntegerRepr -> do
-          outerBound <- getBounds
-
+          sumBounds <- restoreBounds $ do
+            incBound
+            WSum.evalM (\_ _ -> return ()) (\_ _  -> decBound) (\_ -> decBound) sm
+            getBounds
           let
-            bvadd :: Some (BVExpr t) -> Some (BVExpr t) -> RebindM t (Some (BVExpr t))
-            bvadd (Some a1) (Some b1) = do
-              decBound
-              withBounds outerBound $ bvAdd a1 b1
+            mkBV coef_int expr_int = withExpr ("extractBitV: sum: " ++ show sumBounds) expr_int $ withBounds sumBounds $ do
+              Some coef_bv <- mkSomeLitSBV coef_int
+              Some expr_bv <- restoreBounds $ do
+                reduceBoundForIntMul coef_bv
+                extractBitV expr_int
+              bvMul coef_bv expr_bv
 
-            mkLitBV lit_int = do
-              Some e_bv <- mkSomeLitBV lit_int
-              case lit_int of
-                0 -> return ()
-                _ -> decBound
-              return $ Some e_bv
-
-            smul coef_int expr_int = withExpr "extractBitV': sum" expr_int $ do
-              Some coef_bv <- mkSomeLitBV coef_int
-              reduceBoundForIntMul coef_bv
-              Some expr_bv <- extractBitV expr_int
-              withBounds outerBound $ bvMul coef_bv expr_bv
-
-          restoreBounds $ do
-            decBound
-            WSum.evalM bvadd smul mkLitBV sm
+          WSum.evalM (\(Some e1) (Some e2) -> bvAdd e1 e2) mkBV mkSomeLitSBV sm
 
     go _ = fail $ "extractBitV: unsupported expression shape: " ++ showExpr expr
 
@@ -1171,8 +1257,17 @@ reduceBoundForIntMul (BVExpr e) = withExpr "reduceBoundForIntMul: " e $ case WI.
   Just 0 -> return ()
   Just 1 -> return ()
   Just (-1) -> return ()
-  _ -> reduceBoundBy (bvSize e)
+  Just 2 -> reduceBoundBy (NR.knownNat @1)
+  _ -> withBVSize e $ reduceBoundBy (NR.decNat $ bvSize e)
 
+
+increaseBoundBy :: NR.NatRepr n
+                -> RebindM t ()
+increaseBoundBy n = getBounds >>= \case
+  BVUnbounded -> return ()
+  BVBound maxn -> do
+    bnd <- mkBound (maxn `NR.addNat` n)
+    setBound bnd
 
 reduceBoundBy :: NR.NatRepr n
               -> RebindM t ()
@@ -1189,7 +1284,7 @@ bvAdd :: forall t n n'
        . BVExpr t n
       -> BVExpr t n'
       -> RebindM t (Some (BVExpr t))
-bvAdd (BVExpr a1) (BVExpr b1) = do
+bvAdd (BVExpr a1) (BVExpr b1) = withExpr "bvAdd1" a1 $ withExpr "bvAdd2" b1 $ do
   Some maxsz <- return $ NR.maxNat (bvSize a1) (bvSize b1)
   let sz = NR.incNat maxsz
   (Some (BVExpr result) :: Some (BVExpr t)) <- withSym $ \sym -> do
@@ -1209,9 +1304,11 @@ bvMul :: forall t n n'
       -> RebindM t (Some (BVExpr t))
 bvMul (BVExpr a1) (BVExpr b1) =
   case (WI.asSignedBV a1, WI.asSignedBV b1) of
-    (Just a2, Just b2) -> mkSomeLitBV (a2 * b2)
+    (Just a2, Just b2) -> mkSomeLitSBV (a2 * b2)
     (Just 1, Nothing) -> mkSomeBV b1
     (Nothing, Just 1) -> mkSomeBV a1
+    (Just 2, Nothing) -> bvAdd (BVExpr b1) (BVExpr b1)
+    (Nothing, Just 2) -> bvAdd (BVExpr a1) (BVExpr a1)
     (Just (-1), Nothing) -> Some <$> neg (BVExpr b1)
     (Nothing, Just (-1)) -> Some <$> neg (BVExpr a1)
     _ -> do
@@ -1279,7 +1376,7 @@ data RebindEnv t where
   RebindEnv :: { rbBuilder :: WB.ExprBuilder t st fs
                -- ^ underlying expression builder for constructing new terms,
                -- access via 'withSym'
-               , rbDefaultMaxBV :: BVBound
+               , rbDefaultMaxBV :: Maybe BVBound
                -- ^ a concrete max bound for assigning widths to fresh bitvectors backing
                -- integers which do not have any bounds information
                , rbPath :: ExprPath t
@@ -1287,6 +1384,7 @@ data RebindEnv t where
                -- Used for providing context to error messages
                , rbFunName :: T.Text
                -- ^ name of the top-level function being normalized
+               , rbTruncateOverflow :: Bool
                } -> RebindEnv t
 
 data RebindState t =
@@ -1298,6 +1396,7 @@ data RebindState t =
                -- ^ cache for normFieldAccs
               , rbExtractIntsCaches :: Map BVBound (WB.IdxCache t (WB.Expr t))
                -- ^ cache for extractInts
+              , rbFnCache :: Map String (SomeSome (WB.ExprSymFn t))
               }
 
 instance Show (ExprPath t) where
@@ -1314,9 +1413,28 @@ minBVBound (BVBound n1) (BVBound n2) = case NR.testNatCases n1 n2 of
 minBVBound BVUnbounded b2 = b2
 minBVBound b1 BVUnbounded = b1
 
+data RebindException t =
+    UnboundedInteger (WB.Expr t WI.BaseIntegerType)
+  | RebindError String
+
+errorHere :: HasCallStack => String -> RebindM t a
+errorHere msg = do
+  let (_, src): _ = getCallStack callStack
+  path <- MR.asks rbPath
+  nm <- MR.asks rbFunName
+  let msg' = "In expression path:\n" ++ show path ++ "\n Error Message: " ++ msg ++ " at: " ++ prettySrcLoc src ++ "\n" ++ "When normalizing function: " ++ T.unpack nm
+  ME.throwError $ RebindError msg'
+
 newtype RebindM t a =
-  RebindM { unRB :: MR.ReaderT (RebindEnv t) (MS.StateT (RebindState t) IO) a }
-  deriving (Functor, Applicative, Monad, IO.MonadIO, MS.MonadState (RebindState t), MR.MonadReader (RebindEnv t))
+  RebindM { unRB :: ME.ExceptT (RebindException t) (MR.ReaderT (RebindEnv t) (MS.StateT (RebindState t) IO)) a }
+  deriving (Functor
+           , Applicative
+           , Monad
+           , IO.MonadIO
+           , MS.MonadState (RebindState t)
+           , MR.MonadReader (RebindEnv t)
+           , ME.MonadError (RebindException t)
+           )
 
 withSym :: (forall st fs. WB.ExprBuilder t st fs -> IO a) -> RebindM t a
 withSym f = do
@@ -1325,11 +1443,7 @@ withSym f = do
     RebindEnv {rbBuilder = sym, .. } -> IO.liftIO $ f sym
 
 instance MonadFail (RebindM t) where
-  fail msg = do
-    path <- MR.asks rbPath
-    nm <- MR.asks rbFunName
-    let msg' = "In expression path:\n" ++ show path ++ "\n Error Message: " ++ msg ++ "\n" ++ "When normalizing function: " ++ T.unpack nm
-    IO.liftIO $ fail msg'
+  fail msg = errorHere $ "Fail: " ++ msg
 
 getBounds :: RebindM t BVBound
 getBounds = MS.gets rbCurrentBound
@@ -1338,12 +1452,20 @@ getUpperBound :: RebindM t BVBound
 getUpperBound = do
   getBounds >>= \case
     BVBound n -> return $ BVBound n
-    BVUnbounded -> MR.asks rbDefaultMaxBV
+    BVUnbounded -> MR.asks rbDefaultMaxBV >>= \case
+      Just maxbnd -> return maxbnd
+      Nothing -> return BVUnbounded
+
+evalRebindM' :: WB.ExprBuilder t st fs -> T.Text -> Maybe BVBound -> Bool -> RebindM t a -> IO (Either (RebindException t) a)
+evalRebindM' sym nm bound truncateOverflow (RebindM f) = do
+  nfCache <- WB.newIdxCache
+  MS.evalStateT (MR.runReaderT (ME.runExceptT f) (RebindEnv sym bound emptyExprPath nm truncateOverflow)) (RebindState Map.empty BVUnbounded nfCache Map.empty Map.empty)
 
 evalRebindM :: WB.ExprBuilder t st fs -> T.Text -> BVBound -> RebindM t a -> IO a
-evalRebindM sym nm bound (RebindM f) = do
-  nfCache <- WB.newIdxCache
-  MS.evalStateT (MR.runReaderT f (RebindEnv sym bound emptyExprPath nm)) (RebindState Map.empty BVUnbounded nfCache Map.empty)
+evalRebindM sym nm bound f = evalRebindM' sym nm (Just bound) True f >>= \case
+  Left (UnboundedInteger _) -> fail "Unexpected unbounded integer"
+  Left (RebindError msg) -> fail msg
+  Right a -> return a
 
 liftIO1 :: IO.MonadIO m => (a -> IO c) -> a -> m c
 liftIO1 f a = IO.liftIO $ f a
@@ -1360,7 +1482,24 @@ mkSomeBV expr = withExpr "mkSomeBV" expr $ withBVSize expr $ do
   case compare (BVBound (bvSize expr)) curBound of
     LT -> return $ Some $ BVExpr expr
     EQ -> return $ Some $ BVExpr expr
-    GT -> fail $ "mkSomeBV: Bitvector of size:" ++ show (bvSize expr) ++ "exceeds current bounds: " ++ show curBound ++ "\n" ++ showExpr expr
+    GT -> do
+      BVBound maxn <- getBounds
+      MR.asks rbTruncateOverflow >>= \case
+        True -> safeTruncate expr maxn >>= mkSomeBV
+        False -> fail $ "mkSomeBV: Bitvector of size:" ++ show (bvSize expr) ++ "exceeds current bounds: " ++ show curBound ++ "\n" ++ showExpr expr
+
+-- | Similar to above, but we drop any bits (unchecked) that exceed the bound instead of erroring
+truncateToBound :: WB.Expr t (WI.BaseBVType n)
+                -> RebindM t (Some (BVExpr t))
+truncateToBound e = do
+  getBounds >>= \case
+    BVBound n -> withBVSize e $ case NR.testNatCases (bvSize e) n of
+      NR.NatCaseGT NR.LeqProof -> withSym $ \sym -> (Some . BVExpr) <$> WI.bvTrunc sym n e
+      NR.NatCaseLT NR.LeqProof -> mkSomeBV e
+      NR.NatCaseEQ -> mkSomeBV e
+    BVUnbounded -> withBVSize e $ return $ Some $ BVExpr e
+
+
 
 matchSizes :: BVExpr t n
            -> BVExpr t n'
@@ -1437,20 +1576,14 @@ updateBoundOf bv = do
     Nothing -> do
       MS.modify $ \st -> st { rbBVMap = Map.insert bv curbound bvmap }
 
-exprIsVar :: WB.Expr t tp -> Bool
-exprIsVar e = case e of
-  WB.BoundVarExpr _ -> True
-  _ -> False
-
-intIsBound :: Ctx.Assignment (WB.Expr t) (Ctx.EmptyCtx Ctx.::> WI.BaseIntegerType)
-          -> Bool
-intIsBound (Ctx.Empty Ctx.:> e) = case e of
-  WB.AppExpr appExpr -> case WB.appExprApp appExpr of
-    WB.SBVToInteger e' -> exprIsVar e'
-    WB.BVToInteger e' -> exprIsVar e'
-    _ -> False
-  _ -> False
-
+getUpperBoundOf :: WB.ExprBoundVar t WI.BaseIntegerType -> RebindM t BVBound
+getUpperBoundOf bv = do
+  bvmap <- MS.gets rbBVMap
+  case Map.lookup bv bvmap of
+    Just bnd -> return bnd
+    Nothing -> MR.asks rbDefaultMaxBV >>= \case
+      Just maxbnd -> return maxbnd
+      Nothing -> fail $ "getUpperBoundOf: missing bound for" ++ show bv
 
 
 -- | Normalize an integer expression, then extract its bitvector-equivalent.
@@ -1470,12 +1603,10 @@ withPosNat 0 f = f (NR.knownNat @1)
 
 -- | Make a bitvector of sufficient length to represent the given integer and its sign.
 -- This maintains the invariant that sbvToInteger (mkSomeLitBV i) = i for any i.
-mkSomeLitBV :: Integer
-            -> RebindM t (Some (BVExpr t))
-mkSomeLitBV i | i > 0 = withPosNat ((integerLog2 (i*2))+1) $ \nr -> (withSym $ \sym -> WI.bvLit sym nr i) >>= mkSomeBV
-mkSomeLitBV i | i < 0 = withPosNat ((integerLog2 ((-i)*2))+1) $ \nr -> (withSym $ \sym -> WI.bvLit sym nr i) >>= mkSomeBV
-mkSomeLitBV 0 = (withSym $ \sym -> WI.bvLit sym (NR.knownNat @1) 0) >>= mkSomeBV
-
+mkSomeLitSBV :: Integer -> RebindM t (Some (BVExpr t))
+mkSomeLitSBV i | i > 0 = withPosNat ((integerLog2 (i*2))+1) $ \nr -> (withSym $ \sym -> WI.bvLit sym nr i) >>= mkSomeBV
+mkSomeLitSBV i | i < 0 = withPosNat ((integerLog2 ((-i)*2))+1) $ \nr -> (withSym $ \sym -> WI.bvLit sym nr i) >>= mkSomeBV
+mkSomeLitSBV 0 = (withSym $ \sym -> WI.bvLit sym (NR.knownNat @1) 0) >>= mkSomeBV
 
 
 extractInts :: forall t tp

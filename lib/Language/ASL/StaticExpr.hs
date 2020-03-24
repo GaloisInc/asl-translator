@@ -45,6 +45,7 @@ module Language.ASL.StaticExpr
   )
 where
 
+import           Math.NumberTheory.Logarithms
 import           Control.Monad
 import qualified Control.Monad.Fail as Fail
 import           Control.Applicative
@@ -301,6 +302,9 @@ exprToStatic env expr = case expr of
   AS.ExprUnOp AS.UnOpNeg e' -> do
     StaticInt i <- exprToStatic env e'
     return $ StaticInt (-i)
+  AS.ExprCall (AS.VarName "log2") [e'] -> do
+    StaticInt i <- exprToStatic env e'
+    return $ StaticInt (fromIntegral (integerLog2 i))
   AS.ExprCall (AS.QualifiedIdentifier _ "sizeOf") [e] -> do
     StaticBVType i <- exprToStaticType env e
     return $ StaticInt i

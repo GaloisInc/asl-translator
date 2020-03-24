@@ -126,8 +126,12 @@
                     (ExprVarRef
                       (QualifiedIdentifier Any i2)))))))))))
   (DefCallable
-    (QualifiedIdentifier Any UNDEFINED_bitvector)
-    (list)
+    (QualifiedIdentifier Any integerToSBV)
+    (list
+      (SymDecl
+        i
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
     (Just
       (ReturnType
         (list
@@ -140,80 +144,24 @@
         (list
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "uf_integerToSBV")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any i))))))))))
   (DefCallable
-    (QualifiedIdentifier Any UNDEFINED_integer)
-    (list)
-    (Just
-      (ReturnType
-        (list
-          (TypeRef
-            (QualifiedIdentifier Any integer)))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn
-            (Just
-              (ExprUnknown
-                (TypeRef
-                  (QualifiedIdentifier Any integer)))))))))
-  (DefCallable
-    (QualifiedIdentifier Any UNDEFINED_boolean)
-    (list)
-    (Just
-      (ReturnType
-        (list
-          (TypeRef
-            (QualifiedIdentifier Any boolean)))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn
-            (Just
-              (ExprUnknown
-                (TypeRef
-                  (QualifiedIdentifier Any boolean)))))))))
-  (DefCallable
-    (QualifiedIdentifier Any UNDEFINED_IntArray)
-    (list)
-    (Just
-      (ReturnType
-        (list
-          (TypeArray
-            (TypeFun
-              bits
-              (ExprVarRef
-                (QualifiedIdentifier Any N)))
-            (IxTypeRange
-              (ExprLitNat 0)
-              (ExprLitNat 0))))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn
-            (Just
-              (ExprUnknown
-                (TypeArray
-                  (TypeFun
-                    bits
-                    (ExprVarRef
-                      (QualifiedIdentifier Any N)))
-                  (IxTypeRange
-                    (ExprLitNat 0)
-                    (ExprLitNat 0))))))))))
-  (DefCallable
-    (QualifiedIdentifier Any integerSizeBound)
+    (QualifiedIdentifier Any integerSizeBoundS)
     (list
       (SymDecl
         i
         (TypeRef
           (QualifiedIdentifier Any integer)))
       (SymDecl
-        bv
+        x
         (TypeFun
           bits
           (ExprVarRef
@@ -224,20 +172,23 @@
         (list
           (StmtVarDeclInit
             (SymDecl
-              dummy
+              y
               (TypeFun
                 bits
                 (ExprVarRef
                   (QualifiedIdentifier Any N))))
+            (ExprCall
+              (QualifiedIdentifier Any integerToSBV)
+              (list
+                (ExprVarRef
+                  (QualifiedIdentifier Any i)))))
+          (StmtAssert
             (ExprBinOp
-              "<<"
-              (ExprCall
-                (QualifiedIdentifier Any Zeros)
-                (list
-                  (ExprVarRef
-                    (QualifiedIdentifier Any N))))
+              "=="
               (ExprVarRef
-                (QualifiedIdentifier Any i))))
+                (QualifiedIdentifier Any x))
+              (ExprVarRef
+                (QualifiedIdentifier Any y))))
           (StmtReturn Nothing)))))
   (DefCallable
     (QualifiedIdentifier Any truncate)
@@ -259,6 +210,19 @@
             bits
             (ExprVarRef
               (QualifiedIdentifier Any M))))))
+    Nothing)
+  (DefCallable
+    (QualifiedIdentifier Any log2)
+    (list
+      (SymDecl
+        i
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any integer)))))
     Nothing)
   (DefCallable
     (QualifiedIdentifier Any getSlice)
@@ -291,27 +255,99 @@
     (Just
       (StmtBlock
         (list
-          (StmtCall
-            (QualifiedIdentifier Any integerSizeBound)
-            (list
+          (StmtAssert
+            (ExprBinOp
+              "<="
               (ExprVarRef
-                (QualifiedIdentifier Any lo))
+                (QualifiedIdentifier Any length))
               (ExprVarRef
-                (QualifiedIdentifier Any inbv))))
-          (StmtCall
-            (QualifiedIdentifier Any integerSizeBound)
-            (list
+                (QualifiedIdentifier Any N))))
+          (StmtAssert
+            (ExprBinOp
+              ">="
+              (ExprVarRef
+                (QualifiedIdentifier Any length))
+              (ExprLitNat 1)))
+          (StmtAssert
+            (ExprBinOp
+              ">="
               (ExprVarRef
                 (QualifiedIdentifier Any hi))
               (ExprVarRef
-                (QualifiedIdentifier Any inbv))))
+                (QualifiedIdentifier Any lo))))
+          (StmtAssert
+            (ExprBinOp
+              "<="
+              (ExprVarRef
+                (QualifiedIdentifier Any hi))
+              (ExprVarRef
+                (QualifiedIdentifier Any length))))
+          (StmtAssert
+            (ExprBinOp
+              ">="
+              (ExprVarRef
+                (QualifiedIdentifier Any lo))
+              (ExprLitNat 0)))
+          (StmtAssert
+            (ExprBinOp
+              "<="
+              (ExprBinOp
+                "-"
+                (ExprVarRef
+                  (QualifiedIdentifier Any hi))
+                (ExprVarRef
+                  (QualifiedIdentifier Any lo)))
+              (ExprVarRef
+                (QualifiedIdentifier Any length))))
+          (StmtVarDeclInit
+            (SymDecl
+              loBits
+              (TypeFun
+                bits
+                (ExprBinOp
+                  "*"
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))
+                  (ExprLitNat 2))))
+            (ExprCall
+              (QualifiedIdentifier Any integerToSBV)
+              (list
+                (ExprVarRef
+                  (QualifiedIdentifier Any lo)))))
+          (StmtVarDeclInit
+            (SymDecl
+              hiBits
+              (TypeFun
+                bits
+                (ExprBinOp
+                  "*"
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))
+                  (ExprLitNat 2))))
+            (ExprCall
+              (QualifiedIdentifier Any integerToSBV)
+              (list
+                (ExprVarRef
+                  (QualifiedIdentifier Any hi)))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "getSlice")
+                  (ExprLitNat 2)
                   (ExprVarRef
-                    (QualifiedIdentifier Any length))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any length))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any inbv))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any signed))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any loBits))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any hiBits))))))))))
   (DefCallable
     (QualifiedIdentifier Any setSlice)
     (list
@@ -345,27 +381,99 @@
     (Just
       (StmtBlock
         (list
-          (StmtCall
-            (QualifiedIdentifier Any integerSizeBound)
-            (list
+          (StmtAssert
+            (ExprBinOp
+              "<="
+              (ExprVarRef
+                (QualifiedIdentifier Any length))
+              (ExprVarRef
+                (QualifiedIdentifier Any N))))
+          (StmtAssert
+            (ExprBinOp
+              ">="
+              (ExprVarRef
+                (QualifiedIdentifier Any length))
+              (ExprLitNat 1)))
+          (StmtAssert
+            (ExprBinOp
+              ">="
+              (ExprVarRef
+                (QualifiedIdentifier Any hi))
+              (ExprVarRef
+                (QualifiedIdentifier Any lo))))
+          (StmtAssert
+            (ExprBinOp
+              "<="
+              (ExprVarRef
+                (QualifiedIdentifier Any hi))
+              (ExprVarRef
+                (QualifiedIdentifier Any length))))
+          (StmtAssert
+            (ExprBinOp
+              ">="
               (ExprVarRef
                 (QualifiedIdentifier Any lo))
+              (ExprLitNat 0)))
+          (StmtAssert
+            (ExprBinOp
+              "<="
+              (ExprBinOp
+                "-"
+                (ExprVarRef
+                  (QualifiedIdentifier Any hi))
+                (ExprVarRef
+                  (QualifiedIdentifier Any lo)))
               (ExprVarRef
-                (QualifiedIdentifier Any basebv))))
-          (StmtCall
-            (QualifiedIdentifier Any integerSizeBound)
-            (list
-              (ExprVarRef
-                (QualifiedIdentifier Any lo))
-              (ExprVarRef
-                (QualifiedIdentifier Any basebv))))
+                (QualifiedIdentifier Any length))))
+          (StmtVarDeclInit
+            (SymDecl
+              loBits
+              (TypeFun
+                bits
+                (ExprBinOp
+                  "*"
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))
+                  (ExprLitNat 2))))
+            (ExprCall
+              (QualifiedIdentifier Any integerToSBV)
+              (list
+                (ExprVarRef
+                  (QualifiedIdentifier Any lo)))))
+          (StmtVarDeclInit
+            (SymDecl
+              hiBits
+              (TypeFun
+                bits
+                (ExprBinOp
+                  "*"
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))
+                  (ExprLitNat 2))))
+            (ExprCall
+              (QualifiedIdentifier Any integerToSBV)
+              (list
+                (ExprVarRef
+                  (QualifiedIdentifier Any hi)))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "setSlice")
+                  (ExprLitNat 2)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any length))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any basebv))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any loBits))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any hiBits))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any asnbv))))))))))
   (DefCallable
     (QualifiedIdentifier Any getSlice2)
     (list
@@ -441,20 +549,6 @@
                   (QualifiedIdentifier Any lo)))
               (ExprVarRef
                 (QualifiedIdentifier Any length))))
-          (StmtCall
-            (QualifiedIdentifier Any integerSizeBound)
-            (list
-              (ExprVarRef
-                (QualifiedIdentifier Any lo))
-              (ExprVarRef
-                (QualifiedIdentifier Any inbv))))
-          (StmtCall
-            (QualifiedIdentifier Any integerSizeBound)
-            (list
-              (ExprVarRef
-                (QualifiedIdentifier Any hi))
-              (ExprVarRef
-                (QualifiedIdentifier Any inbv))))
           (StmtVarDeclInit
             (SymDecl
               bv
@@ -611,20 +705,6 @@
                   (QualifiedIdentifier Any lo)))
               (ExprVarRef
                 (QualifiedIdentifier Any length))))
-          (StmtCall
-            (QualifiedIdentifier Any integerSizeBound)
-            (list
-              (ExprVarRef
-                (QualifiedIdentifier Any lo))
-              (ExprVarRef
-                (QualifiedIdentifier Any basebv))))
-          (StmtCall
-            (QualifiedIdentifier Any integerSizeBound)
-            (list
-              (ExprVarRef
-                (QualifiedIdentifier Any hi))
-              (ExprVarRef
-                (QualifiedIdentifier Any basebv))))
           (StmtVarDeclInit
             (SymDecl
               bv
@@ -725,58 +805,6 @@
       bits
       (ExprLitNat 32))
     (IxTypeRef regidx))
-  (DefCallable
-    (QualifiedIdentifier Any GPR_Internal_Set)
-    (list
-      (SymDecl
-        idx
-        (TypeRef
-          (QualifiedIdentifier Any regidx)))
-      (SymDecl
-        value
-        (TypeFun
-          bits
-          (ExprLitNat 32))))
-    Nothing
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssign
-            (LValArrayIndex
-              (LValVarRef
-                (QualifiedIdentifier Any GPRS))
-              (list
-                (SliceSingle
-                  (ExprVarRef
-                    (QualifiedIdentifier Any idx)))))
-            (ExprVarRef
-              (QualifiedIdentifier Any value)))
-          (StmtReturn Nothing)))))
-  (DefCallable
-    (QualifiedIdentifier Any GPR_Internal_Get)
-    (list
-      (SymDecl
-        idx
-        (TypeRef
-          (QualifiedIdentifier Any regidx))))
-    (Just
-      (ReturnType
-        (list
-          (TypeFun
-            bits
-            (ExprLitNat 32)))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn
-            (Just
-              (ExprIndex
-                (ExprVarRef
-                  (QualifiedIdentifier Any GPRS))
-                (list
-                  (SliceSingle
-                    (ExprVarRef
-                      (QualifiedIdentifier Any idx)))))))))))
   (DefSetter
     (QualifiedIdentifier Any _R)
     (Just
@@ -812,27 +840,30 @@
               idx
               (TypeFun
                 bits
-                (ExprLitNat 4)))
+                (ExprLitNat 37)))
             (ExprCall
-              (QualifiedIdentifier Any Zeros)
+              (QualifiedIdentifier Any integerToSBV)
               (list
-                (ExprLitNat 4))))
+                (ExprVarRef
+                  (QualifiedIdentifier Any n)))))
           (StmtAssign
             (LValVarRef
-              (QualifiedIdentifier Any idx))
-            (ExprBinOp
-              "+"
-              (ExprVarRef
-                (QualifiedIdentifier Any idx))
-              (ExprVarRef
-                (QualifiedIdentifier Any n))))
-          (StmtCall
-            (QualifiedIdentifier Any GPR_Internal_Set)
-            (list
-              (ExprVarRef
-                (QualifiedIdentifier Any idx))
-              (ExprVarRef
-                (QualifiedIdentifier Any value))))))))
+              (QualifiedIdentifier Any GPRS))
+            (ExprCall
+              (QualifiedIdentifier Any uninterpFn)
+              (list
+                (ExprLitString "gpr_set")
+                (ExprVarRef
+                  (QualifiedIdentifier Any GPRS))
+                (ExprCall
+                  (QualifiedIdentifier Any truncate)
+                  (list
+                    (ExprVarRef
+                      (QualifiedIdentifier Any idx))
+                    (ExprLitNat 4)))
+                (ExprVarRef
+                  (QualifiedIdentifier Any value)))))
+          (StmtReturn Nothing)))))
   (DefGetter
     (QualifiedIdentifier Any _R)
     (Just
@@ -867,27 +898,26 @@
               idx
               (TypeFun
                 bits
-                (ExprLitNat 4)))
+                (ExprLitNat 37)))
             (ExprCall
-              (QualifiedIdentifier Any Zeros)
+              (QualifiedIdentifier Any integerToSBV)
               (list
-                (ExprLitNat 4))))
-          (StmtAssign
-            (LValVarRef
-              (QualifiedIdentifier Any idx))
-            (ExprBinOp
-              "+"
-              (ExprVarRef
-                (QualifiedIdentifier Any idx))
-              (ExprVarRef
-                (QualifiedIdentifier Any n))))
+                (ExprVarRef
+                  (QualifiedIdentifier Any n)))))
           (StmtReturn
             (Just
               (ExprCall
-                (QualifiedIdentifier Any GPR_Internal_Get)
+                (QualifiedIdentifier Any uninterpFn)
                 (list
+                  (ExprLitString "gpr_get")
                   (ExprVarRef
-                    (QualifiedIdentifier Any idx))))))))))
+                    (QualifiedIdentifier Any GPRS))
+                  (ExprCall
+                    (QualifiedIdentifier Any truncate)
+                    (list
+                      (ExprVarRef
+                        (QualifiedIdentifier Any idx))
+                      (ExprLitNat 4)))))))))))
   (DefTypeAlias
     simdidx
     (TypeFun
@@ -899,58 +929,6 @@
       bits
       (ExprLitNat 128))
     (IxTypeRef simdidx))
-  (DefCallable
-    (QualifiedIdentifier Any SIMD_Internal_Set)
-    (list
-      (SymDecl
-        idx
-        (TypeRef
-          (QualifiedIdentifier Any simdidx)))
-      (SymDecl
-        value
-        (TypeFun
-          bits
-          (ExprLitNat 128))))
-    Nothing
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssign
-            (LValArrayIndex
-              (LValVarRef
-                (QualifiedIdentifier Any SIMDS))
-              (list
-                (SliceSingle
-                  (ExprVarRef
-                    (QualifiedIdentifier Any idx)))))
-            (ExprVarRef
-              (QualifiedIdentifier Any value)))
-          (StmtReturn Nothing)))))
-  (DefCallable
-    (QualifiedIdentifier Any SIMD_Internal_Get)
-    (list
-      (SymDecl
-        idx
-        (TypeRef
-          (QualifiedIdentifier Any simdidx))))
-    (Just
-      (ReturnType
-        (list
-          (TypeFun
-            bits
-            (ExprLitNat 128)))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn
-            (Just
-              (ExprIndex
-                (ExprVarRef
-                  (QualifiedIdentifier Any SIMDS))
-                (list
-                  (SliceSingle
-                    (ExprVarRef
-                      (QualifiedIdentifier Any idx)))))))))))
   (DefSetter
     (QualifiedIdentifier Any _V)
     (Just
@@ -986,27 +964,30 @@
               idx
               (TypeFun
                 bits
-                (ExprLitNat 8)))
+                (ExprLitNat 37)))
             (ExprCall
-              (QualifiedIdentifier Any Zeros)
+              (QualifiedIdentifier Any integerToSBV)
               (list
-                (ExprLitNat 8))))
+                (ExprVarRef
+                  (QualifiedIdentifier Any n)))))
           (StmtAssign
             (LValVarRef
-              (QualifiedIdentifier Any idx))
-            (ExprBinOp
-              "+"
-              (ExprVarRef
-                (QualifiedIdentifier Any idx))
-              (ExprVarRef
-                (QualifiedIdentifier Any n))))
-          (StmtCall
-            (QualifiedIdentifier Any SIMD_Internal_Set)
-            (list
-              (ExprVarRef
-                (QualifiedIdentifier Any idx))
-              (ExprVarRef
-                (QualifiedIdentifier Any value))))))))
+              (QualifiedIdentifier Any SIMDS))
+            (ExprCall
+              (QualifiedIdentifier Any uninterpFn)
+              (list
+                (ExprLitString "simd_set")
+                (ExprVarRef
+                  (QualifiedIdentifier Any SIMDS))
+                (ExprCall
+                  (QualifiedIdentifier Any truncate)
+                  (list
+                    (ExprVarRef
+                      (QualifiedIdentifier Any idx))
+                    (ExprLitNat 8)))
+                (ExprVarRef
+                  (QualifiedIdentifier Any value)))))
+          (StmtReturn Nothing)))))
   (DefGetter
     (QualifiedIdentifier Any _V)
     (Just
@@ -1041,27 +1022,26 @@
               idx
               (TypeFun
                 bits
-                (ExprLitNat 8)))
+                (ExprLitNat 37)))
             (ExprCall
-              (QualifiedIdentifier Any Zeros)
+              (QualifiedIdentifier Any integerToSBV)
               (list
-                (ExprLitNat 8))))
-          (StmtAssign
-            (LValVarRef
-              (QualifiedIdentifier Any idx))
-            (ExprBinOp
-              "+"
-              (ExprVarRef
-                (QualifiedIdentifier Any idx))
-              (ExprVarRef
-                (QualifiedIdentifier Any n))))
+                (ExprVarRef
+                  (QualifiedIdentifier Any n)))))
           (StmtReturn
             (Just
               (ExprCall
-                (QualifiedIdentifier Any SIMD_Internal_Get)
+                (QualifiedIdentifier Any uninterpFn)
                 (list
+                  (ExprLitString "simd_get")
                   (ExprVarRef
-                    (QualifiedIdentifier Any idx))))))))))
+                    (QualifiedIdentifier Any SIMDS))
+                  (ExprCall
+                    (QualifiedIdentifier Any truncate)
+                    (list
+                      (ExprVarRef
+                        (QualifiedIdentifier Any idx))
+                      (ExprLitNat 8)))))))))))
   (DefVariable
     (QualifiedIdentifier Any _PC)
     (TypeFun
@@ -1099,91 +1079,6 @@
             (Just
               (ExprVarRef
                 (QualifiedIdentifier Any _PC))))))))
-  (DefGetter
-    (QualifiedIdentifier Any RGen)
-    (Just
-      (list
-        (SymDecl
-          n
-          (TypeRef
-            (QualifiedIdentifier Any integer)))))
-    (ReturnType
-      (list
-        (TypeFun
-          bits
-          (ExprLitNat 32))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtIf
-            (ExprBinOp
-              "=="
-              (ExprVarRef
-                (QualifiedIdentifier Any n))
-              (ExprLitNat 15))
-            (StmtBlock
-              (list
-                (StmtReturn
-                  (Just
-                    (ExprVarRef
-                      (QualifiedIdentifier Any _PC))))))
-            (list)
-            (Just
-              (StmtBlock
-                (list
-                  (StmtReturn
-                    (Just
-                      (ExprIndex
-                        (ExprVarRef
-                          (QualifiedIdentifier Any R))
-                        (list
-                          (SliceSingle
-                            (ExprVarRef
-                              (QualifiedIdentifier Any n)))))))))))))))
-  (DefSetter
-    (QualifiedIdentifier Any RGen)
-    (Just
-      (list
-        (SetterArg
-          n
-          (TypeRef
-            (QualifiedIdentifier Any integer))
-          Value)))
-    (SymDecl
-      value
-      (TypeFun
-        bits
-        (ExprLitNat 32)))
-    (Just
-      (StmtBlock
-        (list
-          (StmtIf
-            (ExprBinOp
-              "=="
-              (ExprVarRef
-                (QualifiedIdentifier Any n))
-              (ExprLitNat 15))
-            (StmtBlock
-              (list
-                (StmtAssign
-                  (LValVarRef
-                    (QualifiedIdentifier Any _PC))
-                  (ExprVarRef
-                    (QualifiedIdentifier Any value)))))
-            (list)
-            (Just
-              (StmtBlock
-                (list
-                  (StmtAssign
-                    (LValArrayIndex
-                      (LValVarRef
-                        (QualifiedIdentifier Any R))
-                      (list
-                        (SliceSingle
-                          (ExprVarRef
-                            (QualifiedIdentifier Any n)))))
-                    (ExprVarRef
-                      (QualifiedIdentifier Any value)))))))))))
   (DefCallable
     (QualifiedIdentifier Any ThisInstrAddr)
     (list)
@@ -1406,18 +1301,92 @@
     (Just
       (StmtBlock
         (list
-          (StmtAssign
-            (LValArrayIndex
-              (LValVarRef
-                (QualifiedIdentifier Any __Memory))
-              (list
-                (SliceSingle
-                  (ExprVarRef
-                    (QualifiedIdentifier Any address)))))
-            (ExprUnknown
-              (TypeFun
-                bits
-                (ExprLitNat 8))))
+          (StmtCase
+            (ExprVarRef
+              (QualifiedIdentifier Any size))
+            (list
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 1))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any __Memory))
+                      (ExprCall
+                        (QualifiedIdentifier Any uninterpFn)
+                        (list
+                          (ExprLitString "write_mem_8")
+                          (ExprVarRef
+                            (QualifiedIdentifier Any __Memory))
+                          (ExprVarRef
+                            (QualifiedIdentifier Any address))
+                          (ExprVarRef
+                            (QualifiedIdentifier Any value))))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 2))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any __Memory))
+                      (ExprCall
+                        (QualifiedIdentifier Any uninterpFn)
+                        (list
+                          (ExprLitString "write_mem_16")
+                          (ExprVarRef
+                            (QualifiedIdentifier Any __Memory))
+                          (ExprVarRef
+                            (QualifiedIdentifier Any address))
+                          (ExprVarRef
+                            (QualifiedIdentifier Any value))))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 3))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any __Memory))
+                      (ExprCall
+                        (QualifiedIdentifier Any uninterpFn)
+                        (list
+                          (ExprLitString "write_mem_32")
+                          (ExprVarRef
+                            (QualifiedIdentifier Any __Memory))
+                          (ExprVarRef
+                            (QualifiedIdentifier Any address))
+                          (ExprVarRef
+                            (QualifiedIdentifier Any value))))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 4))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any __Memory))
+                      (ExprCall
+                        (QualifiedIdentifier Any uninterpFn)
+                        (list
+                          (ExprLitString "write_mem_64")
+                          (ExprVarRef
+                            (QualifiedIdentifier Any __Memory))
+                          (ExprVarRef
+                            (QualifiedIdentifier Any address))
+                          (ExprVarRef
+                            (QualifiedIdentifier Any value))))))))
+              (CaseAltOtherwise
+                (StmtBlock
+                  (list
+                    (StmtAssert
+                      (ExprVarRef
+                        (QualifiedIdentifier Any FALSE))))))))
           (StmtReturn Nothing)))))
   (DefCallable
     (QualifiedIdentifier Any Mem_Internal_Get)
@@ -1444,29 +1413,90 @@
     (Just
       (StmtBlock
         (list
-          (StmtVarDeclInit
-            (SymDecl
-              somebit
-              (TypeFun
-                bits
-                (ExprLitNat 8)))
-            (ExprIndex
-              (ExprVarRef
-                (QualifiedIdentifier Any __Memory))
-              (list
-                (SliceSingle
-                  (ExprVarRef
-                    (QualifiedIdentifier Any address))))))
-          (StmtReturn
-            (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
-                  (ExprBinOp
-                    "*"
-                    (ExprLitNat 8)
-                    (ExprVarRef
-                      (QualifiedIdentifier Any size)))))))))))
+          (StmtCase
+            (ExprVarRef
+              (QualifiedIdentifier Any size))
+            (list
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 1))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprCall
+                          (QualifiedIdentifier Any uninterpFn)
+                          (list
+                            (ExprLitString "read_mem_8")
+                            (ExprVarRef
+                              (QualifiedIdentifier Any __Memory))
+                            (ExprVarRef
+                              (QualifiedIdentifier Any address)))))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 2))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprCall
+                          (QualifiedIdentifier Any uninterpFn)
+                          (list
+                            (ExprLitString "read_mem_16")
+                            (ExprVarRef
+                              (QualifiedIdentifier Any __Memory))
+                            (ExprVarRef
+                              (QualifiedIdentifier Any address)))))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 3))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprCall
+                          (QualifiedIdentifier Any uninterpFn)
+                          (list
+                            (ExprLitString "read_mem_32")
+                            (ExprVarRef
+                              (QualifiedIdentifier Any __Memory))
+                            (ExprVarRef
+                              (QualifiedIdentifier Any address)))))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 4))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprCall
+                          (QualifiedIdentifier Any uninterpFn)
+                          (list
+                            (ExprLitString "read_mem_64")
+                            (ExprVarRef
+                              (QualifiedIdentifier Any __Memory))
+                            (ExprVarRef
+                              (QualifiedIdentifier Any address)))))))))
+              (CaseAltOtherwise
+                (StmtBlock
+                  (list
+                    (StmtAssert
+                      (ExprVarRef
+                        (QualifiedIdentifier Any FALSE)))
+                    (StmtReturn
+                      (Just
+                        (ExprUnknown
+                          (TypeFun
+                            bits
+                            (ExprBinOp
+                              "*"
+                              (ExprLitNat 8)
+                              (ExprVarRef
+                                (QualifiedIdentifier Any size))))))))))))))))
   (DefGetter
     (QualifiedIdentifier Any MemA)
     (Just
@@ -1864,6 +1894,11 @@
                 (QualifiedIdentifier Any fpexc_check))
               (ExprVarRef
                 (QualifiedIdentifier Any advsimd))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any SIMDS_clone))
+            (ExprVarRef
+              (QualifiedIdentifier Any SIMDS)))
           (StmtReturn Nothing)))))
   (DefArray
     SIMDS_clone
@@ -1871,31 +1906,6 @@
       bits
       (ExprLitNat 128))
     (IxTypeRef simdidx))
-  (DefCallable
-    (QualifiedIdentifier Any SIMD_clone_Internal_Get)
-    (list
-      (SymDecl
-        idx
-        (TypeRef
-          (QualifiedIdentifier Any simdidx))))
-    (Just
-      (ReturnType
-        (list
-          (TypeFun
-            bits
-            (ExprLitNat 128)))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn
-            (Just
-              (ExprIndex
-                (ExprVarRef
-                  (QualifiedIdentifier Any SIMDS_clone))
-                (list
-                  (SliceSingle
-                    (ExprVarRef
-                      (QualifiedIdentifier Any idx)))))))))))
   (DefGetter
     (QualifiedIdentifier Any Din)
     (Just
@@ -1930,23 +1940,15 @@
               idx
               (TypeFun
                 bits
-                (ExprLitNat 8)))
+                (ExprLitNat 37)))
             (ExprCall
-              (QualifiedIdentifier Any Zeros)
+              (QualifiedIdentifier Any integerToSBV)
               (list
-                (ExprLitNat 8))))
-          (StmtAssign
-            (LValVarRef
-              (QualifiedIdentifier Any idx))
-            (ExprBinOp
-              "+"
-              (ExprVarRef
-                (QualifiedIdentifier Any idx))
-              (ExprBinOp
-                "DIV"
-                (ExprVarRef
-                  (QualifiedIdentifier Any n))
-                (ExprLitNat 2))))
+                (ExprBinOp
+                  "DIV"
+                  (ExprVarRef
+                    (QualifiedIdentifier Any n))
+                  (ExprLitNat 2)))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any base))
@@ -1958,14 +1960,29 @@
                   (QualifiedIdentifier Any n))
                 (ExprLitNat 2))
               (ExprLitNat 64)))
+          (StmtVarDeclInit
+            (SymDecl
+              result
+              (TypeFun
+                bits
+                (ExprLitNat 128)))
+            (ExprCall
+              (QualifiedIdentifier Any uninterpFn)
+              (list
+                (ExprLitString "simd_get")
+                (ExprVarRef
+                  (QualifiedIdentifier Any SIMDS_clone))
+                (ExprCall
+                  (QualifiedIdentifier Any truncate)
+                  (list
+                    (ExprVarRef
+                      (QualifiedIdentifier Any idx))
+                    (ExprLitNat 8))))))
           (StmtReturn
             (Just
               (ExprSlice
-                (ExprCall
-                  (QualifiedIdentifier Any SIMD_clone_Internal_Get)
-                  (list
-                    (ExprVarRef
-                      (QualifiedIdentifier Any idx))))
+                (ExprVarRef
+                  (QualifiedIdentifier Any result))
                 (list
                   (SliceRange
                     (ExprBinOp
@@ -2220,7 +2237,7 @@
                 (QualifiedIdentifier Any shift))
               (ExprLitNat 0)))
           (StmtCall
-            (QualifiedIdentifier Any integerSizeBound)
+            (QualifiedIdentifier Any integerSizeBoundS)
             (list
               (ExprVarRef
                 (QualifiedIdentifier Any shift))
@@ -2303,7 +2320,7 @@
                 (QualifiedIdentifier Any shift))
               (ExprLitNat 0)))
           (StmtCall
-            (QualifiedIdentifier Any integerSizeBound)
+            (QualifiedIdentifier Any integerSizeBoundS)
             (list
               (ExprVarRef
                 (QualifiedIdentifier Any shift))
@@ -2386,7 +2403,7 @@
                 (QualifiedIdentifier Any shift))
               (ExprLitNat 0)))
           (StmtCall
-            (QualifiedIdentifier Any integerSizeBound)
+            (QualifiedIdentifier Any integerSizeBoundS)
             (list
               (ExprVarRef
                 (QualifiedIdentifier Any shift))
@@ -2468,7 +2485,7 @@
                 (QualifiedIdentifier Any shift))
               (ExprLitNat 0)))
           (StmtCall
-            (QualifiedIdentifier Any integerSizeBound)
+            (QualifiedIdentifier Any integerSizeBoundS)
             (list
               (ExprVarRef
                 (QualifiedIdentifier Any shift))
@@ -2536,7 +2553,7 @@
                 (QualifiedIdentifier Any shift))
               (ExprLitNat 0)))
           (StmtCall
-            (QualifiedIdentifier Any integerSizeBound)
+            (QualifiedIdentifier Any integerSizeBoundS)
             (list
               (ExprVarRef
                 (QualifiedIdentifier Any shift))
@@ -2618,7 +2635,7 @@
                 (QualifiedIdentifier Any shift))
               (ExprLitNat 0)))
           (StmtCall
-            (QualifiedIdentifier Any integerSizeBound)
+            (QualifiedIdentifier Any integerSizeBoundS)
             (list
               (ExprVarRef
                 (QualifiedIdentifier Any shift))

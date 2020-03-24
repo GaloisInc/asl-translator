@@ -100,7 +100,7 @@ simpleGlobals' =
   :> bool "__UnpredictableBehavior"
   :> bool "__EndOfInstruction"
   -- meta-state reifying information about this encoding
-  :> int "__ThisInstrEnc"
+  :> bv @2 "__ThisInstrEnc"
   :> bv @32 "__ThisInstr"
   -- tracking updates to the program counter
   :> bool "__BranchTaken"

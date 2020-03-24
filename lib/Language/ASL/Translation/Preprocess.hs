@@ -49,7 +49,7 @@ module Language.ASL.Translation.Preprocess
   ) where
 
 
-
+import           Math.NumberTheory.Logarithms
 import           Control.Applicative ( (<|>), Const(..) )
 import qualified Control.Monad.Fail as F
 import           Control.Monad (void)
@@ -94,7 +94,7 @@ import           Util.Log ( MonadLog(..), MonadLogIO, LogCfg, runMonadLogIO, ind
 data Definitions arch =
   Definitions { defSignatures :: Map.Map T.Text (SomeSimpleFunctionSignature, [AS.Stmt])
               , defTypes :: Map.Map T.Text (Some UserType)
-              , defEnums :: Map.Map T.Text Integer
+              , defEnums :: Map.Map T.Text (Some NR.NatRepr, Integer)
               , defConsts :: Map.Map T.Text (Some ConstVal)
               , defExtendedTypes :: Map.Map T.Text ExtendedTypeData
               }
@@ -105,7 +105,7 @@ getDefinitions env st =
   Definitions
     { defSignatures = (\(sig, c, _) -> (sig, callableStmts c)) <$> callableSignatureMap st
     , defTypes = userTypes st
-    , defEnums = enums env
+    , defEnums = enums st
     , defConsts = consts env
     , defExtendedTypes = extendedTypeData st
    }
@@ -366,17 +366,11 @@ buildEnv (spec@ASLSpec{..}) =
 
       types = Map.fromList ((\t -> (getTypeName t, t)) <$> (catMaybes (asDefType <$> defs)))
       -- | TODO: Populate enums
-      enums = Map.fromList (concatMap getEnumValues defs)
       consts = Map.fromList (builtinConsts ++ catMaybes (getConst <$> defs))
       -- | TODO: Populate builtin types
       builtinTypes = Map.empty
       -- getVariableName v = let DefVariable name _ = v
       --                     in name
-
-      -- Map each enum type to a name->integer map.
-      getEnumValues d = case d of
-        AS.DefTypeEnum _ names -> zip names [0..]
-        _ -> []
       getConst d = case d of
         AS.DefConst name asType e -> case (asType, e) of
           (AS.TypeRef (AS.QualifiedIdentifier _ "integer"), (AS.ExprLitInt i)) ->
@@ -402,6 +396,7 @@ buildInitState ASLSpec{..} =
   let globalVars = Map.fromList (map getRegisterDefType aslRegisterDefinitions)
       extendedTypeData = Map.fromList (map getRegisterDefSig aslRegisterDefinitions)
       userTypes = Map.empty
+      enums = Map.empty
       callableSignatureMap = Map.empty
       callableOpenSearches = Map.empty
   in SigState{..}
@@ -441,16 +436,23 @@ globalFunctions =
 
 initializeSigM :: ASLSpec -> SigM ext f ()
 initializeSigM ASLSpec{..} = do
+
   mapM_ (initDefGlobal insertUnique) aslExtraDefinitions
   mapM_ (initDefGlobal insertNoReplace) aslSupportDefinitions
   mapM_ (initDefGlobal insertNoReplace) aslDefinitions
   mapM_ (uncurry computeGlobalFunctionSig) globalFunctions
+  initDefTypes
   where
     computeGlobalFunctionSig :: T.Text -> Int -> SigM ext f ()
     computeGlobalFunctionSig nm nargs = do
       lookupCallable (AS.VarName nm) nargs >>= \case
         Just callable -> void $ computeCallableSignature callable
         _ -> E.throwError $ CallableNotFound nm
+
+    initDefTypes :: SigM ext f ()
+    initDefTypes = do
+      tps <- RWS.asks types
+      mapM_ userTypeOfDef (Map.elems tps)
 
     initDefGlobal :: (forall k a. Ord k => Show k => k -> a -> Map.Map k a -> Map.Map k a)
                   -> AS.Definition
@@ -517,7 +519,6 @@ runSigM (SigM m) env state logCfg = do
     Right a -> return $ (Right a, s)
 
 data SigEnv = SigEnv { envCallables :: Map.Map T.Text Callable
-                     , enums :: Map.Map T.Text Integer
                      , consts :: Map.Map T.Text (Some ConstVal)
                      , types :: Map.Map T.Text DefType
                      , builtinTypes :: Map.Map T.Text (Some UserType)
@@ -551,6 +552,8 @@ data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                            -- ^ map of all signatures found thus far, including global variable references
                          , callableOpenSearches :: Map.Map T.Text SearchStatus
                            -- ^ all callables encountered on the current search path
+                         , enums :: Map.Map T.Text (Some NR.NatRepr, Integer)
+                           -- ^ concrete values for enum members
                          , globalVars :: Map.Map T.Text (Some WT.BaseTypeRepr)
                          , extendedTypeData :: Map.Map T.Text ExtendedTypeData
                          }
@@ -666,6 +669,30 @@ storeUserType tp = case applyTypeSynonyms tp of
        return ()
   _ -> return ()
 
+userTypeOfDef :: DefType -> SigM ext f (Maybe (Some UserType))
+userTypeOfDef defType = do
+  case defType of
+    DefTypeBuiltin builtinTpName -> Just <$> lookupBuiltinType builtinTpName
+    DefTypeEnum _ enumVals
+      | nbits <- integerLog2 (fromIntegral (length enumVals))
+      , Just (Some n) <- NR.someNat nbits
+      , Just NR.LeqProof <- NR.isPosNat n -> do
+      -- Enumeration types are represented as bitvectors.
+        forM (zip enumVals [0..]) $ \(nm, idx) -> do
+          RWS.modify $ \st -> st { enums = Map.insert nm (Some n, idx) (enums st) }
+        return $ Just $ Some $ UserEnum n
+    DefTypeStruct _ structVars -> do
+      varTps <- forM structVars $ \(varName, varType) -> do
+        case computeType' varType of
+          Left (Some tp) -> do
+            return $ Some $ LabeledValue (varName, Nothing) tp
+          Right nm -> do
+            Some ut <- computeUserType nm
+            return $ Some $ LabeledValue (varName, Just (Some ut)) (userTypeRepr ut)
+      Some varTpAssignment <- return $ Ctx.fromList varTps
+      return $ Just $ Some $ UserStruct varTpAssignment
+    _ -> return Nothing
+
 -- | Compute the What4 representation of a user-defined ASL type, from the name of
 -- the type as a 'T.Text'. Store it in 'typeSigs' (if it isn't already there).
 computeUserType :: T.Text -> SigM ext f (Some UserType)
@@ -677,22 +704,8 @@ computeUserType tpName = do
     Nothing -> do
       -- If it has not already been computed, then compute, store and return it.
       defType <- lookupDefType tpName
-      Some tp <- case defType of
-        DefTypeBuiltin builtinTpName -> lookupBuiltinType builtinTpName
-        DefTypeEnum _ enumVals -> do
-          -- Enumeration types are represented as integers.
-          return $ Some $ UserEnum (fromIntegral (length enumVals))
-        DefTypeStruct _ structVars -> do
-          varTps <- forM structVars $ \(varName, varType) -> do
-            case computeType' varType of
-              Left (Some tp) -> do
-                return $ Some $ LabeledValue (varName, Nothing) tp
-              Right nm -> do
-                Some ut <- computeUserType nm
-                return $ Some $ LabeledValue (varName, Just (Some ut)) (userTypeRepr ut)
-          Some varTpAssignment <- return $ Ctx.fromList varTps
-          return $ Some $ UserStruct varTpAssignment
-        DefTypeAbstract _ -> error $ "computeUserType: abstract type " ++ show tpName
+      Some tp <- userTypeOfDef defType >>= \case
+        Just tp -> return tp
         _ -> error $ "computeUserType: unsupported type " ++ T.unpack tpName
       storeType tpName tp
       return $ Some tp
@@ -1335,6 +1348,8 @@ addInitializedVariables stmts env =
 -- and optionally an alternative number of arguments it might take.
 overrideFun :: T.Text -> [AS.Expr] -> [(T.Text, [AS.Expr])]
 overrideFun nm args = case nm of
+  "uninterpFnN" -> []
+  "uninterpFn" -> []
   "read_mem" -> map (\nm' -> (nm', take 2 args)) $ ["read_mem_1", "read_mem_2", "read_mem_4", "read_mem_8", "read_mem_16"]
   "write_mem" -> map (\nm' -> (nm', take 2 args ++ drop 3 args)) $ ["write_mem_1", "write_mem_2", "write_mem_4", "write_mem_8", "write_mem_16"]
   _ -> map (\nm' -> (nm', args)) $ case nm of

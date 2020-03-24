@@ -41,7 +41,7 @@ module Language.ASL.Translation (
 import           Control.Lens ( (&), (.~) )
 import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
-import           Control.Monad ( when, void, foldM, foldM_, (<=<), forM_ )
+import           Control.Monad ( when, void, foldM, foldM_, (<=<), forM_, forM )
 import qualified Control.Monad.Except as ME
 import qualified Control.Monad.Fail as F
 import qualified Control.Monad.State.Class as MS
@@ -144,8 +144,9 @@ lookupVarRef' name = do
       Some g <- Map.lookup name (tsGlobals ts)
       return (ExprConstructor g $ (liftGenerator . CCG.readGlobal))
     lookupEnum ts = do
-      e <- Map.lookup name (tsEnums ts)
-      return (ExprConstructor (CCG.App (CCE.IntLit e)) return)
+      (Some n, i) <- Map.lookup name (tsEnums ts)
+      Just NR.LeqProof <- return $ NR.isPosNat n
+      return (ExprConstructor (CCG.App $ CCE.IntegerToBV n (CCG.App (CCE.IntLit i))) return)
     lookupConst ts = do
       Some (ConstVal repr e) <- Map.lookup name (tsConsts ts)
       case repr of
@@ -306,13 +307,12 @@ data TranslationState h ret s =
                    -- ^ Global variables corresponding to machine state (e.g., machine registers).
                    -- These are allocated before we start executing based on the list of
                    -- transitively-referenced globals in the signature.
-                   , tsEnums :: Map.Map T.Text Integer
-                   -- ^ Map from enumeration constant names to their integer values.
+                   , tsEnums ::  Map.Map T.Text (Some NR.NatRepr, Integer)
+                   -- ^ Map from enumeration constant names to their integer values and bitvector length
                    , tsConsts :: Map.Map T.Text (Some ConstVal)
                    -- ^ Map from constants to their types and values.
                    , tsUserTypes :: Map.Map T.Text (Some UserType)
                    -- ^ The base types assigned to user-defined types (defined in the ASL script)
-                   -- , tsEnumBounds :: Map.Map T.Text Natural
                    -- ^ The number of constructors in an enumerated type.  These
                    -- bounds are used in assertions checking the completeness of
                    -- case statements.
@@ -534,7 +534,7 @@ translateStatement' ov stmt
         let expr = case mexpr of
               Nothing -> AS.ExprTuple []
               Just (AS.ExprTuple es) -> AS.ExprTuple es
-              Just e | Ctx.sizeInt (Ctx.size (funcRetRepr sig)) == 1 ->
+              Just e | (Ctx.Empty Ctx.:> _) <- funcRetRepr sig ->
                 AS.ExprTuple [e]
               Just e -> e
         (Some a, _) <- translateExpr' ov expr (ConstraintSingle retT)
@@ -1098,26 +1098,26 @@ sbvToInteger w bv =
             UFCached WT.BaseIntegerRepr (Ctx.singleton (CT.BVRepr w)) (Ctx.singleton bv)
   in CCG.App $ CCE.ExtensionApp uf
 
-integerToBV :: forall w h s arch ret
+integerToSBV :: forall w h s arch ret
                     . 1 WT.<= w
                    => NR.NatRepr w
                    -> CCG.Expr (ASLExt arch) s CT.IntegerType
                    -> CCG.Expr (ASLExt arch) s (CT.BVType w)
-integerToBV w ie =
-  let uf = UF ("integerToBV_" <> T.pack (show (WT.intValue w)))
+integerToSBV w ie =
+  let uf = UF ("uf_integerToSBV_" <> T.pack (show (WT.intValue w)))
             UFCached (WT.BaseBVRepr w) (Ctx.singleton CT.IntegerRepr) (Ctx.singleton ie)
   in CCG.App $ CCE.ExtensionApp uf
 
 -- Cast an integer to a bitvector, but hint that the bitvector backing
 -- the integer in the final normalized form may have more bits than
 -- the result (which will be truncated).
-integerToBVNoBound :: forall w h s arch ret
+integerToSBVNoBound :: forall w h s arch ret
                     . 1 WT.<= w
                    => NR.NatRepr w
                    -> CCG.Expr (ASLExt arch) s CT.IntegerType
                    -> CCG.Expr (ASLExt arch) s (CT.BVType w)
-integerToBVNoBound w ie =
-  let uf = UF ("integerToBVNoBound_" <> T.pack (show (WT.intValue w)))
+integerToSBVNoBound w ie =
+  let uf = UF ("uf_integerToSBVNoBound_" <> T.pack (show (WT.intValue w)))
             UFCached (WT.BaseBVRepr w) (Ctx.singleton CT.IntegerRepr) (Ctx.singleton ie)
   in CCG.App $ CCE.ExtensionApp uf
 
@@ -1861,7 +1861,7 @@ getSliceRange ov slice slicedAtom constraint = do
       case SE.exprToStatic env hi of
         Just (StaticInt hi') | Some (BVRepr hiRepr) <- intToBVRepr (hi'+1) ->
             if | Just WT.LeqProof <- lenRepr `WT.testLeq` hiRepr -> do
-                 intAtom <- mkAtom $ integerToBVNoBound hiRepr (CCG.AtomExpr slicedAtom)
+                 intAtom <- mkAtom $ integerToSBVNoBound hiRepr (CCG.AtomExpr slicedAtom)
                  return $ SliceRange signed lenRepr hiRepr loAtom hiAtom intAtom
                | otherwise -> throwTrace $ InvalidSymbolicSlice lenRepr hiRepr
         _ -> throwTrace $ RequiredConcreteValue hi (staticEnvMapVals env)
@@ -2253,8 +2253,8 @@ bvBinOp con (e1, a1) (e2, a2) =
           -- to just be the given bitvector operation on the actual bitvectors underlying
           -- the given integers
           let bvrepr = WT.knownNat @128
-          let a1' = integerToBV bvrepr (CCG.AtomExpr a1)
-          let a2' = integerToBV bvrepr (CCG.AtomExpr a2)
+          let a1' = integerToSBV bvrepr (CCG.AtomExpr a1)
+          let a2' = integerToSBV bvrepr (CCG.AtomExpr a2)
           Some <$> mkAtom (sbvToInteger bvrepr (CCG.App (con bvrepr a1' a2')))
         _ -> throwTrace (ExpectedBVType e1 (CCG.typeOfAtom a2))
     _ -> throwTrace $ (ExpectedBVType e1 (CCG.typeOfAtom a1))
@@ -2702,6 +2702,14 @@ mkRegisterSetCall nm globalsName idxtp valuetp idxExpr valueExpr = do
               Ctx.:> (CCG.AtomExpr value))
   liftGenerator $ CCG.writeGlobal gprs (CCG.App (CCE.ExtensionApp uf))
 
+constraintToBaseType :: TypeConstraint -> Maybe (Some (WT.BaseTypeRepr))
+constraintToBaseType ty = case ty of
+  ConstraintSingle tp | CT.AsBaseType bt <- CT.asBaseType tp -> return $ Some bt
+  ConstraintTuple tys -> do
+    Some tps <- Ctx.fromList <$> mapM constraintToBaseType tys
+    return $ Some $ WT.BaseStructRepr tps
+  _ -> fail ""
+
 
 
 overrides :: forall arch . Overrides arch
@@ -2753,48 +2761,6 @@ overrides = Overrides {..}
           AS.StmtCall (AS.QualifiedIdentifier _ nm) [_]
             | nm `elem` ["print", "putchar"] -> Just $ do
               return ()
-          AS.StmtCall (AS.QualifiedIdentifier _ "GPR_Internal_Set") [idxExpr, valueExpr] ->
-            Just $ mkRegisterSetCall "gpr_set" "GPRS"
-              (CT.BVRepr (NR.knownNat @4))
-              (CT.BVRepr (NR.knownNat @32))
-              idxExpr
-              valueExpr
-          AS.StmtCall (AS.QualifiedIdentifier _ "SIMD_Internal_Set") [idxExpr, valueExpr] ->
-            Just $ mkRegisterSetCall "simd_set" "SIMDS"
-              (CT.BVRepr (NR.knownNat @8))
-              (CT.BVRepr (NR.knownNat @128))
-              idxExpr
-              valueExpr
-          AS.StmtCall (AS.QualifiedIdentifier _ "Mem_Internal_Set") [addrExpr, szExpr, valueExpr] -> Just $ do
-            Some addr <- translateExpr overrides addrExpr
-            Refl <- assertAtomType addrExpr (CT.BVRepr (WT.knownNat @32)) addr
-            globals <- MS.gets tsGlobals
-            Just (Some mem) <- return $ Map.lookup "__Memory" globals
-            memAtom <- (liftGenerator $ CCG.readGlobal mem) >>= mkAtom
-            env <- getStaticEnv
-            case SE.exprToStatic env szExpr of
-              Just (SE.StaticInt sz)
-                | Some (BVRepr szRepr) <- intToBVRepr sz
-                , bvSize <- (WT.knownNat @8) `WT.natMultiply` szRepr
-                , WT.LeqProof <- WT.leqMulPos (WT.knownNat @8) szRepr -> do
-                  Some value <- translateExpr overrides valueExpr 
-                  Refl <- assertAtomType valueExpr (CT.BVRepr bvSize) value
-                  let name = "write_mem_" <> (T.pack (show (WT.intValue bvSize)))
-                  let ramRepr = CCG.typeOfAtom memAtom
-                  case CT.asBaseType ramRepr of
-                    CT.AsBaseType btramRepr -> do
-                      let uf = UF name UFCached btramRepr
-                            (Ctx.empty
-                             Ctx.:> ramRepr
-                             Ctx.:> CT.BVRepr (WT.knownNat @32)
-                             Ctx.:> CT.BVRepr bvSize)
-                            (Ctx.empty
-                             Ctx.:> (CCG.AtomExpr memAtom)
-                             Ctx.:> (CCG.AtomExpr addr)
-                             Ctx.:> (CCG.AtomExpr value))
-                      liftGenerator $ CCG.writeGlobal mem (CCG.App (CCE.ExtensionApp uf))
-                    _ -> throwTrace $ ExpectedBaseTypeRepr ramRepr
-              _ -> throwTrace $ RequiredConcreteValue szExpr (staticEnvMapVals env)
           _ -> Nothing
 
         overrideExpr :: forall h s ret
@@ -2825,44 +2791,29 @@ overrides = Overrides {..}
                       WT.NatCaseLT _ ->
                         throwTrace $ UnexpectedBitvectorLength (CT.BVRepr lenRepr) (CT.BVRepr bvRepr)
                 _ -> throwTrace $ RequiredConcreteValue lenE (staticEnvMapVals env)
-            AS.ExprCall (AS.QualifiedIdentifier _ "GPR_Internal_Get") [idxExpr] ->
-              Just $ mkRegisterGetCall "gpr_get" "GPRS"
-                (CT.BVRepr (NR.knownNat @4))
-                (WT.BaseBVRepr (NR.knownNat @32)) idxExpr
+            AS.ExprCall (AS.VarName "uninterpFnN") (AS.ExprLitString fnBaseName : nbitArgEs : allargEs)
+              | Just (Some bty) <- constraintToBaseType ty
+              , Just (SE.StaticInt nbitArgs) <- SE.exprToStatic env nbitArgEs -> Just $ do
+                  let (bitSzEs, argEs) = splitAt (fromIntegral nbitArgs) allargEs
+                  bitSzs <- forM bitSzEs $ \bitSzE -> do
+                    case SE.exprToStatic env bitSzE of
+                      Just (SE.StaticInt bitSz) -> return bitSz
+                      Nothing -> throwTrace $ RequiredConcreteValue bitSzE (staticEnvMapVals env)
+                  let fnName = fnBaseName <> "_" <> T.pack (List.intercalate "_" (map show bitSzs))
+                  Some args <- Ctx.fromList <$> mapM (translateExpr overrides) argEs
+                  let uf = UF fnName UFCached bty (FC.fmapFC CCG.typeOfAtom args) (FC.fmapFC CCG.AtomExpr args)
+                  atom <- mkAtom (CCG.App (CCE.ExtensionApp uf))
+                  return (Some atom, TypeBasic)
 
-            AS.ExprCall (AS.QualifiedIdentifier _ "SIMD_Internal_Get") [idxExpr] ->
-              Just $ mkRegisterGetCall "simd_get" "SIMDS"
-                (CT.BVRepr (NR.knownNat @8))
-                (WT.BaseBVRepr (NR.knownNat @128)) idxExpr
+            AS.ExprCall (AS.VarName "uninterpFn") (AS.ExprLitString fnName : argEs) -> Just $ do
+              Some bty <- case constraintToBaseType ty of
+                Just (Some bty) -> return $ Some bty
+                Nothing -> throwTrace $ TranslationError $ "Unexpected type constraint for " ++ show expr ++ " " ++ show ty
 
-            AS.ExprCall (AS.QualifiedIdentifier _ "SIMD_clone_Internal_Get") [idxExpr] ->
-              Just $ mkRegisterGetCall "simd_get" "SIMDS_clone"
-                (CT.BVRepr (NR.knownNat @8))
-                (WT.BaseBVRepr (NR.knownNat @128)) idxExpr
-
-            AS.ExprCall (AS.QualifiedIdentifier _ "Mem_Internal_Get") [addrExpr, szExpr] -> Just $ do
-              Some addr <- translateExpr overrides addrExpr
-              Refl <- assertAtomType addrExpr (CT.BVRepr (WT.knownNat @32)) addr
-              globals <- MS.gets tsGlobals
-              Just (Some mem) <- return $ Map.lookup "__Memory" globals
-              memAtom <- (liftGenerator $ CCG.readGlobal mem) >>= mkAtom
-              case SE.exprToStatic env szExpr of
-                Just (SE.StaticInt sz)
-                  | Some (BVRepr szRepr) <- intToBVRepr sz
-                  , bvSize <- (WT.knownNat @8) `WT.natMultiply` szRepr
-                  , WT.LeqProof <- WT.leqMulPos (WT.knownNat @8) szRepr -> do
-                    let name = "read_mem_" <> (T.pack (show (WT.intValue bvSize)))
-                    let ramRepr = CCG.typeOfAtom memAtom
-                    let uf = UF name UFCached (WT.BaseBVRepr bvSize)
-                          (Ctx.empty
-                           Ctx.:> ramRepr
-                           Ctx.:> (CT.BVRepr (WT.knownNat @32)))
-                          (Ctx.empty
-                           Ctx.:> (CCG.AtomExpr memAtom)
-                           Ctx.:> (CCG.AtomExpr addr))
-                    atom <- mkAtom (CCG.App (CCE.ExtensionApp uf))
-                    return (Some atom, TypeBasic)
-                _ -> throwTrace $ RequiredConcreteValue szExpr (staticEnvMapVals env)
+              Some args <- Ctx.fromList <$> mapM (translateExpr overrides) argEs
+              let uf = UF fnName UFCached bty (FC.fmapFC CCG.typeOfAtom args) (FC.fmapFC CCG.AtomExpr args)
+              atom <- mkAtom (CCG.App (CCE.ExtensionApp uf))
+              return (Some atom, TypeBasic)
             _ ->
               polymorphicBVOverrides expr ty env <|>
               arithmeticOverrides expr ty <|>
