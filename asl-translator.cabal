@@ -13,6 +13,9 @@ copyright:           (c) Galois, Inc 2014-2020
 
 extra-source-files:  CHANGELOG.md
 
+data-files:          output/*.what4,
+                     archived/*.what4.gz
+
 flag unsafe-operations
   Description: Use unsafe operations (e.g. coercions) to improve performance
   Default: True
@@ -86,6 +89,7 @@ library
                        Language.ASL.Formulas.Attach
                        Language.ASL.Formulas
                        Util.Log
+  other-modules:       Paths_asl_translator
   hs-source-dirs:      lib
   ghc-options:         -Wcompat -Wall
 
@@ -120,6 +124,9 @@ test-suite asl-translator-formula-test
                        parameterized-utils,
                        asl-translator
   main-is: Main.hs
+
+  if flag(asl-lite)
+    cpp-options: -DASL_LITE
 
 executable asl-translator-concrete-test
   main-is: Concrete.hs

@@ -4,7 +4,7 @@ default: all
 ASL_PARSER = ./submodules/arm-asl-parser
 PARSED = ./data/parsed
 
-HS_SOURCES := $(shell find ./lib ./exe -name '*.hs' -not -path '*/\.*') $(shell find . -name '*.cabal')
+HS_SOURCES := $(shell find ./lib ./exe -name '*.hs' -not -path '*/\.*' -not -name 'Normalize.hs') $(shell find . -name '*.cabal')
 
 cabal.project: cabal.project.newbuild
 	cp $< $@
@@ -42,11 +42,11 @@ SOURCE_FILES = $(SPEC_FILES:%.sexpr=${PARSED}/%.sexpr)
 	cabal v2-run --builddir=asl-lite-build asl-translator-exec -f asl-lite -- --output-functions="./output/functions-lite.what4" --output-instructions="./output/instructions-lite.what4" --asl-spec="${PARSED}/" --parallel
 
 
-./output/instructions-norm.what4 ./output/functions-norm.what4 &:: ./output/instructions.what4 ./output/functions.what4
+./output/instructions-norm.what4 ./output/functions-norm.what4 &:: ./output/instructions.what4 ./output/functions.what4 ./lib/Language/ASL/Formulas/Normalize.hs
 	cabal v2-build dismantle-arm-xml -f -asl-lite
 	cabal v2-run asl-translator-exec -f -asl-lite -- --output-norm-functions="./output/functions-norm.what4" --output-norm-instructions="./output/instructions-norm.what4" --output-instructions="./output/instructions.what4" --output-functions="./output/functions.what4" --normalize-mode=all
 
-./output/instructions-norm-lite.what4 ./output/functions-norm-lite.what4 &:: ./output/instructions-lite.what4 ./output/functions-lite.what4
+./output/instructions-norm-lite.what4 ./output/functions-norm-lite.what4 &:: ./output/instructions-lite.what4 ./output/functions-lite.what4 ./lib/Language/ASL/Formulas/Normalize.hs
 	cabal v2-build --builddir=asl-lite-build dismantle-arm-xml -f asl-lite
 	cabal v2-run --builddir=asl-lite-build asl-translator-exec -f asl-lite -- --output-norm-functions="./output/functions-norm-lite.what4" --output-norm-instructions="./output/instructions-norm-lite.what4" --output-instructions="./output/instructions-lite.what4" --output-functions="./output/functions-lite.what4" --normalize-mode=all
 

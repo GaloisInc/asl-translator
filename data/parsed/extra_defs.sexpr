@@ -147,7 +147,7 @@
               (ExprCall
                 (QualifiedIdentifier Any uninterpFnN)
                 (list
-                  (ExprLitString "uf_integerToSBV")
+                  (ExprLitString "uu_integerToSBV")
                   (ExprLitNat 1)
                   (ExprVarRef
                     (QualifiedIdentifier Any N))
@@ -225,7 +225,7 @@
             (QualifiedIdentifier Any integer)))))
     Nothing)
   (DefCallable
-    (QualifiedIdentifier Any getSlice)
+    (QualifiedIdentifier Any getSliceUF)
     (list
       (SymDecl
         inbv
@@ -305,10 +305,13 @@
               (TypeFun
                 bits
                 (ExprBinOp
-                  "*"
-                  (ExprVarRef
-                    (QualifiedIdentifier Any N))
-                  (ExprLitNat 2))))
+                  "+"
+                  (ExprCall
+                    (QualifiedIdentifier Any log2)
+                    (list
+                      (ExprVarRef
+                        (QualifiedIdentifier Any N))))
+                  (ExprLitNat 1))))
             (ExprCall
               (QualifiedIdentifier Any integerToSBV)
               (list
@@ -320,10 +323,13 @@
               (TypeFun
                 bits
                 (ExprBinOp
-                  "*"
-                  (ExprVarRef
-                    (QualifiedIdentifier Any N))
-                  (ExprLitNat 2))))
+                  "+"
+                  (ExprCall
+                    (QualifiedIdentifier Any log2)
+                    (list
+                      (ExprVarRef
+                        (QualifiedIdentifier Any N))))
+                  (ExprLitNat 1))))
             (ExprCall
               (QualifiedIdentifier Any integerToSBV)
               (list
@@ -349,7 +355,7 @@
                   (ExprVarRef
                     (QualifiedIdentifier Any hiBits))))))))))
   (DefCallable
-    (QualifiedIdentifier Any setSlice)
+    (QualifiedIdentifier Any setSliceUF)
     (list
       (SymDecl
         basebv
@@ -431,10 +437,13 @@
               (TypeFun
                 bits
                 (ExprBinOp
-                  "*"
-                  (ExprVarRef
-                    (QualifiedIdentifier Any N))
-                  (ExprLitNat 2))))
+                  "+"
+                  (ExprCall
+                    (QualifiedIdentifier Any log2)
+                    (list
+                      (ExprVarRef
+                        (QualifiedIdentifier Any N))))
+                  (ExprLitNat 1))))
             (ExprCall
               (QualifiedIdentifier Any integerToSBV)
               (list
@@ -446,10 +455,13 @@
               (TypeFun
                 bits
                 (ExprBinOp
-                  "*"
-                  (ExprVarRef
-                    (QualifiedIdentifier Any N))
-                  (ExprLitNat 2))))
+                  "+"
+                  (ExprCall
+                    (QualifiedIdentifier Any log2)
+                    (list
+                      (ExprVarRef
+                        (QualifiedIdentifier Any N))))
+                  (ExprLitNat 1))))
             (ExprCall
               (QualifiedIdentifier Any integerToSBV)
               (list
@@ -475,7 +487,7 @@
                   (ExprVarRef
                     (QualifiedIdentifier Any asnbv))))))))))
   (DefCallable
-    (QualifiedIdentifier Any getSlice2)
+    (QualifiedIdentifier Any getSlice)
     (list
       (SymDecl
         inbv
@@ -629,7 +641,7 @@
                   (ExprVarRef
                     (QualifiedIdentifier Any length))))))))))
   (DefCallable
-    (QualifiedIdentifier Any setSlice2)
+    (QualifiedIdentifier Any setSlice)
     (list
       (SymDecl
         basebv
@@ -1345,7 +1357,7 @@
                             (QualifiedIdentifier Any value))))))))
               (CaseAltWhen
                 (list
-                  (CasePatternNat 3))
+                  (CasePatternNat 4))
                 Nothing
                 (StmtBlock
                   (list
@@ -1364,7 +1376,7 @@
                             (QualifiedIdentifier Any value))))))))
               (CaseAltWhen
                 (list
-                  (CasePatternNat 4))
+                  (CasePatternNat 8))
                 Nothing
                 (StmtBlock
                   (list
@@ -1451,7 +1463,7 @@
                               (QualifiedIdentifier Any address)))))))))
               (CaseAltWhen
                 (list
-                  (CasePatternNat 3))
+                  (CasePatternNat 4))
                 Nothing
                 (StmtBlock
                   (list
@@ -1467,7 +1479,7 @@
                               (QualifiedIdentifier Any address)))))))))
               (CaseAltWhen
                 (list
-                  (CasePatternNat 4))
+                  (CasePatternNat 8))
                 Nothing
                 (StmtBlock
                   (list

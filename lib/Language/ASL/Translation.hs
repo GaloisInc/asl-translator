@@ -1104,7 +1104,7 @@ integerToSBV :: forall w h s arch ret
                    -> CCG.Expr (ASLExt arch) s CT.IntegerType
                    -> CCG.Expr (ASLExt arch) s (CT.BVType w)
 integerToSBV w ie =
-  let uf = UF ("uf_integerToSBV_" <> T.pack (show (WT.intValue w)))
+  let uf = UF ("uu_integerToSBV_" <> T.pack (show (WT.intValue w)))
             UFCached (WT.BaseBVRepr w) (Ctx.singleton CT.IntegerRepr) (Ctx.singleton ie)
   in CCG.App $ CCE.ExtensionApp uf
 
@@ -1117,7 +1117,7 @@ integerToSBVNoBound :: forall w h s arch ret
                    -> CCG.Expr (ASLExt arch) s CT.IntegerType
                    -> CCG.Expr (ASLExt arch) s (CT.BVType w)
 integerToSBVNoBound w ie =
-  let uf = UF ("uf_integerToSBVNoBound_" <> T.pack (show (WT.intValue w)))
+  let uf = UF ("uu_integerToSBVNoBound_" <> T.pack (show (WT.intValue w)))
             UFCached (WT.BaseBVRepr w) (Ctx.singleton CT.IntegerRepr) (Ctx.singleton ie)
   in CCG.App $ CCE.ExtensionApp uf
 

@@ -4,6 +4,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Language.ASL.Formulas
     ( getFunctionFormulas
@@ -12,45 +13,77 @@ module Language.ASL.Formulas
     ) where
 
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
+import qualified Data.Text.Encoding as T
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
+import qualified System.Directory as D
 
 import           Data.Parameterized.Classes
-
 import qualified What4.Interface as WI
 import           What4.Utils.Util ( SomeSome(..) )
+import qualified System.IO as IO
+import qualified Codec.Compression.GZip as GZ
 
-import           Language.ASL.Formulas.Attach
 import qualified Language.ASL.Formulas.Serialize as FS
+import           Paths_asl_translator as P
 
 #ifdef ASL_LITE
-functionFormulas :: T.Text
-functionFormulas = decodeSrc $(attachFormulasSrc "./output/functions-norm-lite.what4" "./archived/functions-norm-lite.what4.gz")
+functionFormulas :: (FilePath, FilePath)
+functionFormulas = ("./output/functions-norm-lite.what4", "./archived/functions-norm-lite.what4.gz")
 
-instructionFormulas :: T.Text
-instructionFormulas = decodeSrc $(attachFormulasSrc "./output/instructions-norm-lite.what4" "./archived/instructions-norm-lite.what4.gz")
+instructionFormulas :: (FilePath, FilePath)
+instructionFormulas = ("./output/instructions-norm-lite.what4", "./archived/instructions-norm-lite.what4.gz")
 #else
-functionFormulas :: T.Text
-functionFormulas = decodeSrc $(attachFormulasSrc "./output/functions-norm.what4" "./archived/functions-norm.what4.gz")
+functionFormulas :: (FilePath, FilePath)
+functionFormulas = ("./output/functions-norm.what4", "./archived/functions-norm.what4.gz")
 
-instructionFormulas :: T.Text
-instructionFormulas = decodeSrc $(attachFormulasSrc "./output/instructions-norm.what4" "./archived/instructions-norm.what4.gz")
+instructionFormulas :: (FilePath, FilePath)
+instructionFormulas = ("./output/instructions-norm.what4", "./archived/instructions-norm.what4.gz")
 #endif
 
-genGetFormulas :: (WI.IsSymExprBuilder sym,
+
+decodeSrc :: BS.ByteString -> T.Text
+decodeSrc bs = T.decodeUtf8 $ LBS.toStrict $ GZ.decompress $ LBS.fromStrict bs
+
+fileCases :: FilePath -> FilePath -> (IO.Handle -> IO a) -> (IO.Handle -> IO a) -> IO a
+fileCases fp fallback f1 f2 = do
+  D.doesFileExist fp >>= \case
+    True -> (IO.withFile fp IO.ReadMode $ \handle -> do
+      sz <- IO.hFileSize handle
+      if sz > 0 then
+        Just <$> f1 handle
+      else return Nothing) >>= \case
+        Just result -> return result
+        Nothing -> IO.withFile fallback IO.ReadMode f2
+    False -> IO.withFile fallback IO.ReadMode f2
+
+
+genGetFormulas :: forall sym
+                . (WI.IsSymExprBuilder sym,
                   WI.IsExprBuilder sym,
                   ShowF (WI.SymExpr sym))
-               => T.Text -> sym -> FS.NamedSymFnEnv sym -> IO [(T.Text, SomeSome (WI.SymFn sym))]
-genGetFormulas src sym env  = do
-  sexpr <- FS.parseSExpr src
-  FS.deserializeSymFnEnv sym env (FS.uninterpFunctionMaker sym) sexpr
+               => (String, String) -> sym -> FS.NamedSymFnEnv sym -> IO [(T.Text, SomeSome (WI.SymFn sym))]
+genGetFormulas (fp', fallbackfp') sym env  = do
+  fp <- P.getDataFileName fp'
+  fallbackfp <- P.getDataFileName fallbackfp'
+  fileCases fp fallbackfp
+    (\handle -> T.hGetContents handle >>= doParse)
+    (\handle -> (decodeSrc <$> BS.hGetContents handle) >>= doParse)
+  where
+    doParse :: T.Text -> IO [(T.Text, SomeSome (WI.SymFn sym))]
+    doParse src = do
+      sexpr <- FS.parseSExpr src
+      FS.deserializeSymFnEnv sym env (FS.uninterpFunctionMaker sym) sexpr
 
 getFunctionFormulas :: (WI.IsSymExprBuilder sym,
                        WI.IsExprBuilder sym,
                        ShowF (WI.SymExpr sym))
                     => sym -> FS.NamedSymFnEnv sym -> IO [(T.Text, SomeSome (WI.SymFn sym))]
-getFunctionFormulas sym = genGetFormulas functionFormulas sym
+getFunctionFormulas = genGetFormulas functionFormulas
 
 getInstructionFormulas :: (WI.IsSymExprBuilder sym,
                            WI.IsExprBuilder sym,
                            ShowF (WI.SymExpr sym))
                        => sym -> FS.NamedSymFnEnv sym -> IO [(T.Text, SomeSome (WI.SymFn sym))]
-getInstructionFormulas sym env = genGetFormulas instructionFormulas sym env
+getInstructionFormulas = genGetFormulas instructionFormulas

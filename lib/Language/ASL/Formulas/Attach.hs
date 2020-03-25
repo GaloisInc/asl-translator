@@ -36,7 +36,6 @@ loadFormulasSrc fs = do
 decodeSrc :: BS.ByteString -> T.Text
 decodeSrc bs = T.decodeUtf8 $ LBS.toStrict $ GZ.decompress $ LBS.fromStrict bs
 
-
 fileCases :: FilePath -> FilePath -> (IO.Handle -> IO a) -> (IO.Handle -> IO a) -> IO a
 fileCases fp fallback f1 f2 = do
   D.doesFileExist fp >>= \case
@@ -63,6 +62,7 @@ attachFormulasSrc fp fallbackfp = do
   TH.qAddDependentFile fallbackfp
   TH.qAddDependentFile fp
   embedByteString bs
+
 
 embedByteString :: BS.ByteString -> TH.ExpQ
 embedByteString bs =

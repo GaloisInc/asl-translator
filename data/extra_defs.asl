@@ -14,7 +14,7 @@ integer IntDiv(integer i1, integer i2)
 
 
 bits(N) integerToSBV(integer i)
-    return uninterpFnN("uf_integerToSBV", 1, N, i);
+    return uninterpFnN("uu_integerToSBV", 1, N, i);
 
 integerSizeBoundS(integer i, bits(N) x)
     bits(N) y = integerToSBV(i);
@@ -32,7 +32,7 @@ integer log2(integer i);
 // target length.
 
 
-bits(length) getSlice(bits(N) inbv, boolean signed, integer lo, integer hi)
+bits(length) getSliceUF(bits(N) inbv, boolean signed, integer lo, integer hi)
     assert length <= N;
     assert length >= 1;
     assert hi >= lo;
@@ -40,12 +40,12 @@ bits(length) getSlice(bits(N) inbv, boolean signed, integer lo, integer hi)
     assert lo >= 0;
     assert (hi - lo) <= length;
 
-    bits (N*2) loBits = integerToSBV(lo);
-    bits (N*2) hiBits = integerToSBV(hi);
+    bits (log2(N)+1) loBits = integerToSBV(lo);
+    bits (log2(N)+1) hiBits = integerToSBV(hi);
     return uninterpFnN("getSlice", 2, N, length, inbv, signed, loBits, hiBits);
 
 
-bits(N) setSlice(bits(N) basebv, integer lo, integer hi, bits(length) asnbv)
+bits(N) setSliceUF(bits(N) basebv, integer lo, integer hi, bits(length) asnbv)
     assert length <= N;
     assert length >= 1;
     assert hi >= lo;
@@ -53,11 +53,11 @@ bits(N) setSlice(bits(N) basebv, integer lo, integer hi, bits(length) asnbv)
     assert lo >= 0;
     assert (hi - lo) <= length;
 
-    bits (N*2) loBits = integerToSBV(lo);
-    bits (N*2) hiBits = integerToSBV(hi);
+    bits (log2(N)+1) loBits = integerToSBV(lo);
+    bits (log2(N)+1) hiBits = integerToSBV(hi);
     return uninterpFnN("setSlice", 2, N, length, basebv, loBits, hiBits, asnbv);
 
-bits(length) getSlice2(bits(N) inbv, boolean signed, integer lo, integer hi)
+bits(length) getSlice(bits(N) inbv, boolean signed, integer lo, integer hi)
     assert length <= N;
     assert length >= 1;
     assert hi >= lo;
@@ -89,7 +89,7 @@ bits(length) getSlice2(bits(N) inbv, boolean signed, integer lo, integer hi)
 // the range we are setting, in which case we simply drop
 // any bits above hi - lo.
 
-bits(N) setSlice2(bits(N) basebv, integer lo, integer hi, bits(length) asnbv)
+bits(N) setSlice(bits(N) basebv, integer lo, integer hi, bits(length) asnbv)
     assert length <= N;
     assert length >= 1;
     assert hi >= lo;
@@ -230,9 +230,9 @@ Mem_Internal_Set(bits(32) address, integer size, bits(8*size) value)
             __Memory = uninterpFn("write_mem_8", __Memory, address, value);
        when 2
             __Memory = uninterpFn("write_mem_16", __Memory, address, value);
-       when 3
-            __Memory = uninterpFn("write_mem_32", __Memory, address, value);
        when 4
+            __Memory = uninterpFn("write_mem_32", __Memory, address, value);
+       when 8
             __Memory = uninterpFn("write_mem_64", __Memory, address, value);
        otherwise
             assert FALSE;
@@ -244,9 +244,9 @@ bits(8*size) Mem_Internal_Get(bits(32) address, integer size)
             return uninterpFn("read_mem_8", __Memory, address);
        when 2
             return uninterpFn("read_mem_16", __Memory, address);
-       when 3
-            return uninterpFn("read_mem_32", __Memory, address);
        when 4
+            return uninterpFn("read_mem_32", __Memory, address);
+       when 8
             return uninterpFn("read_mem_64", __Memory, address);
        otherwise
             assert FALSE;
