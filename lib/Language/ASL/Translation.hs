@@ -1108,20 +1108,6 @@ integerToSBV w ie =
             UFCached (WT.BaseBVRepr w) (Ctx.singleton CT.IntegerRepr) (Ctx.singleton ie)
   in CCG.App $ CCE.ExtensionApp uf
 
--- Cast an integer to a bitvector, but hint that the bitvector backing
--- the integer in the final normalized form may have more bits than
--- the result (which will be truncated).
-integerToSBVNoBound :: forall w h s arch ret
-                    . 1 WT.<= w
-                   => NR.NatRepr w
-                   -> CCG.Expr (ASLExt arch) s CT.IntegerType
-                   -> CCG.Expr (ASLExt arch) s (CT.BVType w)
-integerToSBVNoBound w ie =
-  let uf = UF ("uu_integerToSBVNoBound_" <> T.pack (show (WT.intValue w)))
-            UFCached (WT.BaseBVRepr w) (Ctx.singleton CT.IntegerRepr) (Ctx.singleton ie)
-  in CCG.App $ CCE.ExtensionApp uf
-
-
 -- | Get the "default" value for a given crucible type. We can't use unassigned
 -- registers, as ASL functions occasionally return values uninitialized.
 getDefaultValue :: forall h s arch ret tp
@@ -1861,7 +1847,7 @@ getSliceRange ov slice slicedAtom constraint = do
       case SE.exprToStatic env hi of
         Just (StaticInt hi') | Some (BVRepr hiRepr) <- intToBVRepr (hi'+1) ->
             if | Just WT.LeqProof <- lenRepr `WT.testLeq` hiRepr -> do
-                 intAtom <- mkAtom $ integerToSBVNoBound hiRepr (CCG.AtomExpr slicedAtom)
+                 intAtom <- mkAtom $ integerToSBV hiRepr (CCG.AtomExpr slicedAtom)
                  return $ SliceRange signed lenRepr hiRepr loAtom hiAtom intAtom
                | otherwise -> throwTrace $ InvalidSymbolicSlice lenRepr hiRepr
         _ -> throwTrace $ RequiredConcreteValue hi (staticEnvMapVals env)
