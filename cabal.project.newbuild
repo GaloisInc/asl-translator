@@ -5,4 +5,4 @@ packages: *.cabal
           submodules/dismantle/dismantle-tablegen/
           submodules/dismantle/dismantle-arm-xml/
           submodules/crucible/crucible
-          submodules/crucible/what4/
+          submodules/what4/
