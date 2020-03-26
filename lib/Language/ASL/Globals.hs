@@ -432,9 +432,8 @@ data GlobalRef (s :: Symbol) where
   SimpleGlobalRef :: SimpleGlobalRef s -> GlobalRef s
   GPRRef :: GPRRef n -> GlobalRef (IndexedSymbol "_R" n)
   SIMDRef :: SIMDRef n -> GlobalRef (IndexedSymbol "_V" n)
+  -- | The distinguished global state variable representing memory.
   MemoryRef :: GlobalRef "__Memory"
-  -- ^ The distinguished global state variable representing memory.
-
 
 memoryGlobalRef :: GlobalRef "__Memory"
 memoryGlobalRef = MemoryRef
