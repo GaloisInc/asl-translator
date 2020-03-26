@@ -71,10 +71,10 @@ module Language.ASL.Globals
   , destructGlobals
 
   -- All specified 'GlobalRefs'
-  , simpleGlobalRefs
-  , gprGlobalRefs
-  , simdGlobalRefs
-  , memoryGlobalRef
+  , simpleGlobalRefs, simpleGlobalRefsSym
+  , gprGlobalRefs, gprGlobalRefsSym
+  , simdGlobalRefs, simdGlobalRefsSym
+  , memoryGlobalRef, memoryGlobalRefSym
 
   -- accessing the data of a 'GlobalRef'
   , withGPRRef
