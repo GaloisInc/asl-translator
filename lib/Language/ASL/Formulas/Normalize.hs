@@ -100,7 +100,7 @@ normalizeSymFnEnv funsexpr minstexpr = do
       symFnEnv <- FS.getSymFnEnv instexpr
       instrPromises <- forM symFnEnv $ \(nm, instrSexpr) -> forkResult $ do
         reserializeInstr (Map.fromList proxyFns) nm instrSexpr
-      instrs <- mapM (\f -> f >>= return) instrPromises
+      instrs <- liftM concat $ mapM (\f -> f >>= return) instrPromises
       return $ Just $ FS.assembleSymFnEnv $ map (uncurry FS.mkSymFnEnvEntry) instrs
     Nothing -> return Nothing
   funsexpr' <- return $ FS.assembleSymFnEnv $ map (uncurry FS.mkSymFnEnvEntry) normFunSExprs
@@ -131,7 +131,7 @@ forkResult f = do
 reserializeInstr :: Map T.Text FS.SExpr
                  -> T.Text
                  -> FS.SExpr
-                 -> IO (T.Text, FS.SExpr)
+                 -> IO [(T.Text, FS.SExpr)]
 reserializeInstr env name sexpr = do
   Some r <- newIONonceGenerator
   sym <- WB.newExprBuilder WB.FloatRealRepr NoBuilderData r
@@ -141,21 +141,22 @@ reserializeInstr env name sexpr = do
                  . sym ~ WB.ExprBuilder t st fs
                 => WI.IsSymExprBuilder sym
                 => sym
-                -> IO (T.Text, FS.SExpr)
+                -> IO [(T.Text, FS.SExpr)]
     doSerialize sym = do
       ref <- IO.newIORef (Map.empty :: Map T.Text (SomeSome (WI.SymFn sym)))
       let functionMaker = FS.lazyFunctionMaker sym (env, ref) `FS.composeMakers` FS.uninterpFunctionMaker sym
       SomeSome symFn <- FS.deserializeSymFn' functionMaker sexpr
       putStrLn $ "Normalizing Instruction: " ++ (T.unpack name)
-      (symFn', _) <- normalizeSymFn sym name symFn True
-      return $! (name, FS.serializeSymFn symFn')
+      (symFn', eSymFns) <- normalizeSymFn sym name symFn True
 
-    -- serializeEmbedded :: Some(EmbeddedSymFn t) -> Maybe (T.Text, FS.SExpr)
-    -- serializeEmbedded (Some eSymFn)
-    --   | SomeSome symFn <- eSymFnSome eSymFn
-    --   , not (eSymFnInlined eSymFn)
-    --   = Just (eSymFnName eSymFn, FS.serializeSymFn symFn)
-    -- serializeEmbedded _ = Nothing
+      return $! mapMaybe serializeEmbedded eSymFns ++ [(name, FS.serializeSymFn symFn')]
+
+    serializeEmbedded :: Some(EmbeddedSymFn t) -> Maybe (T.Text, FS.SExpr)
+    serializeEmbedded (Some eSymFn)
+      | SomeSome symFn <- eSymFnSome eSymFn
+      , not (eSymFnInlined eSymFn)
+      = Just (eSymFnName eSymFn, FS.serializeSymFn symFn)
+    serializeEmbedded _ = Nothing
 
 data NormalizeSymFnEnv sym =
   NormalizeSymFnEnv { envAllFns :: FS.NamedSymFnEnv sym
@@ -325,7 +326,7 @@ normalizeSymFn :: forall sym t st fs args ret
                -> WB.ExprSymFn t args ret
                -> Bool
                -> IO (WB.ExprSymFn t args ret, [Some (EmbeddedSymFn t)])
-normalizeSymFn sym name symFn inlineAll = case WB.symFnInfo symFn of
+normalizeSymFn sym name symFn topLevel = case WB.symFnInfo symFn of
   WB.DefinedFnInfo args initexpr eval -> do
     -- e.g. f ( S :: (Int, (Bool, Int)) ) :: ((Int, Bool), Int) := ((- S[2:2], NOT S[2:1]), S[1] + S[2:2])
     
@@ -381,11 +382,11 @@ normalizeSymFn sym name symFn inlineAll = case WB.symFnInfo symFn of
       simplifyInts expr = do
         nfCache <- MS.gets rbNormFieldCache
         expr' <- withSym $ \sym -> normFieldAccs sym nfCache expr
-        case exprDepthBounded 7 expr' && not inlineAll of
+        case exprDepthBounded 7 expr' && not topLevel of
           True -> return (expr', True)
           False -> do
             expr'' <- extractInts expr'
-            return (expr'', inlineAll)
+            return (expr'', False)
 
       mkSymFnAt :: forall allargs tp
                  . Ctx.Assignment (WB.ExprBoundVar t) allargs
