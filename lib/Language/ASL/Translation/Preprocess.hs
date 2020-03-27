@@ -674,7 +674,7 @@ userTypeOfDef defType = do
   case defType of
     DefTypeBuiltin builtinTpName -> Just <$> lookupBuiltinType builtinTpName
     DefTypeEnum _ enumVals
-      | nbits <- integerLog2 (fromIntegral (length enumVals))
+      | nbits <- integerLog2 (fromIntegral (length enumVals)) + 1
       , Just (Some n) <- NR.someNat nbits
       , Just NR.LeqProof <- NR.isPosNat n -> do
       -- Enumeration types are represented as bitvectors.
