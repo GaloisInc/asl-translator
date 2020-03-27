@@ -144,7 +144,7 @@ reserializeInstr env name sexpr = do
                 -> IO [(T.Text, FS.SExpr)]
     doSerialize sym = do
       ref <- IO.newIORef (Map.empty :: Map T.Text (SomeSome (WI.SymFn sym)))
-      let functionMaker = FS.lazyFunctionMaker sym (env, ref) `FS.composeMakers` FS.uninterpFunctionMaker sym
+      let functionMaker = FS.lazyFunctionMaker sym (env, ref) (FS.uninterpFunctionMaker sym) `FS.composeMakers` FS.uninterpFunctionMaker sym
       SomeSome symFn <- FS.deserializeSymFn' functionMaker sexpr
       putStrLn $ "Normalizing Instruction: " ++ (T.unpack name)
       (symFn', eSymFns) <- normalizeSymFn sym name symFn True
@@ -157,6 +157,8 @@ reserializeInstr env name sexpr = do
       , not (eSymFnInlined eSymFn)
       = Just (eSymFnName eSymFn, FS.serializeSymFn symFn)
     serializeEmbedded _ = Nothing
+
+
 
 data NormalizeSymFnEnv sym =
   NormalizeSymFnEnv { envAllFns :: FS.NamedSymFnEnv sym

@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK hide #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Language.ASL.Globals.ConsistencyCheck

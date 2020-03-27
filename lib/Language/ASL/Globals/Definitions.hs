@@ -1,3 +1,32 @@
+{-|
+Module           : Language.ASL.Globals.Definitions
+Copyright        : (c) Galois, Inc 2020
+Maintainer       : Daniel Matichuk <dmatichuk@galois.com>
+
+This module provides the base set of definitions for deriving
+the globals in "Language.ASL.Globals". Each 'Global' represents
+a global variable from the ASL specification, and is either
+"tracked" or "untracked".
+
+The tracked globals (specified in "trackedGlobals'") are variables
+that are given as input and taken as output to each instruction.
+They represent the state transition taken by each instruction.
+
+The untracked globals (specified in "untrackedGlobals'") are variables
+that may be read by the ASL specification for each instruction, but
+with an undefined value. Any writes to these globals are preserved
+for the duration of a single instruction (i.e. across multiple
+function calls) but their final value is discarded.
+They represent under-specified pieces of the processor state, whose
+specific values should not be relevant during normal execution.
+
+Either 'Global' kind may provide a 'GlobalDomain' which represents a
+restriction on valid values for that global. The translator will add
+assertions that these domains are respected at the beginning and end
+of each instruction.
+
+-}
+
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
@@ -70,27 +99,34 @@ import           Language.ASL.StaticExpr ( bitsToInteger )
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as TH
 
+-- | The maximum index for a user register
 type MaxGPR = 14
+-- | The maximum index for a vector register
 type MaxSIMD = 31
 
 type ArrayBaseType idxsz valsz = WI.BaseArrayType(EmptyCtx ::> WI.BaseBVType idxsz) (WI.BaseBVType valsz)
 
-
+-- | The type of the array representing all of memory
 type MemoryBaseType = ArrayBaseType 32 8
+-- | The type of the array representing all user registers
 type AllGPRBaseType = ArrayBaseType 4 32
+-- | The type of the array representing all vector registers
 type AllSIMDBaseType = ArrayBaseType 8 128
 
+-- | A 'NR.NatRepr' for 'MaxGPR'
 maxGPRRepr :: NR.NatRepr MaxGPR
 maxGPRRepr = NR.knownNat
 
+-- | A 'NR.NatRepr' for 'MaxSIMD'
 maxSIMDRepr :: NR.NatRepr MaxSIMD
 maxSIMDRepr = NR.knownNat
 
 
--- FIXME: move
+-- | Reversed arguments for 'viewSome'
 forSome :: Some f -> (forall tp . f tp -> r) -> r
 forSome (Some x) f = f x
 
+-- | All simple (non-register and non-memory) "tracked" global ASL variables.
 simpleGlobals' :: Some (Assignment Global)
 simpleGlobals' =
   Some $ Ctx.empty
@@ -100,7 +136,7 @@ simpleGlobals' =
   :> bool "__UnpredictableBehavior"
   :> bool "__EndOfInstruction"
   -- meta-state reifying information about this encoding
-  :> bv @2 "__ThisInstrEnc"
+  :> bv @3 "__ThisInstrEnc"
   :> bv @32 "__ThisInstr"
   -- tracking updates to the program counter
   :> bool "__BranchTaken"
@@ -147,7 +183,7 @@ trackedGlobals' =
   :> simdGlobal
   :> memoryGlobal
 
--- | All 'Global's with GPRs and SIMDs expanded.
+-- | A representation of all global variables with a unique 'Global' for each GPR and SIMD
 flatTrackedGlobals' :: Some (Assignment Global)
 flatTrackedGlobals' =
   forSome simpleGlobals' $ \simpleGlobals'' ->
@@ -158,22 +194,27 @@ flatTrackedGlobals' =
   <++> gprGlobals''
   <++> simdGlobals'') :> memoryGlobal
 
+-- | The 'Global' representing all of memory.
 memoryGlobal :: Global MemoryBaseType
 memoryGlobal =
   def "__Memory" (WI.BaseArrayRepr (empty :> WI.BaseBVRepr (WI.knownNat @32))
     (WI.BaseBVRepr (WI.knownNat @8))) domainUnbounded
 
+-- | The 'Global' reflecting the entire state of the user registers (defined in ASL as "GPRS")
 gprGlobal :: Global AllGPRBaseType
 gprGlobal = def "GPRS" (knownRepr :: WI.BaseTypeRepr AllGPRBaseType) domainUnbounded
 
+-- | The user registers expanded into a distinct 'Global' for each register.
 gprGlobals' :: Some (Assignment Global)
 gprGlobals' = Ctx.fromList $
   map (\i -> Some $ def ("_R" <> (T.pack $ show i))
         (knownRepr :: WI.BaseTypeRepr (WI.BaseBVType 32)) domainUnbounded) [0 .. (NR.intValue maxGPRRepr)]
 
+-- | The 'Global' reflecting the entire state of the vector registers (defined in ASL as "SIMDS")
 simdGlobal :: Global AllSIMDBaseType
 simdGlobal = def "SIMDS" (knownRepr :: WI.BaseTypeRepr AllSIMDBaseType) domainUnbounded
 
+-- | The vector registers expanded into a distinct 'Global' for each register.
 simdGlobals' :: Some (Assignment Global)
 simdGlobals' = Ctx.fromList $
   map (\i -> Some $ def ("_V" <> (T.pack $ show i))
@@ -219,6 +260,9 @@ parseBits bits = case bits of
   [] -> []
   s -> error $ "bad bitstring: " ++ show s
 
+-- | 'Global's which are not explicitly tracked by the translation. These
+-- will have an undefined (but possibly restricted) initial value at the
+-- beginning of each instruction, and any writes will be discarded at the end.
 untrackedGlobals' :: Some (Assignment Global)
 untrackedGlobals' = Some $ empty
   -- the debug flag should not be set

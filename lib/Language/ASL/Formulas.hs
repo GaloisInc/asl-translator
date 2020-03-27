@@ -1,3 +1,14 @@
+{-|
+Module           : Language.ASL.Formulas
+Copyright        : (c) Galois, Inc 2020
+Maintainer       : Daniel Matichuk <dmatichuk@galois.com>
+
+This module provides an interface to the translated ASL
+semantics, represented as a library of what4 expressions.
+
+
+-}
+
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -76,12 +87,18 @@ genGetFormulas (fp', fallbackfp') sym env  = do
       sexpr <- FS.parseSExpr src
       FS.deserializeSymFnEnv sym env (FS.uninterpFunctionMaker sym) sexpr
 
+-- | Given an initial function binding environment (i.e. for
+-- providing bindings for uninterpreted functions), read in the
+-- helper functions used in the specifications for the ARM instructions.
 getFunctionFormulas :: (WI.IsSymExprBuilder sym,
                        WI.IsExprBuilder sym,
                        ShowF (WI.SymExpr sym))
                     => sym -> FS.NamedSymFnEnv sym -> IO [(T.Text, SomeSome (WI.SymFn sym))]
 getFunctionFormulas = genGetFormulas functionFormulas
 
+
+-- | Given a function environment (i.e. as read in from 'getFunctionFormulas'), read in
+-- the functions that represent the semantics for each ARM instruction.
 getInstructionFormulas :: (WI.IsSymExprBuilder sym,
                            WI.IsExprBuilder sym,
                            ShowF (WI.SymExpr sym))

@@ -10,19 +10,26 @@ parse tree by the [asl parser][fn:asl-parser], which is the representation used 
 # Running
 
 By default, this repository comes with an archived version of a successful translation of the ASL semantics,
-contained as a gzipped s-expression file in `archived/formulas.what4.gz`. The module `Language.ASL.Formulas`
-embeds this file directly using template haskell, exposing it indirectly through `getFormulas`.
+contained as two gzipped s-expressions file in `archived/functions-norm.what4.gz` and `archived/instructions-norm.what4.gz`. The module `Language.ASL.Formulas` provides an interface to these files through the functions `getFunctionFormulas` and `getInstructionFormulas`.
 
 The translator can be run via cabal with `cabal v2-run asl-translator-exec` or equivalently `make genarm`.
 The default options will use the source files in `data/Parsed` to build a collection of serialized what4 expressions representing
 the instructions and helper functions for the `A32` and `T32` instructions. By default these
-are written out to `output/formulas.what4`.
+are written out to `output/instructions.what4` and `output/functions.what4`. Once these files exist,
+the normalized specification can be generated from them via `cabal v2-run asl-translator-exec --normalize-mode=all`. By default
+these are written out to `output/instructions-norm.what4` and `output/functions-norm.what4`. The `genarm` make target
+will build these automatically.
 
-If both `output/formulas.what4` and `archived/formulas.what4.gz` exist when `Languages.ASL.Formulas` is built, then
-the former will be embedded with the module.
+The interface functions in `Language.ASL.Formulas` will prefer to use the normalized files in
+`output` if they exist, otherwise falling back on the archived files in `archived`.
 
 The `make genarm` target will use cabal to run the translator, but also can build the source s-expression and asl files in 
 `data` from the source ARM XML specification (via the `Makefile` in the `arm-asl-parser` subrepository).
+
+# Archiving
+
+Any changes to the final normalized specification should be archived for consistency. The archive
+can be created with `make archive`, which will first build and normalize the specification if necessary.
 
 # Source Files
 

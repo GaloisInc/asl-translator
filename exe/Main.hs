@@ -1,3 +1,14 @@
+{-|
+Module           : Main
+Copyright        : (c) Galois, Inc 2019-2020
+Maintainer       : Daniel Matichuk <dmatichuk@galois.com>
+
+The top-level executable for running the ASL translator.
+See "Language.ASL.Translation.Driver" for most of
+the relevant functionality.
+
+-}
+
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Main ( main ) where
@@ -7,6 +18,9 @@ import qualified Control.Concurrent as IO
 import qualified Control.Exception as X
 import           GHC.Stack ( HasCallStack )
 
+import qualified Data.Text as T
+import qualified Data.List as List
+import qualified Data.List.Split as List
 import           Data.Maybe ( fromJust )
 
 import           System.Exit (exitFailure)
@@ -57,7 +71,7 @@ runTranslator :: TranslatorOptions -> StatOptions -> IO ()
 runTranslator opts' statOpts = do
   Log.withLogging "main" (logEventConsumer opts') $ do
     let opts = opts' { optLogCfg = Log.getLogCfg }
-    sm <- ASL.runWithFilters opts
+    sm <- ASL.translateAndSimulate opts
     ASL.reportStats statOpts sm
     ASL.serializeFormulas opts sm
 
@@ -79,6 +93,23 @@ logEventConsumer opts logCfg =
       Log.Warn -> i >= 1
       Log.Debug -> i >= 2
       Log.Error -> True
+
+getTranslationMode :: String -> Maybe (ASL.TranslationMode)
+getTranslationMode mode = case mode of
+  "AArch32" -> return $ ASL.TranslateAArch32
+  _ -> case List.splitOn "/" mode of
+    [instr, enc] -> return $ ASL.TranslateInstruction (T.pack instr, T.pack enc)
+    _ -> fail ""
+
+getSimulationMode :: String -> Maybe (ASL.SimulationMode)
+getSimulationMode mode = case mode of
+  "all" -> return $ ASL.SimulateAll
+  "instructions" -> return $ ASL.SimulateInstructions
+  "functions" -> return $ ASL.SimulateFunctions
+  "none" -> return $ ASL.SimulateNone
+  _ -> case List.splitOn "/" mode of
+    [instr, enc] -> return $ ASL.SimulateInstruction (T.pack instr, T.pack enc)
+    _ -> fail ""
 
 usage :: IO ()
 usage = do
@@ -140,14 +171,14 @@ arguments =
     "Print collected exceptions for known issues thrown during translation (requires collect-exceptions or collect-expected-exceptions)"
 
   , Option [] ["translation-mode"] (ReqArg (\mode -> Left (\opts -> do
-      tmode <- ASL.getTranslationMode mode
+      tmode <- getTranslationMode mode
       return $ opts { optTranslationMode = tmode })) "TRANSLATION_MODE")
     ("Filter instructions according to TRANSLATION_MODE: \n" ++
      "Arch32 (default) - translate T16, T32 and A32 instructions.\n" ++
      "<INSTRUCTION>/<ENCODING> - translate a single instruction/encoding pair.")
 
   , Option [] ["simulation-mode"] (ReqArg (\mode -> Left (\opts -> do
-      smode <- ASL.getSimulationMode mode
+      smode <- getSimulationMode mode
       return $ opts { optSimulationMode = smode })) "SIMULATION_MODE")
     ("Filter instructions and functions for symbolic simulation according to SIMULATION_MODE: \n" ++
      "all (default) - simulate all successfully translated instructions and functions. \n" ++

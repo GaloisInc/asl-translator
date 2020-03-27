@@ -1,3 +1,24 @@
+{-|
+Module           : Language.ASL.Translation.Driver
+Copyright        : (c) Galois, Inc 2019-2020
+Maintainer       : Daniel Matichuk <dmatichuk@galois.com>
+
+This module implements the translation pipeline. Given a
+set of translation options, it performs the following steps:
+
+* Read in the pre-parsed ASL specification (from s-expressions).
+* Translate each instruction into a Crucible CFG (via "Language.ASL.Translation").
+* For each instruction, translate (recursively) any called functions.
+* For all translated instructions/functions, symbolically
+  execute the Crucible CFG into a What4 function.
+* Serialize all resulting What4 functions as s-expressions.
+
+As a separate pass (specified by the translator options),
+it also drives the "normalization" of the resulting What4 functions.
+In this case, the s-expressions from the translation are read back in,
+normalized, then written out again.
+-}
+
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
@@ -19,18 +40,19 @@ module Language.ASL.Translation.Driver
   ( TranslatorOptions(..)
   , defaultFilePaths
   , defaultOptions
+  , TranslationMode(..)
+  , SimulationMode(..)
   , NormalizeMode(..)
   , StatOptions(..)
   , defaultStatOptions
   , TranslationDepth(..)
   , FilePathConfig(..)
-  , runWithFilters
+  , ExpectedException(..)
+  , translateAndSimulate
+  , SigMap
   , reportStats
   , serializeFormulas
-  , getTranslationMode
-  , getSimulationMode
   , readAndNormalize
-  , noFilter
   ) where
 
 import           GHC.Stack ( HasCallStack )
@@ -79,7 +101,7 @@ import           Dismantle.ARM.ASL ( encodingIdentifier )
 
 import qualified System.IO as IO
 import           System.IO (hPutStrLn, stderr)
--- import           Panic hiding (panic)
+
 import           Lang.Crucible.Panic ( Crucible )
 
 import qualified Language.ASL.SyntaxTraverse as AS  ( pattern VarName )
@@ -109,28 +131,42 @@ import qualified What4.Serialize.Normalize as WN
 import qualified Text.PrettyPrint.HughesPJClass as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as LPP
 
--- FIXME: this should be moved somewhere general
 import           What4.Utils.Log ( HasLogCfg, LogLevel(..), LogCfg, withLogCfg )
 import qualified What4.Utils.Log as Log
 import           What4.Utils.Util ( SomeSome(..) )
 import qualified What4.Utils.Util as U
 import           Util.Log ( MonadLog(..), logIntToLvl, logMsgStr )
 
+-- | Configuration options controlling translation and simulation
 data TranslatorOptions = TranslatorOptions
   { optVerbosity :: Integer
-  , optNumberOfInstructions :: Maybe Int
+  -- ^ verbosity level of the translator. 0 = silent, 1 = warnings, 2 = info, 3 = debug
   , optTranslationMode :: TranslationMode
+  -- ^ mode controlling which instructions are translated
   , optSimulationMode :: SimulationMode
+  -- ^ mode controlling which instructions/functions are symbolically executed
   , optCollectAllExceptions :: Bool
+  -- ^ if true, all exceptions thrown are collected and reported at the end
+  -- if false, unexpected exceptions are thrown
   , optCollectExpectedExceptions :: Bool
+  -- ^ if true, expected exceptions thrown are collected and reported at the end
+  -- if false, all exceptions are thrown
   , optTranslationDepth :: TranslationDepth
+  -- ^ mode controlling if translation should proceed recursively
   , optCheckSerialization :: Bool
+  -- ^ if true, serialized functions are deserialized and checked for
+  -- equivalence
   , optFilePaths :: FilePathConfig
+  -- ^ specification of input/output file paths
   , optLogCfg :: LogCfg
+  -- ^ internal log configuration 
   , optParallel :: Bool
+  -- ^ if true, execute symbolic simulation for each function on a separate thread
   , optNormalizeMode :: NormalizeMode
+  -- ^ mode controlling the normalization of the resulting What4 functions
   }
 
+-- | Configuration specifying the location of both input and output files.
 data FilePathConfig = FilePathConfig
   { fpDefs :: FilePath
   , fpInsts :: FilePath
@@ -144,6 +180,8 @@ data FilePathConfig = FilePathConfig
   , fpDataRoot :: FilePath
   }
 
+-- | Configuration options controlling the final report after
+-- translation/simulation
 data StatOptions = StatOptions
   { reportKnownExceptions :: Bool
   , reportSucceedingInstructions :: Bool
@@ -152,7 +190,7 @@ data StatOptions = StatOptions
   , reportFunctionDependencies :: Bool
   }
 
-
+-- | Default configuration for file paths
 defaultFilePaths :: FilePathConfig
 defaultFilePaths = FilePathConfig
   { fpDataRoot = "./data/parsed/"
@@ -167,10 +205,10 @@ defaultFilePaths = FilePathConfig
   , fpNormInstrs = "./output/instructions-norm.what4"
   }
 
+-- | Default configuration for translation/simulation
 defaultOptions :: Log.LogCfg -> TranslatorOptions
 defaultOptions logCfg = TranslatorOptions
   { optVerbosity = 1
-  , optNumberOfInstructions = Nothing
   , optTranslationMode = TranslateAArch32
   , optSimulationMode = SimulateAll
   , optCollectAllExceptions = False
@@ -183,7 +221,7 @@ defaultOptions logCfg = TranslatorOptions
   , optNormalizeMode = NormalizeNone
   }
 
-
+-- | Default configuration for reporting translation/simulation statistics
 defaultStatOptions :: StatOptions
 defaultStatOptions = StatOptions
   { reportKnownExceptions = False
@@ -193,25 +231,43 @@ defaultStatOptions = StatOptions
   , reportFunctionDependencies = False
   }
 
+-- | Flag for specifying the translation depth
 data TranslationDepth = TranslateRecursive
+                      -- ^ recursively translate all function calls
                       | TranslateShallow
+                      -- ^ only translate instructions, don't recurse into function calls
 
+-- | Flag for filtering instructions to be translated
 data TranslationMode = TranslateAArch32
+                     -- ^ translate all of AArch32
                      | TranslateInstruction (T.Text, T.Text)
+                     -- ^ translate a specific instruction/encoding pair
 
+-- | Flag for filtering instructions/functions to be symbolically executed
 data SimulationMode = SimulateAll
+                    -- ^ simulate all functions/instructions
                     | SimulateFunctions
+                    -- ^ simulate only functions
                     | SimulateInstructions
+                    -- ^ simulate only instructions
                     | SimulateInstruction (T.Text, T.Text)
+                    -- ^ simulate only a specific instruction/encoding pair
                     | SimulateNone
+                    -- ^ do not perform any simulation
 
+-- | Flag for controlling the normalization mode
 data NormalizeMode = NormalizeAll
+                   -- ^ normalize all instructions and functions
                    | NormalizeFunctions
+                   -- ^ normalize only functions
                    | NormalizeNone
+                   -- ^ do not normalize
  deriving (Eq, Show)
 
-runWithFilters :: HasCallStack => TranslatorOptions -> IO (SigMap arch)
-runWithFilters opts = do
+-- | Translate and simulate the ASL specification according to the given
+-- 'TranslatorOptions', returning a populated 'SigMap'.
+translateAndSimulate :: HasCallStack => TranslatorOptions -> IO (SigMap arch)
+translateAndSimulate opts = do
   spec <- getASL opts
   logMsgIO opts 0 $ "Loaded "
     ++ show (length $ aslInstructions spec) ++ " instructions and "
@@ -220,10 +276,12 @@ runWithFilters opts = do
     ++ show (length $ aslExtraDefinitions spec) ++ " extra definitions and "
     ++ show (length $ aslRegisterDefinitions spec) ++ " register definitions."
   (sigEnv, sigState) <- buildSigState spec (optLogCfg opts)
-  runWithFilters' opts spec sigEnv sigState
+  translateAndSimulate' opts spec sigEnv sigState
 
 data BuilderData t = NoBuilderData
 
+-- | Read in an existing specification, perform a normalization pass and
+-- then write out the result.
 readAndNormalize :: TranslatorOptions -> IO ()
 readAndNormalize opts = do
   let
@@ -262,7 +320,8 @@ simulateFunctions (optSimulationMode -> smode) = case smode of
   SimulateFunctions -> True
   _ -> False
 
-
+-- | Write out the serialized What4 functions from the given 'SigMap'
+-- to their corresponding file path according to the given 'TranslatorOptions'
 serializeFormulas :: TranslatorOptions -> SigMap arch -> IO ()
 serializeFormulas opts (sFormulaPromises -> promises) = do
   let
@@ -316,43 +375,23 @@ checkSerialization :: (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
 checkSerialization sym opts env fp = do
   logMsgIO opts 0 $ "Deserializing formulas from: " ++ fp
   sexpr <- T.readFile fp >>= FS.parseSExpr
-  fns <- FS.deserializeSymFnEnv sym env (functionMaker sym opts) sexpr
+  fns <- FS.deserializeSymFnEnv sym env (FS.uninterpFunctionMaker sym) sexpr
   logMsgIO opts 0 $ "Successfully deserialized: " ++ show (length fns) ++ " formulas."
   return (Map.fromList $ fns)
 
-functionMaker :: WI.IsSymExprBuilder sym
-              => sym
-              -> TranslatorOptions
-              -> FS.FunctionMaker sym
-functionMaker sym opts = case optSimulationMode opts of
-  SimulateAll -> FS.filteredFunctionMaker validUninterpFunction (FS.uninterpFunctionMaker sym)
-  SimulateFunctions -> FS.filteredFunctionMaker validUninterpFunction (FS.uninterpFunctionMaker sym)
-  SimulateInstruction _ -> FS.uninterpFunctionMaker sym
-  SimulateInstructions -> FS.uninterpFunctionMaker sym
-
-validUninterpFunction :: T.Text -> Bool
-validUninterpFunction nm =
-     "UNDEFINED_" `T.isPrefixOf` nm
-  || "INIT_GLOBAL_" `T.isPrefixOf` nm
-  || "read_mem" `T.isPrefixOf` nm
-  || "write_mem" `T.isPrefixOf` nm
-  || nm `elem` ["gpr_get", "gpr_set", "simd_get", "simd_set"]
-
-runWithFilters' :: HasCallStack
+translateAndSimulate' :: HasCallStack
                 => TranslatorOptions
                 -> ASLSpec
                 -> SigEnv
                 -> SigState
                 -> IO (SigMap arch)
-runWithFilters' opts spec env state = do
-  let numInstrs = optNumberOfInstructions opts
+translateAndSimulate' opts spec env state = do
   let doInstrFilter (daEnc, (instr, enc)) = do
         let test = instrFilter $ optFilters $ opts
         test (instrToIdent daEnc instr enc)
 
   let encodings = filter doInstrFilter $ getEncodingConstraints (aslInstructions spec)
   (sigs, sigmap) <- runSigMapWithScope opts state env $ do
-    -- addUFS (memoryUFSigs ++ initGlobalSigs ++ initUndefFuns)
     forM (zip [1..] encodings) $ \(i :: Int, (daEnc, (instr, instrEnc))) -> do
       logMsgStr 1 $ "Processing instruction: " ++ DA.encName daEnc ++ " (" ++ DA.encASLIdent daEnc ++ ")"
         ++ "\n" ++ show i ++ "/" ++ show (length encodings)
@@ -427,7 +466,6 @@ translationLoop fromInstr callStack defs (fnname, env) = do
           Left _ -> do
             return Set.empty
           Right (Some ssig@(SomeFunctionSignature sig), stmts) -> do
-            MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some ssig) (sMap s) }
             logMsgStr 2 $ "Translating function: " ++ show finalName ++ " for instruction: "
                ++ prettyIdent fromInstr
                ++ "\n CallStack: " ++ show callStack
@@ -451,8 +489,7 @@ runSigMapWithScope opts sigState sigEnv action = do
   handleAllocator <- CFH.newHandleAllocator
   let sigMap =
         SigMap {
-          sMap = Map.empty
-          , instrExcepts = Map.empty
+            instrExcepts = Map.empty
           , funExcepts = Map.empty
           , sigState = sigState
           , sigEnv = sigEnv
@@ -481,52 +518,6 @@ withOnlineBackend :: forall arch a
                   -> (forall scope. CBO.YicesOnlineBackend scope (B.Flags B.FloatReal) -> IO a)
                   -> SigMapM arch (Maybe a)
 withOnlineBackend key action = catchIO key $ withOnlineBackend' action
-
-memoryUFSigs :: [(T.Text, ((Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr)))]
-memoryUFSigs = concatMap mkUF [1,2,4,8,16]
-  where
-    ramRepr = WI.BaseArrayRepr (Ctx.empty Ctx.:> WI.BaseBVRepr (WI.knownNat @32)) (WI.BaseBVRepr (WI.knownNat @8))
-    mkUF :: Integer -> [(T.Text, (Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr))]
-    mkUF sz
-      | Just (Some szRepr) <- WI.someNat sz
-      , Just WI.LeqProof <- WI.knownNat @1 `WI.testLeq` szRepr
-      , bvSize <- (WI.knownNat @8) `WI.natMultiply` szRepr
-      , WI.LeqProof <- WI.leqMulPos (WI.knownNat @8) szRepr =
-        [( "write_mem_" <> (T.pack (show (WI.intValue bvSize)))
-         , ( Some (Ctx.empty Ctx.:> ramRepr Ctx.:> (WI.BaseBVRepr (WI.knownNat @32)) Ctx.:> WI.BaseBVRepr bvSize)
-           , Some ramRepr))
-        ,( "read_mem_" <> (T.pack (show (WI.intValue bvSize)))
-         , ( Some (Ctx.empty Ctx.:> ramRepr Ctx.:> (WI.BaseBVRepr (WI.knownNat @32)))
-           , Some (WI.BaseBVRepr bvSize)))
-        ]
-    mkUF _ = error "unreachable"
-
-initGlobalSigs :: [(T.Text, ((Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr)))]
-initGlobalSigs =
-  FC.toListFC (\gb -> ("INIT_GLOBAL_" <> G.gbName gb, ((Some Ctx.empty, Some (G.gbType gb))))) G.untrackedGlobals
-
-initUndefFuns :: [(T.Text, ((Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr)))]
-initUndefFuns =
-  [ ("UNDEFINED_integer", (Some Ctx.empty, Some WI.BaseIntegerRepr))
-  , ("UNDEFINED_boolean", (Some Ctx.empty, Some WI.BaseBoolRepr))
-  ] ++ (mkUndefBVUF <$> [1..32] ++ [40,48,52,64,128,160,256])
-
-mkUndefBVUF :: Integer
-            -> (T.Text, ((Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr)))
-mkUndefBVUF n
-  | Just (Some nr) <- WI.someNat n
-  , Just WI.LeqProof <- (WI.knownNat @1) `WI.testLeq` nr
-  = ("UNDEFINED_bitvector_" <> T.pack (show n), (Some Ctx.empty, Some (WI.BaseBVRepr nr)))
-
-
-addUFS :: [(T.Text, ((Some (Ctx.Assignment WI.BaseTypeRepr), Some WI.BaseTypeRepr)))] -> SigMapM arch ()
-addUFS sigs = do
-  Just ufs <- withOnlineBackend (KeyFun "memory") $ \sym -> do
-    forM sigs $ \(name, (Some argTs, Some retT)) -> do
-      let symbol = U.makeSymbol (T.unpack name)
-      symFn <- WI.freshTotalUninterpFn sym symbol argTs retT
-      return $ (name, SomeSymFn symFn)
-  mapM_ (\(name, SomeSymFn symFn) -> addFormula (KeyFun name) symFn) ufs
 
 -- Extremely vague measure of function body size
 measureStmts :: [AS.Stmt] -> Int
@@ -607,7 +598,6 @@ data SimulationException where
                                      . T.Text
                                     -> (B.ExprSymFn t args ret)
                                     -> (B.ExprSymFn t args' ret')
-                                   -- -> [(SomeSome (WI.SymFn sym), SomeSome (WI.SymFn sym))]
                                     -> SimulationException
   SimulationFailure :: T.Text -> SimulationException
 
@@ -625,8 +615,6 @@ instance Show SimulationException where
       , prettySymFn symFn'
       , prettySymFnBody symFn'
       ]
-     -- ++ showExprPair (Some expr1, Some expr2)
-     -- ++ showExprContext 3 env
     SimulationFailure msg -> "SimulationFailure:" ++ T.unpack msg
 instance X.Exception SimulationException
 
@@ -776,44 +764,18 @@ isFunFilteredOut inm fnm = do
   test <- MSS.gets (funFilter . optFilters . sOptions)
   return $ not $ test inm fnm
 
+-- | Manually-derived list of known and expected exception categories
 data ExpectedException =
-    RealValueUnsupported
-  | InsufficientStaticTypeInformation
-  | CruciblePanic
-  | ASLSpecMissingZeroCheck
-  | BVLengthFromGlobalState
-  | PrinterParserError
+  -- | See: <https://github.com/GaloisInc/asl-translator/issues/8>
+    ASLSpecMissingZeroCheck
    deriving (Eq, Ord, Show)
 
 expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
 expectedExceptions k ex = case ex of
-  -- SimExcept _ (SimulationDeserializationMismatch _ _) -> Just $ PrinterParserError
-  SExcept _ (TypeNotFound "real") -> Just $ RealValueUnsupported
-  -- TExcept _ (CannotMonomorphizeFunctionCall _ _) -> Just $ InsufficientStaticTypeInformation
-  -- TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
-  -- TExcept _ (CannotDetermineBVLength _ _) -> Just $ InsufficientStaticTypeInformation
   TExcept _ (UnsupportedType (AS.TypeFun "bits" (AS.ExprLitInt 0)))
     | KeyInstr (InstructionIdent nm _ _ _) <- k
     , nm `elem` ["aarch32_USAT16_A", "aarch32_USAT_A"] ->
       Just $ ASLSpecMissingZeroCheck
-  TExcept _ (CannotStaticallyEvaluateType (AS.TypeFun "bits" (AS.ExprCall (AS.VarName fnm) _)) _)
-    | fnm `elem` ["BAREGETTER_PL", "BAREGETTER_VL"] ->
-      Just $ BVLengthFromGlobalState
-  -- SomeExcept e
-  --   | Just (Panic (_ :: Crucible) _ _ _) <- X.fromException e
-  --   , KeyInstr (InstructionIdent nm _ _ _) <- k
-  --   , nm `elem` ["aarch32_WFE_A", "aarch32_WFI_A", "aarch32_VTBL_A", "aarch32_VTST_A"] ->
-  --     Just $ CruciblePanic
-  -- SomeExcept e
-  --   | Just (Panic (_ :: Crucible) _ _ _) <- X.fromException e
-  --   , KeyFun nm <- k
-  --   , nm `elem` ["AArch32_ExclusiveMonitorsPass_2"] ->
-  --     Just $ CruciblePanic
-  SomeExcept e
-    | Just (ASL.SimulationAbort _ _) <- X.fromException e
-    , KeyInstr (InstructionIdent nm _ _ _) <- k
-    , nm `elem` [ "aarch32_VTBL_A" ] ->
-      Just $ CruciblePanic
   _ -> Nothing
 
 isUnexpectedException :: ElemKey -> TranslatorException -> Bool
@@ -822,6 +784,8 @@ isUnexpectedException k e = expectedExceptions k e == Nothing
 forMwithKey_ :: Applicative t => Map k a -> (k -> a -> t b) -> t ()
 forMwithKey_ m f = void $ Map.traverseWithKey f m
 
+-- | Report the results of the given translation/simulation according to
+-- the given 'StatOptions'
 reportStats :: StatOptions -> SigMap arch -> IO ()
 reportStats sopts sm = do
   let expectedInstrs = Map.foldrWithKey (addExpected . KeyInstr) Map.empty (instrExcepts sm)
@@ -829,7 +793,6 @@ reportStats sopts sm = do
   let unexpectedElems =
         Set.union (Set.map KeyInstr $ Map.keysSet (instrExcepts sm)) (Set.map KeyFun $ Map.keysSet (funExcepts sm))
         Set.\\ (Set.unions $ Map.elems expectedInstrs ++ Map.elems expected)
-
   when (not (Set.null unexpectedElems)) $ do
     putStrLn $ "Unexpected exceptions:"
     forMwithKey_ (instrExcepts sm) $ \ident -> \e ->
@@ -846,15 +809,12 @@ reportStats sopts sm = do
         mapM_ (\(dep, err) -> putStrLn $ show dep <> ":" <> show err) errs
     putStrLn "----------------------"
   when (reportKnownExceptions sopts) $ do
-
-
     forMwithKey_ expected $ \ex -> \ks -> do
       putStrLn $ "Failures due to known exception: " <> show ex
       putStrLn "----------------------"
       mapM_ printKey ks
       putStrLn ""
     return ()
-
   putStrLn $ "Total instructions inspected: " <> show (Map.size $ instrDeps sm)
   putStrLn $ "Total functions inspected: " <> show (Map.size $ funDeps sm)
   putStrLn $ "Number of instructions which raised exceptions: " <> show (Map.size $ instrExcepts sm)
@@ -931,7 +891,6 @@ instrToIdent daEnc instr enc =
 finalDepsOf :: Set.Set (T.Text, StaticValues) -> Set.Set T.Text
 finalDepsOf deps = Set.map (\(nm, env) -> mkFinalFunctionName env nm) deps
 
-
 data Filters = Filters { funFilter :: InstructionIdent -> T.Text -> Bool
                        , instrFilter :: InstructionIdent -> Bool
                        , funSimFilter :: InstructionIdent -> T.Text -> Bool
@@ -944,10 +903,11 @@ data ElemKey =
  deriving (Eq, Ord, Show)
 
 
--- FIXME: Seperate this into RWS
+-- | The internal state of the Driver, collecting any raised exceptions during
+-- translation/simulation as well as the final serialized What4 function for each
+-- ASL function and instruction.
 data SigMap arch where
-  SigMap :: { sMap :: Map.Map T.Text (Some (SomeFunctionSignature))
-            , instrExcepts :: Map.Map InstructionIdent TranslatorException
+  SigMap :: { instrExcepts :: Map.Map InstructionIdent TranslatorException
             , funExcepts :: Map.Map T.Text TranslatorException
             , sigState :: SigState
             , sigEnv :: SigEnv
@@ -1053,22 +1013,7 @@ addSimulationFilter smode = case smode of
   SimulateInstruction (instr, enc) -> simulateOnlyInstr  (instr, enc)
   SimulateNone -> simulateNone
 
-getTranslationMode :: String -> Maybe (TranslationMode)
-getTranslationMode mode = case mode of
-  "AArch32" -> return $ TranslateAArch32
-  _ -> case List.splitOn "/" mode of
-    [instr, enc] -> return $ TranslateInstruction (T.pack instr, T.pack enc)
-    _ -> fail ""
 
-getSimulationMode :: String -> Maybe (SimulationMode)
-getSimulationMode mode = case mode of
-  "all" -> return $ SimulateAll
-  "instructions" -> return $ SimulateInstructions
-  "functions" -> return $ SimulateFunctions
-  "none" -> return $ SimulateNone
-  _ -> case List.splitOn "/" mode of
-    [instr, enc] -> return $ SimulateInstruction (T.pack instr, T.pack enc)
-    _ -> fail ""
 
 noFilter :: Filters
 noFilter = Filters
