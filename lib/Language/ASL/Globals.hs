@@ -74,8 +74,8 @@ module Language.ASL.Globals
 
   -- All specified 'GlobalRefs'
   , simpleGlobalRefs
-  , gprGlobalRefs
-  , simdGlobalRefs
+  , gprGlobalRefs, gprGlobalRefsSym
+  , simdGlobalRefs, simdGlobalRefsSym
   , memoryGlobalRef
 
   -- accessing the data of a 'GlobalRef'
