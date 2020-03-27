@@ -406,179 +406,168 @@ bits(N) ASR(bits(N) x, integer shift)
         result = primitive_ASR(x, shift);
     return result;
 
-// FIXME: This can't reasonably be simulated
+bits(N) UnsignedRSqrtEstimate(bits(N) operand)
+    assert N IN {16,32};
+    return uninterpFnN("unsignedRSqrtEstimate", 1, N, operand);
 
-integer RecipSqrtEstimate(integer a)
-  assert FALSE;
-  return integer UNKNOWN;
-
-// Stubbed floating point operations to allow proper signature calculations
+// FPCRType == bits(32)
 
 bits(N) FPAdd(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpAdd", 1, N, op1, op2, fpcr);
 
 boolean FPCompareUN(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return boolean UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpCompareUN", 1, N, op1, op2, fpcr);
 
 bits(N) FPMin(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpMin", 1, N, op1, op2, fpcr);
 
 bits(N) FPProcess(bits(N) input)
-    assert FALSE;
-    return bits(N) UNKNOWN;
-
-bits(N) FPTwo(bit sign)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpProcess", 1, N, input);
 
 boolean FPCompareNE(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return boolean UNKNOWN;
-
-bits(N) FPMinNormal(bit sign)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpCompareNE", 1, N, op1, op2, fpcr);
 
 boolean FPCompareGT(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return boolean UNKNOWN;
+    // static unrolling can't figure out that 8 is invalid
+    assert N IN {8,16,32,64};
+    //assert N IN {16,32,64};
+    return uninterpFnN("fpCompareGT", 1, N, op1, op2, fpcr);
 
 bits(N) FPSub(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpSub", 1, N, op1, op2, fpcr);
 
 bits(M) FPToFixed(bits(N) op, integer fbits, boolean unsigned, FPCRType fpcr, FPRounding rounding)
-    assert FALSE;
-    return bits(M) UNKNOWN;
+    assert N IN {16,32,64};
+    assert M IN {16,32,64};
+    assert fbits >= 0;
+    assert rounding != FPRounding_ODD;
+    bits(32) fbitsB = integerToSBV(fbits);
+    return uninterpFnN("fpToFixed", 2, N, M, op, fbitsB, unsigned, fpcr, rounding);
 
 bits(N) FixedToFP(bits(M) op, integer fbits, boolean unsigned, FPCRType fpcr, FPRounding rounding)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    assert M IN {16,32,64};
+    assert fbits >= 0;
+    assert rounding != FPRounding_ODD;
+    bits(32) fbitsB = integerToSBV(fbits);
+    return uninterpFnN("fixedToFP", 2, M, N, op, fbitsB, unsigned, fpcr, rounding);
 
 bits(N) FPRecpX(bits(N) op, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpRecpX", 1, N, op, fpcr);
 
 bits(N) FPMul(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpMul", 1, N, op1, op2, fpcr);
 
 bits(N) FPRecipStep(bits(N) op1, bits(N) op2)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32};
+    return uninterpFnN("fpRecipStep", 1, N, op1, op2);
 
 bits(N) FPMulAddH(bits(N) addend, bits(M) op1, bits(M) op2, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {32,64};
+    assert M == (N DIV 2);
+    return uninterpFnN("fpMulAddH", 1, N, op1, op2, fpcr);
 
 bits(N) FPMinNum(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpMinNum", 1, N, op1, op2, fpcr);
 
 bits(N) FPMax(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpMax", 1, N, op1, op2, fpcr);
 
 bits(N) FPMaxNum(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpMaxNum", 1, N, op1, op2, fpcr);
 
 bits(N) FPScale(bits (N) op, integer scale, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    bits(32) scaleB = integerToSBV(scale);
+    return uninterpFnN("fpScale", 1, N, op, scaleB, fpcr);
 
 bits(N) FPRoundIntN(bits(N) op, FPCRType fpcr, FPRounding rounding, integer intsize)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert rounding != FPRounding_ODD;
+    assert N IN {16,32,64};
+    bits(32) intsizeB = integerToSBV(intsize);
+    return uninterpFnN("fpRoundIntN", 1, N, op, fpcr, rounding, intsizeB);
 
 bits(4) FPCompare(bits(N) op1, bits(N) op2, boolean signal_nans, FPCRType fpcr)
-    assert FALSE;
-    return bits(4) UNKNOWN;
+    assert N IN {16,32,64};    
+    return uninterpFnN("fpCompare", 1, N, op1, op2, signal_nans, fpcr);
 
 boolean FPCompareGE(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return boolean UNKNOWN;
+    // static unrolling can't figure out that 8 is invalid
+    assert N IN {8,16,32,64};
+    //assert N IN {16,32,64};
+    return uninterpFnN("fpCompareGE", 1, N, op1, op2, fpcr);
 
 bits(N) FPRSqrtStepFused(bits(N) op1, bits(N) op2)
-    assert FALSE;
-    return bits(4) UNKNOWN;
+    assert N IN {16, 32, 64};    
+    return uninterpFnN("fprSqrtStepFused", 1, N, op1, op2);
 
 boolean FPCompareEQ(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return boolean UNKNOWN;
-
-(boolean, bits(N)) FPProcessNaNs3(FPType type1, FPType type2, FPType type3,
-                                  bits(N) op1, bits(N) op2, bits(N) op3,
-                                  FPCRType fpcr)
-    assert FALSE;
-    return (boolean UNKNOWN, bits(N) UNKNOWN);
+    assert N IN {16,32,64};   
+    return uninterpFnN("fpCompareEQ", 1, N, op1, op2, fpcr);
 
 bits(N) FPRecipEstimate(bits(N) operand, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpRecipEstimate", 1, N, operand, fpcr);
 
 bits(N) FPSqrt(bits(N) op, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpSqrt", 1, N, op, fpcr);
 
 bits(M) FPConvert(bits(N) op, FPCRType fpcr, FPRounding rounding)
-    assert FALSE;
-    return bits(M) UNKNOWN;
-
-bits(M) FPConvert(bits(N) op, FPCRType fpcr)
-    assert FALSE;
-    return bits(M) UNKNOWN;
-
-bits(M) FPConvertSVE(bits(N) op, FPCRType fpcr, FPRounding rounding)
-    assert FALSE;
-    return bits(M) UNKNOWN;
-
-bits(M) FPConvertSVE(bits(N) op, FPCRType fpcr)
-    assert FALSE;
-    return bits(M) UNKNOWN;
+    assert M IN {16,32,64};
+    assert N IN {16,32,64};   
+    return uninterpFnN("fpConvert", 2, N, M, op, fpcr, rounding);
 
 bits(N) FPDiv(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpDiv", 1, N, op1, op2, fpcr);
 
 bits(N) FPRSqrtEstimate(bits(N) operand, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpSqrtEstimate", 1, N, operand, fpcr);
 
 bits(N) FPTrigSMul(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpTrigSMul", 1, N, op1, op2, fpcr);
 
 bits(N) FPHalvedSub(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpHalvedSub", 1, N, op1, op2, fpcr);
 
 bits(N) FPRSqrtStep(bits(N) op1, bits(N) op2)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32};
+    return uninterpFnN("fprSqrtStep", 1, N, op1, op2);
 
 bits(N) FPMulAdd(bits(N) addend, bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpMulAdd", 1, N, addend, op1, op2, fpcr);
 
 bits(N) FPRecipStepFused(bits(N) op1, bits(N) op2)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16, 32, 64};
+    return uninterpFnN("fpRecipStepFused", 1, N, op1, op2);
 
-bits(N) FPToFixedJS(bits(M) op, FPCRType fpcr, boolean Is64)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+bits(32) FPToFixedJS(bits(64) op, FPCRType fpcr, boolean Is64)
+    return uninterpFn("fpToFixedJS", op, fpcr, Is64);
 
 bits(N) FPMulX(bits(N) op1, bits(N) op2, FPCRType fpcr)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpMulX", 1, N, op1, op2, fpcr);
 
 bits(N) FPRoundInt(bits(N) op, FPCRType fpcr, FPRounding rounding, boolean exact)
-    assert FALSE;
-    return bits(N) UNKNOWN;
+    assert rounding != FPRounding_ODD;
+    assert N IN {16,32,64};
+    return uninterpFnN("fpRoundInt", 1, N, op, fpcr, rounding, exact);
 
 
 // We assume that the MMU is disabled and that general address translation

@@ -2700,28 +2700,45 @@
               (ExprVarRef
                 (QualifiedIdentifier Any result))))))))
   (DefCallable
-    (QualifiedIdentifier Any RecipSqrtEstimate)
+    (QualifiedIdentifier Any UnsignedRSqrtEstimate)
     (list
       (SymDecl
-        a
-        (TypeRef
-          (QualifiedIdentifier Any integer))))
+        operand
+        (TypeFun
+          bits
+          (ExprVarRef
+            (QualifiedIdentifier Any N)))))
     (Just
       (ReturnType
         (list
-          (TypeRef
-            (QualifiedIdentifier Any integer)))))
+          (TypeFun
+            bits
+            (ExprVarRef
+              (QualifiedIdentifier Any N))))))
     (Just
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeRef
-                  (QualifiedIdentifier Any integer)))))))))
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "unsignedRSqrtEstimate")
+                  (ExprLitNat 1)
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any operand))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPAdd)
     (list
@@ -2752,15 +2769,32 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpAdd")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPCompareUN)
     (list
@@ -2789,13 +2823,32 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeRef
-                  (QualifiedIdentifier Any boolean)))))))))
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpCompareUN")
+                  (ExprLitNat 1)
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPMin)
     (list
@@ -2826,15 +2879,32 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpMin")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPProcess)
     (list
@@ -2855,42 +2925,28 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpProcess")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
-  (DefCallable
-    (QualifiedIdentifier Any FPTwo)
-    (list
-      (SymDecl
-        sign
-        (TypeRef
-          (QualifiedIdentifier Any bit))))
-    (Just
-      (ReturnType
-        (list
-          (TypeFun
-            bits
-            (ExprVarRef
-              (QualifiedIdentifier Any N))))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
-          (StmtReturn
-            (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+                    (QualifiedIdentifier Any N))
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any input))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPCompareNE)
     (list
@@ -2919,40 +2975,32 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeRef
-                  (QualifiedIdentifier Any boolean)))))))))
-  (DefCallable
-    (QualifiedIdentifier Any FPMinNormal)
-    (list
-      (SymDecl
-        sign
-        (TypeRef
-          (QualifiedIdentifier Any bit))))
-    (Just
-      (ReturnType
-        (list
-          (TypeFun
-            bits
-            (ExprVarRef
-              (QualifiedIdentifier Any N))))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
-          (StmtReturn
-            (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpCompareNE")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPCompareGT)
     (list
@@ -2981,13 +3029,34 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 8))
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeRef
-                  (QualifiedIdentifier Any boolean)))))))))
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpCompareGT")
+                  (ExprLitNat 1)
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPSub)
     (list
@@ -3018,15 +3087,32 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpSub")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPToFixed)
     (list
@@ -3063,15 +3149,74 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
+          (StmtAssert
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any M))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
+          (StmtAssert
+            (ExprBinOp
+              ">="
+              (ExprVarRef
+                (QualifiedIdentifier Any fbits))
+              (ExprLitNat 0)))
+          (StmtAssert
+            (ExprBinOp
+              "!="
+              (ExprVarRef
+                (QualifiedIdentifier Any rounding))
+              (ExprVarRef
+                (QualifiedIdentifier Any FPRounding_ODD))))
+          (StmtVarDeclInit
+            (SymDecl
+              fbitsB
+              (TypeFun
+                bits
+                (ExprLitNat 32)))
+            (ExprCall
+              (QualifiedIdentifier Any integerToSBV)
+              (list
+                (ExprVarRef
+                  (QualifiedIdentifier Any fbits)))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpToFixed")
+                  (ExprLitNat 2)
                   (ExprVarRef
-                    (QualifiedIdentifier Any M))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any M))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fbitsB))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any unsigned))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any rounding))))))))))
   (DefCallable
     (QualifiedIdentifier Any FixedToFP)
     (list
@@ -3108,15 +3253,74 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
+          (StmtAssert
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any M))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
+          (StmtAssert
+            (ExprBinOp
+              ">="
+              (ExprVarRef
+                (QualifiedIdentifier Any fbits))
+              (ExprLitNat 0)))
+          (StmtAssert
+            (ExprBinOp
+              "!="
+              (ExprVarRef
+                (QualifiedIdentifier Any rounding))
+              (ExprVarRef
+                (QualifiedIdentifier Any FPRounding_ODD))))
+          (StmtVarDeclInit
+            (SymDecl
+              fbitsB
+              (TypeFun
+                bits
+                (ExprLitNat 32)))
+            (ExprCall
+              (QualifiedIdentifier Any integerToSBV)
+              (list
+                (ExprVarRef
+                  (QualifiedIdentifier Any fbits)))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fixedToFP")
+                  (ExprLitNat 2)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any M))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fbitsB))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any unsigned))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any rounding))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPRecpX)
     (list
@@ -3141,15 +3345,30 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpRecpX")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPMul)
     (list
@@ -3180,15 +3399,32 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpMul")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPRecipStep)
     (list
@@ -3215,15 +3451,28 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpRecipStep")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPMulAddH)
     (list
@@ -3260,15 +3509,40 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
+          (StmtAssert
+            (ExprBinOp
+              "=="
+              (ExprVarRef
+                (QualifiedIdentifier Any M))
+              (ExprBinOp
+                "DIV"
+                (ExprVarRef
+                  (QualifiedIdentifier Any N))
+                (ExprLitNat 2))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpMulAddH")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPMinNum)
     (list
@@ -3299,15 +3573,32 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpMinNum")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPMax)
     (list
@@ -3338,15 +3629,32 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpMax")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPMaxNum)
     (list
@@ -3377,15 +3685,32 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpMaxNum")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPScale)
     (list
@@ -3414,15 +3739,43 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
+          (StmtVarDeclInit
+            (SymDecl
+              scaleB
+              (TypeFun
+                bits
+                (ExprLitNat 32)))
+            (ExprCall
+              (QualifiedIdentifier Any integerToSBV)
+              (list
+                (ExprVarRef
+                  (QualifiedIdentifier Any scale)))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpScale")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any scaleB))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPRoundIntN)
     (list
@@ -3455,15 +3808,52 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprBinOp
+              "!="
+              (ExprVarRef
+                (QualifiedIdentifier Any rounding))
+              (ExprVarRef
+                (QualifiedIdentifier Any FPRounding_ODD))))
+          (StmtAssert
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
+          (StmtVarDeclInit
+            (SymDecl
+              intsizeB
+              (TypeFun
+                bits
+                (ExprLitNat 32)))
+            (ExprCall
+              (QualifiedIdentifier Any integerToSBV)
+              (list
+                (ExprVarRef
+                  (QualifiedIdentifier Any intsize)))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpRoundIntN")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any rounding))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any intsizeB))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPCompare)
     (list
@@ -3497,14 +3887,34 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
-                  (ExprLitNat 4)))))))))
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpCompare")
+                  (ExprLitNat 1)
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any signal_nans))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPCompareGE)
     (list
@@ -3533,13 +3943,34 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 8))
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeRef
-                  (QualifiedIdentifier Any boolean)))))))))
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpCompareGE")
+                  (ExprLitNat 1)
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPRSqrtStepFused)
     (list
@@ -3566,14 +3997,30 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
-                  (ExprLitNat 4)))))))))
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fprSqrtStepFused")
+                  (ExprLitNat 1)
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPCompareEQ)
     (list
@@ -3602,77 +4049,32 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
-          (StmtReturn
-            (Just
-              (ExprUnknown
-                (TypeRef
-                  (QualifiedIdentifier Any boolean)))))))))
-  (DefCallable
-    (QualifiedIdentifier Any FPProcessNaNs3)
-    (list
-      (SymDecl
-        type1
-        (TypeRef
-          (QualifiedIdentifier Any FPType)))
-      (SymDecl
-        type2
-        (TypeRef
-          (QualifiedIdentifier Any FPType)))
-      (SymDecl
-        type3
-        (TypeRef
-          (QualifiedIdentifier Any FPType)))
-      (SymDecl
-        op1
-        (TypeFun
-          bits
-          (ExprVarRef
-            (QualifiedIdentifier Any N))))
-      (SymDecl
-        op2
-        (TypeFun
-          bits
-          (ExprVarRef
-            (QualifiedIdentifier Any N))))
-      (SymDecl
-        op3
-        (TypeFun
-          bits
-          (ExprVarRef
-            (QualifiedIdentifier Any N))))
-      (SymDecl
-        fpcr
-        (TypeRef
-          (QualifiedIdentifier Any FPCRType))))
-    (Just
-      (ReturnType
-        (list
-          (TypeRef
-            (QualifiedIdentifier Any boolean))
-          (TypeFun
-            bits
-            (ExprVarRef
-              (QualifiedIdentifier Any N))))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
-          (StmtReturn
-            (Just
-              (ExprTuple
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
                 (list
-                  (ExprUnknown
-                    (TypeRef
-                      (QualifiedIdentifier Any boolean)))
-                  (ExprUnknown
-                    (TypeFun
-                      bits
-                      (ExprVarRef
-                        (QualifiedIdentifier Any N))))))))))))
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
+          (StmtReturn
+            (Just
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpCompareEQ")
+                  (ExprLitNat 1)
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPRecipEstimate)
     (list
@@ -3697,15 +4099,30 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpRecipEstimate")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any operand))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPSqrt)
     (list
@@ -3730,15 +4147,30 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpSqrt")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPConvert)
     (list
@@ -3767,118 +4199,46 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
-          (StmtReturn
-            (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
-                  (ExprVarRef
-                    (QualifiedIdentifier Any M))))))))))
-  (DefCallable
-    (QualifiedIdentifier Any FPConvert)
-    (list
-      (SymDecl
-        op
-        (TypeFun
-          bits
-          (ExprVarRef
-            (QualifiedIdentifier Any N))))
-      (SymDecl
-        fpcr
-        (TypeRef
-          (QualifiedIdentifier Any FPCRType))))
-    (Just
-      (ReturnType
-        (list
-          (TypeFun
-            bits
-            (ExprVarRef
-              (QualifiedIdentifier Any M))))))
-    (Just
-      (StmtBlock
-        (list
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any M))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpConvert")
+                  (ExprLitNat 2)
                   (ExprVarRef
-                    (QualifiedIdentifier Any M))))))))))
-  (DefCallable
-    (QualifiedIdentifier Any FPConvertSVE)
-    (list
-      (SymDecl
-        op
-        (TypeFun
-          bits
-          (ExprVarRef
-            (QualifiedIdentifier Any N))))
-      (SymDecl
-        fpcr
-        (TypeRef
-          (QualifiedIdentifier Any FPCRType)))
-      (SymDecl
-        rounding
-        (TypeRef
-          (QualifiedIdentifier Any FPRounding))))
-    (Just
-      (ReturnType
-        (list
-          (TypeFun
-            bits
-            (ExprVarRef
-              (QualifiedIdentifier Any M))))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
-          (StmtReturn
-            (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+                    (QualifiedIdentifier Any N))
                   (ExprVarRef
-                    (QualifiedIdentifier Any M))))))))))
-  (DefCallable
-    (QualifiedIdentifier Any FPConvertSVE)
-    (list
-      (SymDecl
-        op
-        (TypeFun
-          bits
-          (ExprVarRef
-            (QualifiedIdentifier Any N))))
-      (SymDecl
-        fpcr
-        (TypeRef
-          (QualifiedIdentifier Any FPCRType))))
-    (Just
-      (ReturnType
-        (list
-          (TypeFun
-            bits
-            (ExprVarRef
-              (QualifiedIdentifier Any M))))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
-          (StmtReturn
-            (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+                    (QualifiedIdentifier Any M))
                   (ExprVarRef
-                    (QualifiedIdentifier Any M))))))))))
+                    (QualifiedIdentifier Any op))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any rounding))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPDiv)
     (list
@@ -3909,15 +4269,32 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpDiv")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPRSqrtEstimate)
     (list
@@ -3942,15 +4319,30 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpSqrtEstimate")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any operand))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPTrigSMul)
     (list
@@ -3981,15 +4373,32 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpTrigSMul")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPHalvedSub)
     (list
@@ -4020,15 +4429,32 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpHalvedSub")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPRSqrtStep)
     (list
@@ -4055,15 +4481,28 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fprSqrtStep")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPMulAdd)
     (list
@@ -4100,15 +4539,34 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpMulAdd")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any addend))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPRecipStepFused)
     (list
@@ -4135,15 +4593,30 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpRecipStepFused")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPToFixedJS)
     (list
@@ -4151,8 +4624,7 @@
         op
         (TypeFun
           bits
-          (ExprVarRef
-            (QualifiedIdentifier Any M))))
+          (ExprLitNat 64)))
       (SymDecl
         fpcr
         (TypeRef
@@ -4166,21 +4638,22 @@
         (list
           (TypeFun
             bits
-            (ExprVarRef
-              (QualifiedIdentifier Any N))))))
+            (ExprLitNat 32)))))
     (Just
       (StmtBlock
         (list
-          (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFn)
+                (list
+                  (ExprLitString "fpToFixedJS")
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any op))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any Is64))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPMulX)
     (list
@@ -4211,15 +4684,32 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpMulX")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op1))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op2))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))))))))))
   (DefCallable
     (QualifiedIdentifier Any FPRoundInt)
     (list
@@ -4252,15 +4742,41 @@
       (StmtBlock
         (list
           (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
+            (ExprBinOp
+              "!="
+              (ExprVarRef
+                (QualifiedIdentifier Any rounding))
+              (ExprVarRef
+                (QualifiedIdentifier Any FPRounding_ODD))))
+          (StmtAssert
+            (ExprInSet
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (Set
+                (list
+                  (SetElementSingle
+                    (ExprLitNat 16))
+                  (SetElementSingle
+                    (ExprLitNat 32))
+                  (SetElementSingle
+                    (ExprLitNat 64))))))
           (StmtReturn
             (Just
-              (ExprUnknown
-                (TypeFun
-                  bits
+              (ExprCall
+                (QualifiedIdentifier Any uninterpFnN)
+                (list
+                  (ExprLitString "fpRoundInt")
+                  (ExprLitNat 1)
                   (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
+                    (QualifiedIdentifier Any N))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any op))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any fpcr))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any rounding))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any exact))))))))))
   (DefCallable
     (QualifiedIdentifier AArch64 TranslationTableWalk)
     (list
