@@ -1,3 +1,24 @@
+{-|
+Module           : Language.ASL.Crucible
+Copyright        : (c) Galois, Inc 2019-2020
+Maintainer       : Daniel Matichuk <dmatichuk@galois.com>
+
+This module is the entry point for deriving Crucible CFGs from
+ASL functions and instructions. The translation from ASL
+syntax into Crucible is handled by "Language.ASL.Translation",
+while this module provides the framework for specifying
+the expected signature for the derived function.
+
+The core functionality is provided by 'functionToCrucible'
+and 'instructionToCrucible'. Fundamentally instructions
+and functions are the same (a list of ASL statements, with
+a corresponding list of arguments and a return type), however
+all instructions share the same set of global reads/writes
+(defined as 'G.StructGlobalsCtx').
+
+-}
+
+{-# OPTIONS_HADDOCK not-home #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE EmptyDataDecls #-}
@@ -16,39 +37,43 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
--- | Convert fragments of ASL code into Crucible CFGs
+
 module Language.ASL.Crucible (
+  -- * Deriving a Crucible CFG from ASL
     functionToCrucible
+  , instructionToCrucible
+  -- * Wrappers for translated functions/instructions
   , GenFunction(..)
   , Function
   , Instruction
-  , FunctionSignature
+
+
   , funcRetRepr
   , funcArgReprs
   , funcSigBaseRepr
   , funcSigAllArgsRepr
   , funcGlobalReadReprs
   , funcGlobalWriteReprs
-  , instructionToCrucible
-  , SomeFunctionSignature(..)
-  , LabeledValue(..)
-  , BaseGlobalVar(..)
-  , Overrides(..)
-  -- * Preprocessing
-  -- , computeDefinitionSignature
-  -- , computeInstructionSignature
-  -- , collectUserTypes
-  , UserType
-  , Definitions(..)
-  -- * Syntax extension
+
+  -- re-exports
+
+  -- syntax extension
   , ASLExt
   , ASLApp(..)
   , ASLStmt
   , aslExtImpl
-  
+  -- function signatures
+  , FunctionSignature
+  , SomeFunctionSignature(..)
+  , LabeledValue(..)
+  -- preprocessing
+  , UserType
+  , Definitions(..)
+  -- translation
+  , BaseGlobalVar(..)
+  , Overrides(..)
   ) where
 
-import           Control.Monad ( when )
 import qualified Control.Exception as X
 import           Control.Monad.ST ( stToIO, ST )
 import qualified Data.Map as Map
@@ -58,10 +83,9 @@ import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.Nonce ( newSTNonceGenerator )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Parameterized.Map as MapF
-import           Data.Maybe ( fromJust )
 import qualified Data.Text as T
 import qualified Data.Set as Set
-import qualified Data.List as List
+
 import qualified Lang.Crucible.CFG.Core as CCC
 import qualified Lang.Crucible.CFG.Expr as CCE
 import qualified Lang.Crucible.CFG.Generator as CCG
@@ -70,9 +94,6 @@ import qualified Lang.Crucible.FunctionHandle as CFH
 import qualified Lang.Crucible.Types as CT
 import qualified What4.BaseTypes as WT
 import qualified What4.Utils.StringLiteral as WT
-
-import           System.IO
-
 import qualified What4.FunctionName as WFN
 import qualified What4.ProgramLoc as WP
 
@@ -81,17 +102,23 @@ import qualified Language.ASL.Syntax as AS
 import           Language.ASL.Translation.Exceptions ( TranslationException(..) )
 import           Language.ASL.Crucible.Extension ( ASLExt, ASLApp(..), ASLStmt(..), aslExtImpl )
 import           Language.ASL.Signature
-import           Language.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..)
-                                          , Definitions(..), InnerGenerator
+import           Language.ASL.Translation.Preprocess ( Definitions(..) )
+import           Language.ASL.Translation ( TranslationState(..), Overrides(..)
+                                          , InnerGenerator
                                           , translateBody, overrides, unliftGenerator)
-import           Language.ASL.Types
+import           Language.ASL.Types ( UserType(..)
+                                    , ToCrucTypes
+                                    , toCrucTypes
+                                    , LabeledValue(..)
+                                    , projectValue
+                                    , toBaseIndex)
 import           Language.ASL.StaticExpr
 import qualified Language.ASL.Globals as G
 
 import qualified Lang.Crucible.CFG.Extension as CCExt
 
 -- FIXME: this should be moved somewhere general
-import           What4.Utils.Log ( HasLogCfg, logIO, LogLevel(..), getLogCfg )
+import           What4.Utils.Log ( HasLogCfg, getLogCfg )
 
 
 data GenFunction arch innerReads innerWrites outerReads outerWrites init tps =
@@ -134,7 +161,7 @@ type ReturnsGlobals ret globalWrites tps = (ret ~ FuncReturn globalWrites tps)
 -- UNDEFINED globals.  They may be accessed during the translation and must be
 -- available in the 'TranslationState'
 functionToCrucible' :: forall arch innerReads innerWrites outerReads outerWrites init tps ret
-                    . HasLogCfg
+                     . HasLogCfg
                     => ReturnsGlobals ret innerWrites tps
                     => Ctx.Assignment (LabeledValue T.Text CT.BaseTypeRepr) outerReads
                     -> Ctx.Assignment (LabeledValue T.Text CT.BaseTypeRepr) outerWrites

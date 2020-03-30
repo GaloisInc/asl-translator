@@ -915,7 +915,7 @@ fakeCallableSignature c@Callable{..} =
       SomeSimpleFunctionSignature $ SimpleFunctionSignature
       { sfuncName = mkCallableName c
       , sfuncRet = callableRets
-      , sfuncArgs = map (\(nm,t) -> FunctionArg nm t Nothing) callableArgs
+      , sfuncArgs = map (\(nm,t) -> FunctionArg nm t) callableArgs
       , sfuncGlobalReadReprs = globalReadReprs
       , sfuncGlobalWriteReprs = globalWriteReprs
       }
@@ -964,7 +964,7 @@ computeCallableSignature c@Callable{..} = do
       let sig = SomeSimpleFunctionSignature $ SimpleFunctionSignature
             { sfuncName = name
             , sfuncRet = callableRets
-            , sfuncArgs = map (\(nm,t) -> FunctionArg nm t Nothing) callableArgs
+            , sfuncArgs = map (\(nm,t) -> FunctionArg nm t) callableArgs
             , sfuncGlobalReadReprs = globalReadReprs
             , sfuncGlobalWriteReprs = globalWriteReprs
             }
@@ -1025,7 +1025,7 @@ mkSignature env sig =
     mkType t = case applyStaticEnv (simpleStaticEnvMap env) t of
       Just t' -> computeType t'
       _ -> E.throwError $ FailedToMonomorphizeSignature t env
-    mkLabel fa@(FunctionArg _ t _) = do
+    mkLabel fa@(FunctionArg _ t) = do
       Some tp <- mkType t
       return $ Some (LabeledValue fa tp)
 
@@ -1046,7 +1046,7 @@ validateEncoding daEnc (SomeInstructionSignature iSig) = do
     E.throwError $ InstructionSignatureMismatch args ops
   where
     mkSimpleArg :: LabeledValue FunctionArg WT.BaseTypeRepr tp -> SigM ext f (Const (String, Integer) tp)
-    mkSimpleArg (LabeledValue (FunctionArg nm _ _) tr) = case tr of
+    mkSimpleArg (LabeledValue (FunctionArg nm _) tr) = case tr of
       WT.BaseBVRepr nr -> return $ Const $ (T.unpack nm, NR.intValue nr)
       _ -> E.throwError $ InvalidInstructionOperand (nm, tr)
 
@@ -1155,17 +1155,17 @@ getFunctionArgSig enc daEnc = do
   fields <- getFieldsInOrder enc daEnc
   realops <- forM fields $ \field -> do
     (Some tp, ty) <- computeFieldType field
-    let funarg = FunctionArg (AS.instFieldName field) ty Nothing
+    let funarg = FunctionArg (AS.instFieldName field) ty
     return (Some (LabeledValue funarg tp))
   pseudoops <- forM (DA.encPseudoOperands daEnc) $ \(nm, w) -> do
     Just (Some nr) <- return $ NR.someNat w
     Just NR.LeqProof <- return $ NR.testLeq (NR.knownNat @1) nr
     let ty = AS.TypeFun "bits" (AS.ExprLitInt w)
-    let funarg = FunctionArg (T.pack nm) ty Nothing
+    let funarg = FunctionArg (T.pack nm) ty
     return (Some (LabeledValue funarg (WT.BaseBVRepr nr)))
   return $ realops ++ pseudoops
 
--- | According to the 'dependentVariableHints', lift the given instruction body
+-- | According to the 'dependentVariablesOfStmts', lift the given instruction body
 -- over all possible assignments to the given variables in the "decode" section
 -- of the specific instruction encoding.
 liftOverEnvs :: T.Text -- ^ instruction name (for hint lookup)

@@ -1,11 +1,7 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeOperators #-}
-
 {-|
+Module           : Language.ASL.Signature
+Copyright        : (c) Galois, Inc 2019-2020
+Maintainer       : Daniel Matichuk <dmatichuk@galois.com>
 
 This module contains types that describe signatures of ASL functions and
 procedures. Procedures have side effects, while functions are side-effect free and
@@ -16,22 +12,35 @@ signature with no inputs (just global refs) and a set of outputs that is the uni
 locations touched by that function.
 
 -}
+
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeOperators #-}
+
+
 module Language.ASL.Signature (
+  -- * Function signatures
     FunctionSignature(..)
-  , projectStruct
+  , FunctionArg(..)
   , SomeFunctionSignature(..)
   , SomeInstructionSignature(..)
+  , SimpleFunctionSignature(..)
+  , SomeSimpleFunctionSignature(..)
   , FuncReturn
   , FuncReturnCtx
+  , projectStruct
   , funcSigRepr
   , funcSigBaseRepr
   , funcSigAllArgsRepr
   , someSigName
   , someSigRepr
+ -- * Global variable wrapper
   , BaseGlobalVar(..)
-  , SimpleFunctionSignature(..)
-  , SomeSimpleFunctionSignature(..)
-  , FunctionArg(..)
+
+
   ) where
 
 import           Data.Parameterized.Classes
@@ -66,13 +75,6 @@ data FunctionSignature globalReads globalWrites init tps =
                     -- transition
                     }
   deriving Show
--- instance Show (FunctionSignature globalReads globalWrites init tps) where
---   show sig = (if funcIsInstruction sig then "Instruction: " else "Function: ") ++ T.unpack (funcName sig)
---              ++ "\nReturns: " ++ show (funcRetRepr sig)
---              ++ "\nArguments; " ++ show (funcArgReprs sig)
---              ++ "\nGlobal Reads: " ++ show (funcGlobalReadReprs sig)
---              ++ "\nGlobal Writes: " ++ show (funcGlobalWriteReprs sig)
---              ++ "\nStatic Environment: " ++ show (funcStaticVals sig)
 
 type FuncReturnCtx globalWrites tps =
   (Ctx.EmptyCtx Ctx.::> (CT.BaseStructType globalWrites) Ctx.::> (CT.BaseStructType tps))
@@ -80,11 +82,6 @@ type FuncReturnCtx globalWrites tps =
 type FuncReturn globalWrites tps =
   CT.SymbolicStructType (FuncReturnCtx globalWrites tps)
 
-
-newtype BaseGlobalVar tp = BaseGlobalVar { unBaseVar :: CCG.GlobalVar (CT.BaseToType tp) }
-  deriving (Show)
-
-instance ShowF BaseGlobalVar
 
 data SomeFunctionSignature ret where
   SomeFunctionSignature :: FunctionSignature globalReads globalWrites init tps ->
@@ -123,10 +120,10 @@ deriving instance Show (SomeFunctionSignature ret)
 
 instance ShowF SomeFunctionSignature
 
+-- | A named function argument with an associated 'AS.Type'
 data FunctionArg = FunctionArg
   { argName :: T.Text
   , argType :: AS.Type
-  , argRegKind :: Maybe RegisterKind -- is this variable (transitively) used as a register index
   }
   deriving Show
 
@@ -150,3 +147,9 @@ data SimpleFunctionSignature globalReads globalWrites  =
 data SomeSimpleFunctionSignature where
   SomeSimpleFunctionSignature ::
     SimpleFunctionSignature globalReads globalWrites -> SomeSimpleFunctionSignature
+
+-- | A wrapped 'CCG.GlobalVar' which is a 'WT.BaseType'
+newtype BaseGlobalVar tp = BaseGlobalVar { unBaseVar :: CCG.GlobalVar (CT.BaseToType tp) }
+  deriving (Show)
+
+instance ShowF BaseGlobalVar
