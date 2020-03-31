@@ -254,9 +254,9 @@ funcDef :: HasLogCfg
         -> Ctx.Assignment BaseGlobalVar outerReads
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) (ToCrucTypes init)
-        -> (TranslationState h ret s, InnerGenerator h s arch ret (CCG.Expr (ASLExt arch) s ret))
+        -> (TranslationState arch h ret s, InnerGenerator h s arch ret (CCG.Expr (ASLExt arch) s ret))
 funcDef defs sig hdls globalReads stmts args =
-  (funcInitialState defs sig hdls globalReads args, defineFunction overrides sig stmts args)
+  (funcInitialState defs sig hdls globalReads args, defineFunction sig stmts args)
 
 funcInitialState :: forall init innerReads innerWrites outerReads tps h s arch ret
                   . HasLogCfg
@@ -266,7 +266,7 @@ funcInitialState :: forall init innerReads innerWrites outerReads tps h s arch r
                  -> STRef.STRef h (Set.Set (T.Text, StaticValues))
                  -> Ctx.Assignment BaseGlobalVar outerReads
                  -> Ctx.Assignment (CCG.Atom s) (ToCrucTypes init)
-                 -> TranslationState h ret s
+                 -> TranslationState arch h ret s
 funcInitialState defs sig funDepRef globalReads args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgument Map.empty
                    , tsVarRefs = Map.empty
@@ -280,6 +280,7 @@ funcInitialState defs sig funDepRef globalReads args =
                    , tsStaticValues = Map.union (funcStaticVals sig) G.staticGlobals
                    , tsSig = SomeFunctionSignature sig
                    , tsLogCfg = getLogCfg
+                   , tsOverrides = overrides
                    }
   where
     addArgument :: forall tp
@@ -297,17 +298,16 @@ funcInitialState defs sig funDepRef globalReads args =
       Map.insert (CCG.globalName gv) (Some gv) m
 
 projectFunctionName :: LabeledValue FunctionArg a tp -> T.Text
-projectFunctionName (LabeledValue (FunctionArg nm _ _) _) = nm
+projectFunctionName (LabeledValue (FunctionArg nm _) _) = nm
 
 defineFunction :: HasLogCfg
                => ReturnsGlobals ret globalWrites tps
-               => Overrides arch
-               -> FunctionSignature globalReads globalWrites init tps
+               => FunctionSignature globalReads globalWrites init tps
                -> [AS.Stmt]
                -> Ctx.Assignment (CCG.Atom s) (ToCrucTypes init)
                -> InnerGenerator h s arch ret (CCG.Expr (ASLExt arch) s ret)
-defineFunction ov sig stmts _args = do
-  unliftGenerator $ translateBody ov stmts
+defineFunction sig stmts _args = do
+  unliftGenerator $ translateBody stmts
   let errmsg = "Function " <> funcName sig <> " does not return."
   errStr <- CCG.mkAtom (CCG.App (CCE.StringLit $ WT.UnicodeLiteral errmsg))
   CCG.reportError (CCG.AtomExpr errStr)

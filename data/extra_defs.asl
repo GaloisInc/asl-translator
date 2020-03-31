@@ -31,32 +31,6 @@ integer log2(integer i);
 // either zero or sign-extended (according to the signed flag) to the
 // target length.
 
-
-bits(length) getSliceUF(bits(N) inbv, boolean signed, integer lo, integer hi)
-    assert length <= N;
-    assert length >= 1;
-    assert hi >= lo;
-    assert hi <= length;
-    assert lo >= 0;
-    assert (hi - lo) <= length;
-
-    bits (log2(N)+1) loBits = integerToSBV(lo);
-    bits (log2(N)+1) hiBits = integerToSBV(hi);
-    return uninterpFnN("getSlice", 2, N, length, inbv, signed, loBits, hiBits);
-
-
-bits(N) setSliceUF(bits(N) basebv, integer lo, integer hi, bits(length) asnbv)
-    assert length <= N;
-    assert length >= 1;
-    assert hi >= lo;
-    assert hi <= length;
-    assert lo >= 0;
-    assert (hi - lo) <= length;
-
-    bits (log2(N)+1) loBits = integerToSBV(lo);
-    bits (log2(N)+1) hiBits = integerToSBV(hi);
-    return uninterpFnN("setSlice", 2, N, length, basebv, loBits, hiBits, asnbv);
-
 bits(length) getSlice(bits(N) inbv, boolean signed, integer lo, integer hi)
     assert length <= N;
     assert length >= 1;
@@ -219,6 +193,8 @@ ASLSetUndefined()
 ASLSetUnpredictable()
   __UnpredictableBehavior = TRUE;
   return;
+
+// Concretizing some IMPLEMENTATION_DEFINED blocks
 
 // Memory model
 

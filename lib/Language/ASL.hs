@@ -118,7 +118,7 @@ genSimulation symCfg crucFunc extractResult =
     CCC.SomeCFG cfg -> do
       let sym = simSym symCfg
       let sig = AC.funcSig crucFunc
-      let argReprNames = FC.fmapFC (\(AT.LabeledValue (AS.FunctionArg nm _ _) v) -> AT.LabeledValue nm v) (AC.funcArgReprs sig)
+      let argReprNames = FC.fmapFC (\(AT.LabeledValue (AS.FunctionArg nm _) v) -> AT.LabeledValue nm v) (AC.funcArgReprs sig)
       initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) argReprNames
       let retRepr = AS.funcSigRepr sig
       let econt = CS.runOverrideSim retRepr $ do

@@ -3,35 +3,13 @@ Module           : Language.ASL.Translation
 Copyright        : (c) Galois, Inc 2019-2020
 Maintainer       : Daniel Matichuk <dmatichuk@galois.com>
 
-This is the core module of the ASL transaltor that defines the
+This is the core module of the ASL translator that defines the
 mapping from ASL syntax into Crucible 'Generator' actions. The
 ASL syntax is expected to have already been preprocessed with
 "Language.ASL.Preprocess" in order to standardize various
 syntactic forms, as well as extract the set of global variables
 that need to be in scope during translation.
 
-
-
-The global ASL state (as defined by "Language.ASL.Globals") is
-captured during preprocessing, and presented during translation
-simply as a set of local variables. Function calls are modelled as
-
-Exceptional control flow is simply modelled by a flag indicating
-that an assertion has been tripped. Execution is therefore allowed
-to "continue" despite an assertion failure, with the expectation
-that the result of execution will be interpreted as meaningless.
-In general, this means that assertion failure will often result
-in a function tripping the failure flag and then simply returning
-some undefined value. Assertions are translated by 'assertAtom'.
-
-
-
-
-
-Undefined values are
-
-During translation, we model the "global" state of ASL as a
-struct of values that gets
 
 -}
 
