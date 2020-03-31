@@ -1,6 +1,6 @@
 # Overview
 
-This repository implements a translation of the [ARM Semantic Language (ASL)][fn:asl-description] 
+This repository implements a translation of the [Arm Architecture Specification Language (ASL)][fn:asl-description] 
 into a closed [What4][fn:what4] expression using the [Crucible][fn:crucible] symbolic execution library.
 
 The ASL source is extracted from the official [XML specifications from ARM][fn:arm-specs] using 
