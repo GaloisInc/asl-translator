@@ -1101,28 +1101,10 @@
               (ExprLitNat 15))
             (StmtBlock
               (list
-                (StmtAssign
-                  (LValVarRef
-                    (QualifiedIdentifier Any offset))
-                  (ExprIf
-                    (ExprBinOp
-                      "=="
-                      (ExprCall
-                        (QualifiedIdentifier Any CurrentInstrSet)
-                        (list))
-                      (ExprVarRef
-                        (QualifiedIdentifier Any InstrSet_A32)))
-                    (ExprLitNat 8)
-                    (list)
-                    (ExprLitNat 4)))
                 (StmtReturn
                   (Just
-                    (ExprBinOp
-                      "+"
-                      (ExprVarRef
-                        (QualifiedIdentifier Any _PC))
-                      (ExprVarRef
-                        (QualifiedIdentifier Any offset)))))))
+                    (ExprVarRef
+                      (QualifiedIdentifier Any PC))))))
             (list)
             (Just
               (StmtBlock
@@ -1136,6 +1118,39 @@
                           (SliceSingle
                             (ExprVarRef
                               (QualifiedIdentifier Any n)))))))))))))))
+  (DefGetter
+    (QualifiedIdentifier Any PC)
+    Nothing
+    (ReturnType
+      (list
+        (TypeFun
+          bits
+          (ExprLitNat 32))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any offset))
+            (ExprIf
+              (ExprBinOp
+                "=="
+                (ExprCall
+                  (QualifiedIdentifier Any CurrentInstrSet)
+                  (list))
+                (ExprVarRef
+                  (QualifiedIdentifier Any InstrSet_A32)))
+              (ExprLitNat 8)
+              (list)
+              (ExprLitNat 4)))
+          (StmtReturn
+            (Just
+              (ExprBinOp
+                "+"
+                (ExprVarRef
+                  (QualifiedIdentifier Any _PC))
+                (ExprVarRef
+                  (QualifiedIdentifier Any offset)))))))))
   (DefTypeAlias
     simdidx
     (TypeFun

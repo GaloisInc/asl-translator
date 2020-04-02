@@ -161,10 +161,13 @@ R[integer n] = bits(32) value
 
 bits(32) R[integer n]
     if n == 15 then
-        offset = (if CurrentInstrSet() == InstrSet_A32 then 8 else 4);
-        return _PC + offset;
+        return PC;
     else
         return _R[n];
+
+bits(32) PC
+    offset = (if CurrentInstrSet() == InstrSet_A32 then 8 else 4);
+    return _PC + offset;
 
 type simdidx = bits(8);
 array bits(128) SIMDS[simdidx];
