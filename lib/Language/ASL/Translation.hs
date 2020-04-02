@@ -69,6 +69,7 @@ import qualified Lang.Crucible.Types as CT
 import qualified What4.BaseTypes as WT
 import qualified What4.ProgramLoc as WP
 import qualified What4.Utils.StringLiteral as WT
+import qualified What4.Concrete as WT
 
 import qualified Language.ASL.Syntax as AS
 
@@ -81,6 +82,7 @@ import           Language.ASL.Translation.Preprocess
 import qualified Language.ASL.SyntaxTraverse as TR
 import qualified Language.ASL.SyntaxTraverse as AS ( pattern VarName )
 import qualified Language.ASL.Globals as G
+import qualified Language.ASL.Globals.Types as G
 
 import qualified Lang.Crucible.CFG.Reg as CCR
 import qualified What4.Utils.MonadST as MST
@@ -409,14 +411,24 @@ translateBody ov stmts = do
     Ctx.Empty -> translateStatement ov (AS.StmtReturn Nothing)
     _ -> return ()
 
+concreteToAtom :: WT.ConcreteVal tp -> Generator h s arch ret (CCG.Atom s (CT.BaseToType tp))
+concreteToAtom cv = do
+  case cv of
+    WT.ConcreteBV nr i -> mkAtom $ CCG.App $ CCE.BVLit nr i
+    WT.ConcreteBool b -> mkAtom $ CCG.App $ CCE.BoolLit b
+    WT.ConcreteInteger i -> mkAtom $ CCG.App $ CCE.IntLit i
+    _ -> throwTrace $ TranslationError $ "unexpected concrete type"
+
 initializeUndefinedGlobal :: LabeledValue T.Text WT.BaseTypeRepr tp -> Generator h s arch ret ()
 initializeUndefinedGlobal lbl = do
   ts <- MS.get
   case G.lookupGlobal lbl of
     Just (Left gb) -> case Map.lookup (G.gbName gb) (tsGlobals ts) of
       Just (Some gref) | Just Refl <- testEquality (CCG.globalType gref) (CT.baseToType (G.gbType gb)) -> do
-        defaultv <- getInitialGlobal (projectLabel lbl) (projectValue lbl)
-        liftGenerator $ CCG.writeGlobal gref (CCG.AtomExpr defaultv)
+        v <- case G.asSingleton (G.gbDomain gb) of
+          Just v -> concreteToAtom v
+          Nothing -> getInitialGlobal (projectLabel lbl) (projectValue lbl)
+        liftGenerator $ CCG.writeGlobal gref (CCG.AtomExpr v)
       _ -> throwTrace $ TranslationError $ "Untracked global missing from registers: " ++ show (G.gbName gb)
     Just (Right _) -> return ()
     Nothing -> throwTrace $ TranslationError $ "No corresponding global with given signature: " ++ show lbl

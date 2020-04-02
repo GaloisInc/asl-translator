@@ -930,6 +930,212 @@
                       (ExprVarRef
                         (QualifiedIdentifier Any idx))
                       (ExprLitNat 4)))))))))))
+  (DefGetter
+    (QualifiedIdentifier Any Rmode)
+    (Just
+      (list
+        (SymDecl
+          n
+          (TypeRef
+            (QualifiedIdentifier Any integer)))
+        (SymDecl
+          mode
+          (TypeFun
+            bits
+            (ExprLitNat 5)))))
+    (ReturnType
+      (list
+        (TypeFun
+          bits
+          (ExprLitNat 32))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssert
+            (ExprBinOp
+              "&&"
+              (ExprBinOp
+                ">="
+                (ExprVarRef
+                  (QualifiedIdentifier Any n))
+                (ExprLitNat 0))
+              (ExprBinOp
+                "<="
+                (ExprVarRef
+                  (QualifiedIdentifier Any n))
+                (ExprLitNat 14))))
+          (StmtAssert
+            (ExprBinOp
+              "=="
+              (ExprVarRef
+                (QualifiedIdentifier Any mode))
+              (ExprVarRef
+                (QualifiedIdentifier Any M32_User))))
+          (StmtReturn
+            (Just
+              (ExprIndex
+                (ExprVarRef
+                  (QualifiedIdentifier Any _R))
+                (list
+                  (SliceSingle
+                    (ExprVarRef
+                      (QualifiedIdentifier Any n)))))))))))
+  (DefSetter
+    (QualifiedIdentifier Any Rmode)
+    (Just
+      (list
+        (SetterArg
+          n
+          (TypeRef
+            (QualifiedIdentifier Any integer))
+          Value)
+        (SetterArg
+          mode
+          (TypeFun
+            bits
+            (ExprLitNat 5))
+          Value)))
+    (SymDecl
+      value
+      (TypeFun
+        bits
+        (ExprLitNat 32)))
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssert
+            (ExprBinOp
+              "&&"
+              (ExprBinOp
+                ">="
+                (ExprVarRef
+                  (QualifiedIdentifier Any n))
+                (ExprLitNat 0))
+              (ExprBinOp
+                "<="
+                (ExprVarRef
+                  (QualifiedIdentifier Any n))
+                (ExprLitNat 14))))
+          (StmtAssert
+            (ExprBinOp
+              "=="
+              (ExprVarRef
+                (QualifiedIdentifier Any mode))
+              (ExprVarRef
+                (QualifiedIdentifier Any M32_User))))
+          (StmtAssign
+            (LValArrayIndex
+              (LValVarRef
+                (QualifiedIdentifier Any _R))
+              (list
+                (SliceSingle
+                  (ExprVarRef
+                    (QualifiedIdentifier Any n)))))
+            (ExprVarRef
+              (QualifiedIdentifier Any value)))))))
+  (DefSetter
+    (QualifiedIdentifier Any R)
+    (Just
+      (list
+        (SetterArg
+          n
+          (TypeRef
+            (QualifiedIdentifier Any integer))
+          Value)))
+    (SymDecl
+      value
+      (TypeFun
+        bits
+        (ExprLitNat 32)))
+    (Just
+      (StmtBlock
+        (list
+          (StmtIf
+            (ExprBinOp
+              "=="
+              (ExprVarRef
+                (QualifiedIdentifier Any n))
+              (ExprLitNat 15))
+            (StmtBlock
+              (list
+                (StmtAssert
+                  (ExprVarRef
+                    (QualifiedIdentifier Any FALSE)))
+                (StmtReturn Nothing)))
+            (list)
+            (Just
+              (StmtBlock
+                (list
+                  (StmtAssign
+                    (LValArrayIndex
+                      (LValVarRef
+                        (QualifiedIdentifier Any _R))
+                      (list
+                        (SliceSingle
+                          (ExprVarRef
+                            (QualifiedIdentifier Any n)))))
+                    (ExprVarRef
+                      (QualifiedIdentifier Any value)))
+                  (StmtReturn Nothing)))))))))
+  (DefGetter
+    (QualifiedIdentifier Any R)
+    (Just
+      (list
+        (SymDecl
+          n
+          (TypeRef
+            (QualifiedIdentifier Any integer)))))
+    (ReturnType
+      (list
+        (TypeFun
+          bits
+          (ExprLitNat 32))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtIf
+            (ExprBinOp
+              "=="
+              (ExprVarRef
+                (QualifiedIdentifier Any n))
+              (ExprLitNat 15))
+            (StmtBlock
+              (list
+                (StmtAssign
+                  (LValVarRef
+                    (QualifiedIdentifier Any offset))
+                  (ExprIf
+                    (ExprBinOp
+                      "=="
+                      (ExprCall
+                        (QualifiedIdentifier Any CurrentInstrSet)
+                        (list))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any InstrSet_A32)))
+                    (ExprLitNat 8)
+                    (list)
+                    (ExprLitNat 4)))
+                (StmtReturn
+                  (Just
+                    (ExprBinOp
+                      "+"
+                      (ExprVarRef
+                        (QualifiedIdentifier Any _PC))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any offset)))))))
+            (list)
+            (Just
+              (StmtBlock
+                (list
+                  (StmtReturn
+                    (Just
+                      (ExprIndex
+                        (ExprVarRef
+                          (QualifiedIdentifier Any _R))
+                        (list
+                          (SliceSingle
+                            (ExprVarRef
+                              (QualifiedIdentifier Any n)))))))))))))))
   (DefTypeAlias
     simdidx
     (TypeFun
