@@ -10,6 +10,9 @@ a closed-form [What4][fn:what4] function in order to serve as the formal semanti
 for the AArch32 architecture for the purpose of perform binary analysis on
 compiled executables.
 
+This document outlines some of the key technical challenges addressed by 
+the translator
+
 # Architecture
 The ASL translator provides a formal semantics to the ASL specification from
 [mra-tools][fn:mra_tools] using symbolic execution with
@@ -48,7 +51,7 @@ instantiation for AArch32.
 |                          |
 +--------------------------+       semmc-asl
 ```
-## ASL Translation Pipeline
+# ASL Translation Pipeline
 The `asl-translation-exec` executable (`./exe/Main.hs`) and driver library (`Language.ASL.Translation.Driver`) 
 implements the pipeline to transform the parsed ASL specification into formal semantics (as a collection
 of What4 functions). Translation proceeds as follows:
@@ -134,14 +137,14 @@ formulas and writes out the final normalized formulas which are used by `semmc`.
 ```
 
 
-## Preprocessing
+# Preprocessing
 
 Preprocessing transforms the ASL AST into a semantically equivalent AST, but
 with a simplified representation in order to ease translation. Additionally, it
 computes necessary static information about the ASL specification, such as function
 signatures and user-defined types.
 
-### Getters/Setters
+## Getters/Setters
 
 One syntactic transformation performed during preprocessing is rewriting ASL
 _getters_ and _setters_ into standard function calls. For example, the `S`
@@ -188,7 +191,7 @@ S_SETTER(n, s);
 
 ```
 
-### Function Signatures
+## Function Signatures
 
 Preprocessing also computes a signature for each function, which is
 used during translation. A signature specifies the natural
@@ -209,7 +212,7 @@ Note that `S_SETTER` has `_V` in its `GlobalReads` set, as every write
 implies a potential read.
 
 
-### Types
+## Types
 
 An equivalent Crucible type is required to represent each ASL type. For the most part
 this is a straightforward one-to-one translation, with some notable exceptions:
@@ -226,8 +229,7 @@ contrast, Crucible bitvectors must have a fixed and statically-known width. To r
 this, the translator produces multiple _monomorphized_ copies of polymorphic functions.
 In some cases, code blocks must be copied into multiple monomorphized variants.
 
-
-### Monomorphization
+## Monomorphization
 
 Polymorphic and dependently-typed bitvectors in ASL are a significant source of
 complexity when translating into Crucible, which requires that all bitvector
@@ -330,7 +332,7 @@ In each of these cases `val` now has a statically-known width, and translating
 each call to `BitReverse` will result in a monomorphized copy
 (i.e. `BitReverse_N_8`, `BitReverse_N_16` and `BitReverse_N_32`).
 
-## Translation
+# Translation
 
 Translation is the core functionality of the ASL translator - taking
 preprocessed ASL syntax with function signatures, and producing
@@ -339,7 +341,49 @@ Most of the complexity in this transformation arises from variable-width
 and dependently-typed bitvector widths, as well as representing the
 ASL global state.
 
-### Global State
+Translation occurs primarily via a wrapped `Crucible.CFG.Generator` monad
+defined in `Language.ASL.Translation`, which adds modified error handling and
+logging behavior to the original generator. The state of the translation
+is defined by `Language.ASL.TranslationState` which includes intermediate
+information about the current translation context (e.g. local variables),
+the current function (e.g. function arguments), and the global ASL environment
+(e.g. in-scope callable functions).
+
+An ASL function (or instruction) is a sequence of _statements_
+(`Language.ASL.Syntax.Stmt`) which are mostly standard elements of any
+imperative language: function calls, variable assignments, for-loops,
+if-then-else blocks, etc. A statement may contain zero or more _expression_s
+(`Language.ASL.Syntax.Expr`) as subcomponents: arithmetic, literal values,
+struct accesses, value comparison, functions, etc. Translation proceeds by
+simply converting each ASL statement in order into a `Generator` action, and
+each ASL expression into an appropriately-typed `Atom`.
+
+The result of translation is a Crucible `Crucible.CFG.Core.CFG` via
+`Language.ASL.Crucible` with either `functionToCrucible` or
+`instructionToCrucible`. The result is wrapped in either a `Function` or
+`Instruction`, which contains information about the intended type signature for
+the What4 function that will be used to represent the semantics of the given ASL
+element.
+
+Additionally, translation produces a set of function dependencies for the given
+instruction or function. These dependencies are each a monomorphized
+specialization of some ASL function, which was unified against a concrete
+calling context during translation. The `Language.ASL.Driver` checks the new
+dependencies against the set of already-translated functions, and translates any
+additional functions as needed.
+
+Notably, this implies that ASL functions are translated on-demand, driven at the
+top-level by the translation of some instruction. The overrides in
+`extra_defs.asl` and `Language.ASL.Translation.Overrides` restrict the set of
+possible code paths by concretizing pieces of the ASL global state or providing
+replacements for some functions. This effectively reduces the set of functions
+which are required to be translated. The output of the translator is therefore
+not necessarily every function in `arm_defs.asl`, but rather a subset of those
+functions which are required for the specific Aarch32 semantics that we are
+modelling.
+
+
+## Global State
 
 Similar to most imperative languages, ASL allows functions to refer to
 globally-scoped variables whose value is expected to persist across function
@@ -374,7 +418,7 @@ function into a struct representing all of the function effects.
  +---------------------------------------+
 ```
 
-### Function Calls
+## Function Calls
 
 During translation, function calls are represented as explicit _uninterpreted_
 functions, whose signature is calculated by taking the `SimpleFunctionSignature`
@@ -426,7 +470,7 @@ of the function evaluation.
       +---------------+   +-----------------------+
 ```
 
-### Instructions - Tracked vs. Untracked Global State
+## Instructions - Tracked vs. Untracked Global State
 
 Most of the translator is agnostic of whether or not the given ASL syntax
 corresponds to an ASL function vs. an ASL instruction specification.
@@ -435,8 +479,8 @@ its operands, and it has no natural return value, while its global writes
 are any effects it has on the machine state.
 
 Each what4 function representing an instruction, however, is standardized to
-take and produce a fixed set of globals. These globals are considered _tracked_,
-or semantically relevant to our model of the processor state. 
+take and produce the same standard set of globals. These globals are considered
+_tracked_, or semantically relevant to our model of the processor state.
 
 The set of tracked global variables is manually defined in
 `Language.ASL.Globals.Definitions`. It consists of the processor state,
@@ -444,15 +488,348 @@ the user registers, vector registers, the program counter, the system memory,
 as well as various execution flags.
 
 In contrast to a tracked global, an _untracked_ global is any piece of global
-state that is not expected to change. Most of the available global ASL state is
-unmodified during normal execution, and therefore not necessary to be tracked as
-part of our semantics. For example, if we assume that the processor is always
-executing in user mode then we can assume any references to the current mode
-(`PSTATE_M`) are always `M32_User` and that any assignments to it are invalid.
-Other registers may simply have an undefined value that we don't expect to be
-read for
+state that is not expected to change, or where changes are not relevant to our
+semantics. The set of untracked globals is also manually defined in
+`Language.ASL.Globals.Definitions`, which is the minimal set required to build
+the fragment of Aarch32 that we are targeting.
+
+Most of the available global ASL state is unmodified during normal execution,
+and therefore not necessary to be tracked as part of our semantics. The majority
+of the untracked globals have an undefined value that is not expected to be read
+during normal execution. During translation, untracked globals are initialized
+with a distinguished uninterpreted function (e.g. `INIT_CPACR()`). Updates to
+these values (i.e. across intermediate function calls) are persistent for the
+duration of a single instruction, but their final value is discarded after the
+instruction execution is finished.
+
+Both kinds of globals are defined as a `Language.ASL.Globals.Types.Global`,
+which optionally allows for a valid set of values to be defined as a
+`GlobalDomain`. During translation for each instruction, each global (both
+tracked an untracked) is asserted to belong to their expected domain both at the
+beginning and end of execution. For example, we assume that the processor is
+always executing in user mode, and therefore any references to the current mode
+(`PSTATE_M`) are always `M32_User`, and any changes to `PSTATE_M` will raise an
+assertion failure.
+
+## Global References
+
+The `Language.ASL.Globals` module provides an interface to the struct
+representing the global ASL state (taken as input and given as the output of
+each instruction).  It uses template haskell to generate the type signature for
+the struct out of the definitions present in
+`Language.ASL.Globals.Definitions`. The `GlobalRef` datatype represents a
+reference to a tracked global in ASL. Its type parameter is the name of the ASL
+global that it refers to.
+
+## Registers and Memory Global Variables
+
+The general-purpose registers, vector registers and RAM are all represented by
+an array-typed global variable. Access to these globals, however, is only via
+special-purpose uninterpreted functions. The resulting `__Memory` global
+variable after any instruction execution is therefore guaranteed to be a
+collection of (uninterpreted) `write_mem` functions. Further processing of this
+specification is free to assign semantics to these functions without necessarily
+involving any theory of arrays.
+
+In `Language.ASL.Globals` there is a distinct `GlobalRef` for each
+general-purpose register (GPR) and vector register (SIMD). The global struct
+representing the entire CPU state, however, contains a single array-typed
+variable for each register set. The functions `flattenGlobalsStruct` and
+`destructGlobals` from `Language.ASL.Globals` provide an interface for
+projecting between both views of the registers.
+
+## Exceptions
+
+ASL has a few different sources of exceptional control flow. The most
+straightforward is the `assert` statement, which simply asserts that the
+provided boolean expression is true. Additionally the `UNDEFINED` and
+`UNPREDICTABLE` statements are error conditions resulting from unexpected
+input, underspecified processor features or state.
+
+In the translated semantics, these are each represented by flags in the set of
+tracked globals (i.e. `__AssertionFailure`, `__UndefinedBehavior` and
+`__UnpredictableBehavior`). Rather than explicitly modelling exceptional control
+flow, a corresponding flag is set to `True` when an exception is raised and
+execution proceeds as normal. This avoids the state explosion that would be
+caused by having every expression conditional on those flags. Although the
+functions representing the instruction semantics are total, if any of the
+exception flags are `True` then the resulting values are not necessarily
+meaningful. The intention is that these flags will be checked externally by
+any clients of these semantics.
+
+## Undefined Values
+
+Undefined or uninitialized values are represented by nullary uninterpreted
+functions. Occasionally an undefined/uninitialized value will be returned by a
+function, with the intention that its value will be discarded by the calling
+context. This precludes the use of more standard features (i.e. using an
+uninitialized register in Crucible), since these values need to persist outside
+the scope of a given function.
+
+An undefined value can be explicitly created in ASL with the `UNKNOWN` primitive.
+It is also possible, however, to create an undefined value by returning a variable
+without initializing it.
+
+For example, in the following ASL code either the first or second element of
+the resulting tuple is undefined depending on the given `b`.
+```
+(integer, integer) f(boolean b)
+    if b then
+        foo = 1
+    else
+        baz = 1
+    return (foo, baz)
+```
+
+In this case, the translator implicitly sets both `foo` and `baz` to be
+undefined integers before the `if` statement.
+
+Although function calls and undefined values are both represented as
+uninterpreted functions, they have different behaviors with respect
+to their "fresh"ness in the underlying what4 representation. The Crucible
+extension used by the translator (defined in `Language.ASL.Crucible.Extension`)
+adds a `UF` primitive for creating explicit calls to uninterpreted functions.
+An uninterpreted function can be introduced as either "fresh" or "cached".
+Undefined values are represented by fresh uninterpreted functions, indicating
+that they are all formally distinct. Two undefined values are therefore not
+necessarily equivalent. Function calls, however, are represented by cached
+uninterpreted functions: all function calls are represented by the same
+formal what4 function and are therefore equivalent given the same arguments.
+
+## Types - Constraints and Extensions
+
+Each ASL expression is resolved to some Crucible expression or atom during
+translation, which assigns it a What4 base type (i.e. a boolean, integer,
+struct, or fixed-width bitvector). The fields of an ASL struct, however, are
+accessed by name, while What4 structs are accessed by index. Additionally,
+system registers are treated as both raw bitvectors as well as structs, where a
+field access represents some slice of the bitvector.
+
+Along with its Crucible representation, each ASL expression is therefore given
+some `ExtendedTypeData` which tracks additional type information. In the case
+of a struct, it contains a mapping from struct names to indexes. When
+the translator is initialized for a function, an `ExtendedTypeData` is provided
+for each argument based on its ASL type. This extended data is propagated 
+during translation, and used to resolve named field accesses.
+
+Each ASL expression is also translated under some `TypeConstraint`, representing
+any known constraints that can be inferred about the target type of the expression
+based on the surrounding context. This is required to concretize bitvector widths
+when this can't be determined from the expression itself.
+
+For example, the `Zeros()` function returns a bitvector of any length. Since this
+can't be monomorphized without a concrete width for the target size, we need to know
+the context in which `Zeros()` has been called. In the simplest case, this is
+either provided as an explicit type annotation or can be inferred as the result
+of some assignment.
+
+```
+bits(32) foo = Zeros();
+foo = Ones();
+(result, carry) = AddWithCarry(foo, Zeros(), '1');
+```
+
+All of these cases are straightforward, as we can determine a specific target
+type (i.e. a `ConstraintSingle`) before we translate each function call. In
+the final case of `AddWithCarry` the first argument, `foo`, pins down the
+bitvector width to 32, which can then be used to determine the type of `result`
+as well as the second argument, `Zeros()`.
+
+### Slicing
+
+ASL allows for reading and writing to restriced "slices" of bitvectors with the
+syntax: `var<3:0>`, representing a 4-bit slice of the low bits of `var`. A slice
+may be used as a expression, or as an l-value in an assignment. e.g. `var<3:0>
+= Zeros()` sets the lower 4 bits of `var` to `0`.
+
+Bitvector slices are translated into explicit calls to the `getSlice` and
+`setSlice` functions, which have been manually defined in
+`extra_defs.asl`. These define bitvector slicing in terms of shifts and masks,
+with runtime assertions that the provided indexes are wellformed.
+
+Translation is straightforward when the width of the slice can be determined
+statically. For example `var<i:i-4>` can be assumed to be 4 bits wide (given an
+assertion `i >= 4`). The surrounding type information can be used to determine a
+slice width even when the indexes are symbolic. e.g. `bits(4) a = var<i:j>`
+
+Complications arise, however, when the size of a slice isn't apparent from the
+surrounding context. For example, in the assignment `bits(32) a =
+ZeroExtend(bv<i:j>)` a concrete width for `bv<i:j>` can't be determined since
+`ZeroExtend` can take any bitvector width as an argument. The outer type
+constraint of `bits(32)` can't be used directly, since `bv<i:j>` may not
+necessarily be 32 bits wide.
+
+In this case, the expression `bv<i:j>` is translated with a `ConstraintHint` as
+its constrant. Here the provided hint is `HintMaxBVSize 32`, which indicates
+that `bv<i:j>` may be _at most_ 32 bits. When `bv<i:j>` is then translated into
+a call to `getSlice`, where the width of the resulting bitvector is concretized
+to 32 bits. The `signed` argument to `getSlice` controls whether or not the
+resulting slice is sign or zero-extended to the target width after slicing.
+
+Simiularly, the `UInt(bits(N))` function translates its argument with a
+`HintBVAnySize` constraint. This allows the resulting bitvector to have any
+size, while providing a hint that any bitvector slice may be implicitly
+zero-extended to the size of the source bitvector. For example, given
+`UInt('1111'<i:j>)` we first translate `'1111'` and then use `HintBVAnySize` to
+determine that the slice `'1111'<i:j>'` may be stored in a 4-bit bitvector and
+have its actual value (given a concrete `i` and `j`) zero-extended to 4 bits.
+
+The constraints for bitvector primitives are determined by a set of
+manually-defined overrides in the translator
+(`Language.ASL.Translation.Overrides`), but the set of supported cases is not
+necessarily complete. For example, `LSL_C` from `arm_defs.asl` cannot be
+automatically translated due to its use of an intermediate arbitrarily-wide
+bitvector. We provide an alternative implementation in `extra_defs.asl` which is
+equivalent, but can be automatically translated.
+
+## Function Argument Type Unification
+
+Matching a set of arguments to a function signature requires type _unification_
+in order to resolve polymorphic bitvector lengths. This is complicated by the
+fact that the type constraints imposed by the function signature may be
+necessary to resolve the ASL expressions for the function arguments.
+Unification therefore performs the dual function of calculating a monomorphized
+variant of the called function, as well as providing necessary type constraints
+in order to translate its arguments.
+
+The three inputs to a unification problem are:
+
+* A polymorphic function signature (e.g. `bits(L+M) f(bits(N*M) bv1, bits(N) bv2, integer M)`)
+* A list of ASL expressions used as arguments to the given function (e.g. `(Zeros(16), baz<i:j>, 3-1)`)
+* A type constraint for the function return value (e.g. `ConstraintSingle (BaseBVType 10)`)
+
+Unification proceeds by first collecting any concretely known arguments. In this
+example `3-1` is given as the `M` formal argument, which is concretely evaluated
+to `2` and added to the binding environment `[M := 2]`.
+
+From left to right, each expression is translated into a Crucible atom under the
+type constraint imposed by the function signature, combined with any static
+bindings that have been calculated so far during unification.
+
+In our example, `Zeros(16)` is translated without constraints, since its
+corresponding formal argument type `bits(N*M)` cannot be fully resolved under
+the binding environment `[M := 2]`. 
+
+Next the type of the resulting Crucible atom is unified against its argument
+type, potentially discovering bindings for type variables.
+
+In our example, `Zeros(16)` is translated into the Crucible type `BaseBVType
+16`.  Under the bindinng environment `[M := 2]`, unifying `BaseBVType 16` with
+`bits(N*M)` implies that `N` must be `8`. This is added to the binding
+environment and unification then continues to the next argument. Here this
+provides a necessary static upper bound of `8` on the bitvector width when
+translating `baz<i:j>`.
+
+After unifying the arguments, the return type from the function signature is
+unified against the current type constraint. Here we unify `BaseBVType 10` with
+`bits(L+M)` under the binding environment `[N := 8, M := 2]`, which implies that
+`L` must be `8`.
+
+The function signature is then evaluated in the binding environment to confirm
+that all bitvector widths have been fully monomorphized. A variant name is
+derived from the binding environment (e.g. `f_L_2_N_8_M_2`) as the formal
+handle for the monomorphized variant of the function, and then translated 
+into a function call. The function name and binding environment pair are
+then recorded as a dependency of the current function, potentially creating
+a future translation obligation.
+
+Note that this unification strategy is sensitive to the order of the function
+arguments. In our example, swapping the first and second arguments `f` would
+have caused a translation failure due to `N` not having a static binding when
+translating `baz<i:j>`. This does not appear to be an issue in practice,
+however.
+
+Here is an overview of the intermediate binding environments in our example
+unification of `f`:
+
+```
+  +-------------------------------------------------------+
+  | f(bits(N*M) bv1, bits(N) bv2, integer M) :: bits(L+M) |
+  +--------+-------------+------------+-------------+-----+
+           |             |            |             |
+   [M := 2]|     [M := 2]|            |     [M := 2]|
+           |     [N := 8]|            |     [N := 8]|
+           |             |            |             |
+  +--------v-------------v------------v-------------v-----+
+  | f(Zeros(16),     baz<i:j>,       3-1)    :: bits(10)  |
+  +--------+--------------------------+-------------+-----+
+           |                          |             |
+           v                          v             v
+       [N := 8]                   [M := 2]      [L := 10]
+
+```
+
+# Simulation
+
+Given a successfully-translated ASL function or instruction, represented as a
+Crucible CFG wrapped in a `Language.ASL.Crucible.Function` or
+`Language.ASL.Crucible.Instruction`, the final step in translation is to
+symbolically execute that CFG into a closed-form What4 function.
+
+This is handled by the `Language.ASL` module with either `simulateFunction` or
+`simulateInstruction`. Here the primary distinction between a `Function` and and
+`Instruction` is that an instruction has a uniform structure with respect to the
+_tracked_ set of global ASL variables. All instructions are defined to read from
+and write to the entire set of tracked globals, taking the instruction operands
+as the natural function arguments. The symbolic expression representing the
+result of an instruction is reshaped to conform to this standard signature. In
+contrast, a function may read from and write to any global variable.
+
+In both cases, a fresh both variable is initialized for each of the function's
+natural arguments. These are use to initialize the Crucible registers to be
+accessed during translation. A single bound variable (`globalReads`) is created
+for the struct representing the global reads of the function. For each global
+read, a `Crucible.Simulator.GlobalState.GlobalVar` is initialized with a
+corresponding field access from `globalReads`.
 
 
+The return value of each CFG is a struct containing both the natural return
+value of the function, as well as the final state of the global variables. After
+successfully symbolically executing the CFG, the resulting expression is then
+simply used as the body of the function representing the semantics for the given
+ASL instruction or function.
 
+# Serialization
+
+Once all the target instructions and dependent functions have been successfully
+translated and simulated, they are serialized as s-expressions with
+`Language.ASL.Formulas.Serialize`, which uses
+[what4-serialize][fn:what4-serialize] as its backend. 
+The `Language.ASL.Driver` produces two files by default: `functions.what4` and
+`instructions.what4`, corresponding to the translated and serialized functions
+from `arm_defs.asl` and the instructions from `arm_instrs.asl` respectively.
+
+Recall that up until now there has been no formal connection between a function
+_call_ and the _definition_ (i.e. its translated semantics) of a function. In
+the final what4 function representing an ASL instruction or function, function
+calls are still uninterpreted functions. This connection is made formal during
+the deserialization of the function environment s-expression. As each function
+is deserialized, it is added to an incrementally-built function environment that
+puts all currently-serialized functions in-scope. The deserialization then
+parses a function call by retrieving the actual function definition from this
+environment and producing a what4 _defined_ function. Notably the serialized
+function environment is already in toplogical order, so all necessary dependent
+function definitions will be in-scope when a function is deserialized.
+
+# Normalization
+
+Normalization (implemented in `Language.ASL.Formulas.Normalize`) occurs as a
+final post-processing step on the serialized semantics. It decomposes each
+function into a collection of point-update functions (one per struct field) and
+strips out all integers by replacing them with bitvectors.
+
+By default, normalization is performed as a separate call to the translator
+executable, which reads in existing `functions.what4` and `instructions.what4`
+files and produces `functions-norm.what4` and ``instructions-norm.what4`. These
+normalized, serialized functions are then used as the basis for defining the ARM
+semantics in [semmc][https://github.com/GaloisInc/semmc].
+
+## Struct Removal
+
+Removing structs from the semantics
+
+
+[fn:semmc]: https://github.com/GaloisInc/semmc
+[fn:what4-serialize]: https://github.com/GaloisInc/what4-serialize/
 [fn:asl-description]: https://alastairreid.github.io/dissecting-ARM-MRA/
 [fn:what4]: https://github.com/GaloisInc/crucible/tree/master/what4/
