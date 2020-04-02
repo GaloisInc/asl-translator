@@ -115,6 +115,27 @@ bits(32) _R[integer n]
     bits(37) idx = integerToSBV(n);
     return uninterpFn("gpr_get", GPRS, truncate(idx, 4));
 
+bits(32) Rmode[integer n, bits(5) mode]
+    assert n >= 0 && n <= 14;
+    assert mode == M32_User;
+    return _R[n];
+
+Rmode[integer n, bits(5) mode] = bits(32) value
+    assert n >= 0 && n <= 14;
+    assert mode == M32_User;
+    _R[n] = value;
+
+R[integer n] = bits(32) value
+    _R[n] = value;
+    return;
+
+bits(32) R[integer n]
+    if n == 15 then
+        offset = (if CurrentInstrSet() == InstrSet_A32 then 8 else 4);
+        return _PC + offset;
+    else
+        return _R[n];
+
 type simdidx = bits(8);
 array bits(128) SIMDS[simdidx];
 
