@@ -81,10 +81,10 @@ integerToBits len val =
   where
     go :: Integer -> [Bool]
     go 0 = []
-    go val | val > 0 =
+    go val' | val' > 0 =
       let
-        (half, rem) = val `divMod` 2
-      in (rem == 1) : go half
+        (half, rem_) = val' `divMod` 2
+      in (rem_ == 1) : go half
     go _ = error $ "integerToBits: Unsupported negative int:" ++ show val
 
 -- TODO: Type synonyms are currently a global property,
@@ -589,9 +589,9 @@ applyStaticEnv env t = case applyTypeSynonyms t of
   AS.TypeFun "bits" e -> case exprToStatic env e of
     Just (StaticInt i) -> Just $ AS.TypeFun "bits" (AS.ExprLitInt i)
     _ -> Nothing
-  AS.TypeArray t idxt -> do
-    t' <- applyStaticEnv env t
-    return $ AS.TypeArray t' idxt
+  AS.TypeArray t' idxt -> do
+    t'' <- applyStaticEnv env t'
+    return $ AS.TypeArray t'' idxt
   _ -> Just $ t
 
 

@@ -51,33 +51,25 @@ module Language.ASL.Globals.Types
   , forallUpTo
   ) where
 
-import           GHC.Natural ( naturalFromInteger )
+
 import           GHC.TypeLits
 
 import           Control.Applicative ( Const(..) )
-import           Control.Monad ( forM, foldM )
-import           Control.Monad.Except ( throwError )
+
 import qualified Control.Monad.Except as ME
 import           Control.Monad.Identity
 
-import           GHC.TypeNats ( KnownNat )
 import           Data.Type.Equality
 import           Data.Constraint as Constraint
 import           Data.Proxy
 
-import           Data.Parameterized.Some ( Some(..), viewSome )
-import           Data.Parameterized.Ctx ( type (<+>) )
-import           Data.Parameterized.Classes
-import           Data.Parameterized.Context ( EmptyCtx, (::>), Assignment, empty, pattern (:>) )
+import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Context ( pattern (:>) )
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
 import qualified Data.Parameterized.TraversableFC as FC
-import           Data.Parameterized.Map ( MapF )
-import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Pair
-import           Data.Parameterized.WithRepr
 
-import           Data.Void
+
 import           Data.Maybe ( catMaybes )
 import           Data.List ( intercalate )
 import           Data.Set ( Set )
@@ -86,7 +78,6 @@ import           Data.Map ( Map )
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import           Data.Parameterized.NatRepr ( type (<=) )
-import           Data.Parameterized.Classes
 import qualified What4.Interface as WI
 import qualified What4.Concrete as WI
 
@@ -97,13 +88,9 @@ import qualified Lang.Crucible.CFG.Expr as CCE
 import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.Types as CT
 
-import           Language.ASL.Signature
 import           Language.ASL.Types
 
 import qualified Language.Haskell.TH as TH
-import qualified Language.Haskell.TH.Syntax as TH
-
-import           Unsafe.Coerce
 
 -- | A 'Global' represents each piece of the global ASL state.
 data Global tp =
@@ -129,7 +116,6 @@ data GlobalDomain tp =
   | DomainSpan (Maybe (WI.ConcreteVal tp)) (Maybe (WI.ConcreteVal tp))
     -- ^ the global is in a range of values (inclusive). A 'Nothing' bound indicates
     -- it is unbounded in that direction.
-  | DomainUndefined
   deriving Eq
 
 domainSingleton :: WI.ConcreteVal tp -> GlobalDomain tp
@@ -149,12 +135,6 @@ asSingleton :: GlobalDomain tp -> Maybe (WI.ConcreteVal tp)
 asSingleton dom = case domainSpan dom of
   (Just lo, Just hi) | lo == hi -> Just lo
   _ -> Nothing
-
-mapSpan :: (WI.ConcreteVal tp -> a)
-        -> (Maybe (WI.ConcreteVal tp), Maybe (WI.ConcreteVal tp))
-        -> (Maybe a, Maybe a)
-mapSpan f (v1, v2) = (fmap f v1, fmap f v2)
-
 
 genLeq :: WI.BaseTypeRepr tp
        -> CCG.Expr ext s (CT.BaseToType tp)
@@ -181,11 +161,11 @@ domainPred gb e = case gbDomain gb of
   DomainSet vs -> foldr go (CCG.App $ CCE.BoolLit False) vs
     where
       go :: WI.ConcreteVal tp -> CCG.Expr ext s CT.BoolType -> CCG.Expr ext s CT.BoolType
-      go v pred =
+      go v pred_ =
         let
           e' = concreteToExpr v
           isEq = CCG.App $ CCE.BaseIsEq (WI.concreteType v) e e'
-        in mkOr isEq pred
+        in mkOr isEq pred_
   DomainSpan lo hi ->
     let
       loPred = case lo of
@@ -208,8 +188,6 @@ mkAnd e1 e2 = case (e1, e2) of
    (_, CCG.App (CCE.BoolLit True)) -> e1
    _ -> CCG.App $ CCE.And e1 e2
 
-globalSymbol :: Global tp -> WI.SolverSymbol
-globalSymbol gb = WI.safeSymbol (T.unpack (gbName gb))
 
 projectGlobals :: forall m ctx
                 . (Monad m, ME.MonadError String m)
@@ -230,7 +208,7 @@ projectGlobals globalsMap sig = do
     getGlobal lblv = case Map.lookup (projectLabel lblv) globalsMap of
       Just (Some gb) | Just Refl <- testEquality (projectValue lblv) (gbType gb)
         -> return $ gb
-      Nothing -> ME.throwError $ "Missing global specification for: "
+      _ -> ME.throwError $ "Missing global specification for: "
         ++ T.unpack (projectLabel lblv) ++ " " ++ show (projectValue lblv)
 
 
@@ -241,7 +219,7 @@ genCond :: forall ext s ctx err m
         -> (forall tp. LabeledValue T.Text WI.BaseTypeRepr tp -> m (CCG.Expr ext s (CT.BaseToType tp)))
         -> Ctx.Assignment (LabeledValue T.Text WI.BaseTypeRepr) ctx
         -> m [(T.Text, CCG.Expr ext s CT.BoolType)]
-genCond mkerr globalsMap lookup sig = do
+genCond mkerr globalsMap lookup_ sig = do
   globals <- case projectGlobals globalsMap sig of
     Left errStr -> ME.throwError $ mkerr errStr
     Right globals -> return globals
@@ -253,7 +231,7 @@ genCond mkerr globalsMap lookup sig = do
 
     getPred :: forall tp. LabeledValue T.Text WI.BaseTypeRepr tp -> Global tp -> m (Const (T.Text, (CCG.Expr ext s CT.BoolType)) tp)
     getPred lblv gb = do
-      expr <- lookup lblv
+      expr <- lookup_ lblv
       return $ Const $ (projectLabel lblv, domainPred gb expr)
 
 -- Retrieving indexes into the globals based on type-level symbols
@@ -271,8 +249,8 @@ mkGlobalsGen :: forall a
              -> TH.Q a
 mkGlobalsGen comb mkinit mkelem (Some gbs) = do
   elems <- Ctx.traverseWithIndex go gbs
-  init <- mkinit
-  FC.foldlMFC (\b (Const a) -> comb b a) init elems
+  init_ <- mkinit
+  FC.foldlMFC (\b (Const a) -> comb b a) init_ elems
   where
     go :: Ctx.Index ctx tp -> Global tp -> TH.Q (Const a tp)
     go idx gb = Const <$> mkelem idx gb
@@ -322,17 +300,6 @@ forallSymbols = forallGen (\symb -> mkSymbolT (CT.symbolRepr symb))
 forallNats ::  TH.Q TH.Type -> Ctx.Assignment NR.NatRepr ctx -> TH.DecsQ
 forallNats = forallGen (\nr -> TH.litT (TH.numTyLit (NR.intValue nr)))
 
-
-
-liftIndex :: Ctx.Index ctx tp -> TH.Q TH.Exp
-liftIndex idx = [e| Ctx.natIndexProxy $(liftIndexNatRepr idx) |]
-
-liftIndexNatRepr :: Ctx.Index ctx tp -> TH.Q TH.Exp
-liftIndexNatRepr idx = [e| NR.knownNat :: NR.NatRepr $(liftIndexNumT idx) |]
-
-liftIndexNumT :: Ctx.Index ctx tp -> TH.Q TH.Type
-liftIndexNumT idx = TH.litT (TH.numTyLit(fromIntegral $ Ctx.indexVal idx))
-
 mkAllGlobalSymsT :: Some (Ctx.Assignment Global) -> TH.Q TH.Type
 mkAllGlobalSymsT = mkGlobalsT $ \_ gb -> mkSymbolT (gbName gb)
 
@@ -346,6 +313,7 @@ mkTypeFromRepr repr = case repr of
   WI.BaseBVRepr nr -> [t| WI.BaseBVType $(return (TH.LitT (TH.NumTyLit (NR.intValue nr)))) |]
   WI.BaseArrayRepr idx ret -> [t| WI.BaseArrayType $(mkTypeFromReprs idx) $(mkTypeFromRepr ret) |]
   WI.BaseStructRepr reprs -> [t| WI.BaseStructType $(mkTypeFromReprs reprs) |]
+  _ -> fail $ "mkTypeFromRepr: unsupported type: " ++ show repr
 
 mkTypeFromReprs :: Ctx.Assignment WI.BaseTypeRepr ctx -> TH.Q TH.Type
 mkTypeFromReprs reprs = case Ctx.viewAssign reprs of
@@ -390,13 +358,13 @@ withKnownIndex :: forall ctx tp f
 withKnownIndex idx f = withForallCtx (Proxy @(DistinctIn ctx)) idx f
 
 class NeqT a b where
-  neq :: NeqTRepr a b
+  _neq :: NeqTRepr a b
 
 data NeqTRepr a b where
-  NeqTRepr :: ((a == b) ~ False) => NeqTRepr a b
+  NeqTRepr :: ((a == b) ~ 'False) => NeqTRepr a b
 
-instance ((a == b) ~ False) => NeqT a b where
-  neq = NeqTRepr
+instance ((a == b) ~ 'False) => NeqT a b where
+  _neq = NeqTRepr
 
 -- | Proof that the given type is not present in the context.
 data NotMemberOfProof ctx s where
@@ -485,7 +453,7 @@ traverseForallCtx :: forall ctx c f g m
              -> m (Ctx.Assignment g ctx)
 traverseForallCtx c f asn = Ctx.traverseWithIndex (\idx a -> withForallCtx c idx $ f a) asn
 
-forallUpTo :: forall ctx c n maxn
+forallUpTo :: forall c n maxn
             . ForallCtx c (CtxUpTo maxn)
            => Proxy c
            -> Proxy maxn

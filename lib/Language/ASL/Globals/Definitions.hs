@@ -59,45 +59,20 @@ module Language.ASL.Globals.Definitions
   , maxSIMDRepr
   ) where
 
-import           GHC.Natural ( naturalFromInteger )
-
-import           Control.Applicative ( Const(..) )
-import           Control.Monad ( forM, foldM )
-import           Control.Monad.Except ( throwError )
-import qualified Control.Monad.Except as ME
-
 import           GHC.TypeNats ( KnownNat )
-import           Data.Parameterized.Some ( Some(..), viewSome )
-import           Data.Parameterized.Ctx ( type (<+>) )
+import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.Context ( EmptyCtx, (::>), Assignment, empty, pattern (:>), (<++>) )
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
-import qualified Data.Parameterized.TraversableFC as FC
 
-
-import           Data.Maybe ( catMaybes )
-import           Data.List ( intercalate )
-import           Data.Set ( Set )
-import qualified Data.Set as Set
-import           Data.Map ( Map )
-import qualified Data.Map as Map
 import qualified Data.Text as T
 import           Data.Parameterized.NatRepr ( type (<=) )
 import           Data.Parameterized.Classes
 import qualified What4.Interface as WI
 import qualified What4.Concrete as WI
 
-import qualified Lang.Crucible.CFG.Expr as CCE
-import qualified Lang.Crucible.CFG.Generator as CCG
-import qualified Lang.Crucible.Types as CT
-
-import           Language.ASL.Signature
-import           Language.ASL.Types
 import           Language.ASL.Globals.Types
 import           Language.ASL.StaticExpr ( bitsToInteger )
-
-import qualified Language.Haskell.TH as TH
-import qualified Language.Haskell.TH.Syntax as TH
 
 -- | The maximum index for a user register
 type MaxGPR = 14
@@ -222,17 +197,6 @@ simdGlobals' = Ctx.fromList $
 
 def :: T.Text -> WI.BaseTypeRepr tp -> GlobalDomain tp -> Global tp
 def nm repr dom = Global nm repr dom
-
-noval :: T.Text -> Global (WI.BaseStructType EmptyCtx)
-noval nm = def nm WI.knownRepr domainUnbounded
-
-intarraybv :: forall n. 1 <= n
-           => KnownNat n
-           => T.Text -> Global (WI.BaseArrayType (EmptyCtx ::> WI.BaseIntegerType) (WI.BaseBVType n))
-intarraybv nm = def nm WI.knownRepr domainUnbounded
-
-int :: T.Text -> Global WI.BaseIntegerType
-int nm = def nm WI.BaseIntegerRepr domainUnbounded
 
 bool :: T.Text -> Global WI.BaseBoolType
 bool nm = def nm WI.BaseBoolRepr domainUnbounded

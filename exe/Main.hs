@@ -13,15 +13,11 @@ the relevant functionality.
 
 module Main ( main ) where
 
-import           Control.Monad ( when, void )
-import qualified Control.Concurrent as IO
-import qualified Control.Exception as X
+import           Control.Monad ( when )
 import           GHC.Stack ( HasCallStack )
 
 import qualified Data.Text as T
-import qualified Data.List as List
 import qualified Data.List.Split as List
-import           Data.Maybe ( fromJust )
 
 import           System.Exit (exitFailure)
 import qualified System.Environment as IO

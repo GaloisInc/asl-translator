@@ -15,6 +15,7 @@ module Util.Log
   , unindentLog
   , MonadLogT
   , WLog.LogCfg
+  , runMonadLogT
   ) where
 
 import           Control.Monad.Identity

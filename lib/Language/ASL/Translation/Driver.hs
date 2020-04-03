@@ -74,7 +74,7 @@ import           Data.Either ( partitionEithers )
 import           Data.Map ( Map )
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import           Data.Maybe ( catMaybes, mapMaybe, fromJust )
+import           Data.Maybe ( catMaybes )
 import           Data.Monoid
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Nonce
@@ -85,9 +85,6 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-import qualified Data.List as List
-import qualified Data.List.Split as List
-import           Data.List.Index (imap)
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified Lang.Crucible.FunctionHandle as CFH
 import qualified Language.ASL.Parser as AP
@@ -102,19 +99,14 @@ import           Dismantle.ARM.ASL ( encodingIdentifier )
 import qualified System.IO as IO
 import           System.IO (hPutStrLn, stderr)
 
-import           Lang.Crucible.Panic ( Crucible )
-
-import qualified Language.ASL.SyntaxTraverse as AS  ( pattern VarName )
 import qualified Language.ASL.SyntaxTraverse as TR
 
 import qualified Language.ASL as ASL
-import qualified Language.ASL.Globals as G
 import qualified Language.ASL.Formulas.Serialize as FS
 import qualified Language.ASL.Formulas.Normalize as FS
 
 import qualified Language.ASL.Crucible as AC
 
-import           Language.ASL.Translation
 import           Language.ASL.Translation.Preprocess
 import           Language.ASL.Translation.Exceptions
 import           Language.ASL.Signature
@@ -131,7 +123,7 @@ import qualified What4.Serialize.Normalize as WN
 import qualified Text.PrettyPrint.HughesPJClass as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as LPP
 
-import           What4.Utils.Log ( HasLogCfg, LogLevel(..), LogCfg, withLogCfg )
+import           What4.Utils.Log ( HasLogCfg, LogCfg, withLogCfg )
 import qualified What4.Utils.Log as Log
 import           What4.Utils.Util ( SomeSome(..) )
 import qualified What4.Utils.Util as U
@@ -305,27 +297,12 @@ readAndNormalize opts = do
       T.writeFile fpNormInstrs (FS.printSExpr $ instsexpr')
     Nothing -> return ()
 
-
-
-simulateInstructions :: TranslatorOptions -> Bool
-simulateInstructions (optSimulationMode -> smode) = case smode of
-  SimulateAll -> True
-  SimulateInstructions -> True
-  SimulateInstruction _ -> True
-  _ -> False
-
-simulateFunctions :: TranslatorOptions -> Bool
-simulateFunctions (optSimulationMode -> smode) = case smode of
-  SimulateAll -> True
-  SimulateFunctions -> True
-  _ -> False
-
 -- | Write out the serialized What4 functions from the given 'SigMap'
 -- to their corresponding file path according to the given 'TranslatorOptions'
 serializeFormulas :: TranslatorOptions -> SigMap arch -> IO ()
 serializeFormulas opts (sFormulaPromises -> promises) = do
   let
-    FilePathConfig { fpOutFuns, fpOutInstrs, fpNormFuns, fpNormInstrs, ..} = optFilePaths opts
+    FilePathConfig { fpOutFuns, fpOutInstrs, ..} = optFilePaths opts
 
   (instrs, funs) <- (partitionEithers . reverse) <$> mapM getFormula promises
 
@@ -342,6 +319,7 @@ serializeFormulas opts (sFormulaPromises -> promises) = do
       void $ doSerialize sym Map.empty fpOutInstrs instrs
     SimulateInstruction _ ->
       void $ doSerialize sym Map.empty fpOutInstrs instrs
+    SimulateNone -> return ()
   where
     doSerialize :: (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
                 => sym
@@ -465,7 +443,7 @@ translationLoop fromInstr callStack defs (fnname, env) = do
         case result of
           Left _ -> do
             return Set.empty
-          Right (Some ssig@(SomeFunctionSignature sig), stmts) -> do
+          Right (Some (SomeFunctionSignature sig), stmts) -> do
             logMsgStr 2 $ "Translating function: " ++ show finalName ++ " for instruction: "
                ++ prettyIdent fromInstr
                ++ "\n CallStack: " ++ show callStack
@@ -501,7 +479,7 @@ runSigMapWithScope opts sigState sigEnv action = do
           }
   runSigMapM action sigMap
 
-withOnlineBackend' :: forall arch a
+withOnlineBackend' :: forall a
                     . (forall scope. CBO.YicesOnlineBackend scope (B.Flags B.FloatReal) -> IO a)
                    -> IO a
 withOnlineBackend' action = do
@@ -633,15 +611,6 @@ prettySymFnBody symFn = case B.symFnInfo symFn of
   B.DefinedFnInfo _ fnexpr _ -> showExpr fnexpr
   _ -> PP.text "[[uninterpreted]]"
 
-
-showExprPair :: (Some (B.Expr t), Some (B.Expr t)) -> [PP.Doc]
-showExprPair (Some expr1, Some expr2) =
-  [PP.text "Original Expression:", showExpr expr1, PP.text "Deserialized Expression:", showExpr expr2]
-
-showExprContext :: Int -> [(Some (B.Expr t), Some (B.Expr t))] -> [PP.Doc]
-showExprContext _ [] = []
-showExprContext count env = [PP.text "With context:"] ++ concat (map showExprPair (take count env))
-
 showExpr :: B.Expr t ret -> PP.Doc
 showExpr e = PP.text (LPP.displayS (LPP.renderPretty 0.4 80 (WI.printSymExpr e)) "")
 
@@ -662,8 +631,6 @@ doSimulation opts handleAllocator name p = do
           X.throw $ SimulationFailure $ T.pack (show e)
 
     isCheck = optCheckSerialization opts
-    logCfg = optLogCfg opts
-  Some nonceGenerator <- newIONonceGenerator
   withOnlineBackend' $ \backend -> do
     let cfg = ASL.SimulatorConfig { simOutputHandle = IO.stdout
                                   , simHandleAllocator = handleAllocator
@@ -948,9 +915,6 @@ instance MonadLog (SigMapM arch) where
     logCfg <- MSS.gets (optLogCfg . sOptions)
     liftIO $ Log.logIOWith logCfg (logIntToLvl logLvl) (T.unpack msg)
 
-execSigMapM :: SigMapM arch a -> SigMap arch -> IO (SigMap arch)
-execSigMapM (SigMapM m) = MSS.execStateT m
-
 runSigMapM :: SigMapM arch a -> SigMap arch -> IO (a, SigMap arch)
 runSigMapM (SigMapM m) = MSS.runStateT m
 
@@ -1022,25 +986,11 @@ noFilter = Filters
   (\_ -> \_ -> True)
   (\_ -> True)
 
-translateAll :: Filters -> Filters
-translateAll f =
-  f { funFilter = (\_ -> \_ -> True)
-    , instrFilter = (\_ -> True)
-    }
-
 translateOnlyInstr :: (T.Text, T.Text) -> Filters -> Filters
 translateOnlyInstr inm f =
   f { funFilter = (\(InstructionIdent nm enc _ _) -> \_ -> inm == (nm, enc))
     , instrFilter = (\(InstructionIdent nm enc _ _) -> (nm, enc) == inm)
     }
-
-
-translateNoArch64 :: Filters -> Filters
-translateNoArch64 f =
-  f { funFilter = (\(InstructionIdent _ _ iset _) -> \_ -> iset /= AS.A64 )
-    , instrFilter = (\(InstructionIdent _ _ iset _) -> iset /= AS.A64)
-    }
-
 
 translateArch32 :: Filters -> Filters
 translateArch32 f =

@@ -38,6 +38,7 @@ module Language.ASL.Formulas.Serialize
   , getSymFnEnv
   , FunSig(..)
   , FunctionMaker(..)
+  , mapFunctionMaker
   , envFunctionMaker
   , iteFunctionMaker
   , uninterpFunctionMaker
@@ -52,23 +53,18 @@ module Language.ASL.Formulas.Serialize
 import           Prelude hiding ( fail )
 
 import           GHC.Stack ( HasCallStack, callStack, getCallStack, withFrozenCallStack, prettySrcLoc )
-import           Control.Monad ( foldM, when )
-import qualified Control.Monad.Except as ME
+import           Control.Monad ( foldM )
 import           Control.Monad.Fail ( MonadFail, fail )
 import           Control.Monad.IO.Class ( MonadIO(..) )
 
 import qualified Data.Text as T
 import           Data.Map.Ordered (OMap)
 import qualified Data.Map.Ordered as OMap
-import           Data.Proxy
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.Sequence as Seq
-import qualified Data.SCargot.Repr.Rich as SE
 import qualified Data.IORef as IO
 
 import           Data.Parameterized.Classes
-import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
 
@@ -237,7 +233,7 @@ data FunctionMaker sym where
     -> FunctionMaker sym
 
 makeFunction :: MonadFail m => MonadIO m => FunctionMaker sym -> T.Text -> FunSig args ret -> m (WI.SymFn sym args ret)
-makeFunction (FunctionMaker sym f) nm sig = f nm sig >>= \case
+makeFunction (FunctionMaker _sym f) nm sig = f nm sig >>= \case
   Left err -> fail err
   Right result -> return result
 
@@ -366,7 +362,7 @@ deserializeSymFnEnv' :: forall sym m env
                     -- function calls 
                     -> SExpr
                     -> m ([(T.Text, SomeSome (WI.SymFn sym))], env)
-deserializeSymFnEnv' sym env extendenv mkFun sexpr = do
+deserializeSymFnEnv' _sym env extendenv mkFun sexpr = do
   symFnSExprs <- getSymFnEnv sexpr
   (env', symFns) <- foldM go (env, []) symFnSExprs
   return $ (reverse $ symFns, env')
@@ -383,7 +379,7 @@ deserializeSymFnEnv' sym env extendenv mkFun sexpr = do
 -- the given function binding environment 'NamedSymFnEnv'.
 -- Each deserialized function is added to the environment, so
 -- it is in-scope for subsequent functions.
-deserializeSymFnEnv :: forall sym m env
+deserializeSymFnEnv :: forall sym m
                      . (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
                     => MonadFail m
                     => MonadIO m
@@ -393,7 +389,7 @@ deserializeSymFnEnv :: forall sym m env
                     -> SExpr
                     -> m [(T.Text, SomeSome (WI.SymFn sym))]
 deserializeSymFnEnv sym env mkFun' sexpr =
-  fst <$> deserializeSymFnEnv' sym env (\nm symfn env -> return $ Map.insert nm symfn env) mkFun sexpr
+  fst <$> deserializeSymFnEnv' sym env (\nm symfn env' -> return $ Map.insert nm symfn env') mkFun sexpr
   where
     mkFun :: NamedSymFnEnv sym -> FunctionMaker sym
     mkFun env' = envFunctionMaker sym env' `composeMakers` mkFun'

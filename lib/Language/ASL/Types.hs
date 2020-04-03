@@ -55,7 +55,6 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.TraversableFC as FC
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.NatRepr as NR
-import           Numeric.Natural ( Natural )
 import qualified Data.Text as T
 import qualified Lang.Crucible.Types as CT
 import What4.BaseTypes as WT
@@ -63,9 +62,6 @@ import           Data.Parameterized.Classes
 import qualified Data.BitVector.Sized as BVS
 import qualified Language.ASL.Syntax as AS
 import qualified Data.Map as Map
-
-import qualified Language.Haskell.TH as TH
-import qualified Language.Haskell.TH.Syntax as TH
 
 
 type family ToBaseType (ctp :: CT.CrucibleType) :: WT.BaseType where
@@ -135,7 +131,6 @@ fromBaseIndex breprs creprs ix =
     Just (Some ix') | Just Refl <- testEquality (creprs Ctx.! ix') (CT.baseToType $ breprs Ctx.! ix) -> ix'
     _ -> error "Impossible"
 
-
 toBaseIndex :: Ctx.Assignment CT.BaseTypeRepr bctx
             -> Ctx.Assignment CT.TypeRepr (ToCrucTypes bctx)
             -> Ctx.Index (ToCrucTypes bctx) tp
@@ -148,8 +143,6 @@ toBaseIndex breprs creprs ix
 toBaseIndex _ _ _ = error "Impossible"
 
 data LabeledValue a b tp = LabeledValue a (b tp)
-
-
 
 instance (Eq a, TestEquality b) => TestEquality (LabeledValue a b) where
   LabeledValue a b `testEquality` LabeledValue a' b' =
@@ -219,6 +212,7 @@ deriving instance Show (UserType tp)
 
 instance ShowF UserType where
 
+-- | The 'WT.BaseTypeRepr' equivalent representation of a given 'UserType'.
 userTypeRepr :: UserType tp -> WT.BaseTypeRepr tp
 userTypeRepr ut =
   case ut of

@@ -7,7 +7,6 @@
 module Main ( main ) where
 
 import qualified Data.Map as M
-import           Data.Parameterized.Classes
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableFC
@@ -16,7 +15,6 @@ import qualified Data.Text as T
 import qualified What4.Interface as WI
 import qualified What4.Expr.Builder as B
 import qualified What4.Utils.Complex as U
-import qualified What4.Utils.Log as U
 import qualified What4.Utils.Util as U
 import qualified What4.Utils.Word16String as U
 import           Control.Monad.IO.Class

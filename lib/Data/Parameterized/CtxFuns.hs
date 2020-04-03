@@ -46,11 +46,9 @@ module Data.Parameterized.CtxFuns
 import           GHC.TypeLits
 import           Unsafe.Coerce
 import qualified Language.Haskell.TH as TH
-import qualified Language.Haskell.TH.Syntax as TH
 
 import           Control.Applicative
 
-import           Data.Maybe ( fromJust )
 import           Data.Proxy
 import           Data.Kind
 import           Data.Void
@@ -137,7 +135,11 @@ replicatedCtxPrf :: forall k n tp
                  -> Size (CtxReplicate k n)
                  -> Index (CtxReplicate k n) tp
                  -> tp :~: k
-replicatedCtxPrf n sz idx = unsafeCoerce (Refl :: tp :~: tp)
+replicatedCtxPrf _n _sz _idx = unsafeCoerce (Refl :: tp :~: tp)
+
+-- needed to avoid unused import warning
+_voidStub :: Void
+_voidStub = error "void"
 #else
 _ctxReplicateStep :: forall k f n. f n -> CtxReplicate k (n + 1) :~: (CtxReplicate k n ::> k)
 _ctxReplicateStep _ = unsafeCoerce (Refl :: CtxReplicate k n :~: CtxReplicate k n)
@@ -157,7 +159,7 @@ replicatedCtxPrf n sz idx =
       | Refl <- _ctxReplicateStep @k (NR.decNat n)
       , Refl <- NR.minusPlusCancel n (NR.knownNat @1)
       -> case viewIndex sz idx of
-           IndexViewLast sz' -> Refl
+           IndexViewLast _ -> Refl
            IndexViewInit idx' -> replicatedCtxPrf (NR.decNat n) (decSize sz) idx'
 #endif
 
@@ -170,7 +172,7 @@ type family MapCtx (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1) :: Ctx.Ctx k2 w
   MapCtx f Ctx.EmptyCtx = Ctx.EmptyCtx
   MapCtx f (xs Ctx.::> x) = MapCtx f xs Ctx.::> Apply f x
 
-applyMapCtx :: forall (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1)
+applyMapCtx :: forall k1 k2 (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1)
                  (g :: k2 -> Type) (h :: k1 -> Type)
                . Proxy f -> (forall (x :: k1). h x -> g (Apply f x))
               -> Ctx.Assignment h xs
@@ -179,7 +181,7 @@ applyMapCtx p1 f asn = case Ctx.viewAssign asn of
   Ctx.AssignEmpty -> Ctx.empty
   Ctx.AssignExtend asn' x -> applyMapCtx p1 f asn' Ctx.:> f x
 
-traverseMapCtx :: forall (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1)
+traverseMapCtx :: forall k1 k2 (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1)
                   (g :: k2 -> Type) (h :: k1 -> Type) m
                 . Applicative m
                => Proxy f -> (forall (x :: k1). h x -> m (g (Apply f x)))
@@ -189,22 +191,22 @@ traverseMapCtx p1 f asn = case Ctx.viewAssign asn of
   Ctx.AssignEmpty -> pure Ctx.empty
   Ctx.AssignExtend asn' x -> liftA2 (:>) (traverseMapCtx p1 f asn') (f x)
 
-revApplyMapCtx :: forall (f :: TyFun k1 k2 -> Type) (xs :: Ctx k1)
-                         (g :: k2 -> Type) (h :: k1 -> Type) w
+revApplyMapCtx :: forall k1 k2 (f :: TyFun k1 k2 -> Type) (xs :: Ctx k1)
+                         (g :: k2 -> Type) (h :: k1 -> Type) 
                 . Proxy f -> (forall (x :: k1). g (Apply f x) -> h x)
                -> Ctx.Assignment g (MapCtx f xs)
                -> Ctx.Assignment h xs
-revApplyMapCtx p1 f Ctx.Empty | Refl <- zeroMapCtx p1 (Proxy @xs) = Ctx.empty
+revApplyMapCtx p1 _f Ctx.Empty | Refl <- zeroMapCtx p1 (Proxy @xs) = Ctx.empty
 revApplyMapCtx p1 f (rest :> a) | ApplyRepr <- appliedMapCtx p1 (Proxy @xs) (viewCtxRepr (Ctx.size (rest :> a))) =
   revApplyMapCtx p1 f rest :> f a
 
-revTraverseMapCtx :: forall (f :: TyFun k1 k2 -> Type) (xs :: Ctx k1)
+revTraverseMapCtx :: forall k1 k2 (f :: TyFun k1 k2 -> Type) (xs :: Ctx k1)
                             (g :: k2 -> Type) (h :: k1 -> Type) m
                    . Applicative m
                   => Proxy f -> (forall (x :: k1). g (Apply f x) -> m (h x))
                   -> Ctx.Assignment g (MapCtx f xs)
                   -> m (Ctx.Assignment h xs)
-revTraverseMapCtx p1 f Ctx.Empty | Refl <- zeroMapCtx p1 (Proxy @xs) = pure $ Ctx.empty
+revTraverseMapCtx p1 _f Ctx.Empty | Refl <- zeroMapCtx p1 (Proxy @xs) = pure $ Ctx.empty
 revTraverseMapCtx p1 f (rest :> a)
   | ApplyRepr <- appliedMapCtx p1 (Proxy @xs) (viewCtxRepr (Ctx.size (rest :> a))) =
     liftA2 (:>) (revTraverseMapCtx p1 f rest) (f a)
@@ -245,7 +247,7 @@ fromMapCtxIndex :: forall f ctx tp
                 -> Index (MapCtx f ctx) tp
                 -> IndexApplied f ctx tp
 fromMapCtxIndex f ctx sz idx = case viewIndex sz idx of
-  IndexViewLast sz'
+  IndexViewLast _
     |  ApplyRepr <- appliedMapCtx f ctx (viewCtxRepr sz)
     -> IndexApplied f $ lastIndex (fromMapCtxSize f ctx sz)
   IndexViewInit idx'
@@ -285,11 +287,11 @@ mapCtxSize pf sz = case viewSize sz of
   IncSize sz' -> incSize (mapCtxSize pf sz')
 
 mapCtxIndex :: Proxy f
-                -> Size ctx
-                -> Index ctx tp
-                -> Index (MapCtx f ctx) (Apply f tp)
+            -> Size ctx
+            -> Index ctx tp
+            -> Index (MapCtx f ctx) (Apply f tp)
 mapCtxIndex pf sz idx = case viewIndex sz idx of
-  IndexViewLast sz' -> lastIndex (mapCtxSize pf sz)
+  IndexViewLast _ -> lastIndex (mapCtxSize pf sz)
   IndexViewInit idx' -> skipIndex (mapCtxIndex pf (decSize sz) idx')
 
 fromMapCtxSize :: forall f ctx

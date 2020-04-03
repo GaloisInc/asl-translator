@@ -39,8 +39,6 @@ module Language.ASL.Signature (
   , someSigRepr
  -- * Global variable wrapper
   , BaseGlobalVar(..)
-
-
   ) where
 
 import           Data.Parameterized.Classes

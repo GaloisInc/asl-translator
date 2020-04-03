@@ -55,7 +55,6 @@ import qualified Control.Monad.Fail as F
 import           Control.Monad (void)
 import           Control.Monad.Identity
 import qualified Control.Monad.Except as E
-import qualified Control.Monad.Writer.Lazy as W
 import qualified Control.Monad.RWS as RWS
 import qualified Data.BitVector.Sized as BVS
 import           Data.Foldable ( find )
@@ -65,9 +64,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
-import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.Classes
 
 import qualified Data.BitMask as BM
 import qualified Dismantle.ARM.ASL as DA ( Encoding(..), FieldConstraint(..) )
@@ -89,7 +86,7 @@ import qualified Language.ASL.SyntaxTraverse as TR
 import qualified Language.ASL.SyntaxTraverse as AS ( pattern VarName )
 import           Language.ASL.SyntaxTraverse (mkFunctionName)
 
-import           Util.Log ( MonadLog(..), MonadLogIO, LogCfg, runMonadLogIO, indentLog, unindentLog  )
+import           Util.Log ( MonadLog(..), MonadLogIO, LogCfg, runMonadLogIO, unindentLog  )
 
 data Definitions arch =
   Definitions { defSignatures :: Map.Map T.Text (SomeSimpleFunctionSignature, [AS.Stmt])
@@ -678,7 +675,7 @@ userTypeOfDef defType = do
       , Just (Some n) <- NR.someNat nbits
       , Just NR.LeqProof <- NR.isPosNat n -> do
       -- Enumeration types are represented as bitvectors.
-        forM (zip enumVals [0..]) $ \(nm, idx) -> do
+        forM_ (zip enumVals [0..]) $ \(nm, idx) -> do
           RWS.modify $ \st -> st { enums = Map.insert nm (Some n, idx) (enums st) }
         return $ Just $ Some $ UserEnum n
     DefTypeStruct _ structVars -> do
@@ -735,8 +732,8 @@ computeType' tp = case applyTypeSynonyms tp of
     ctps = map (\t -> case computeType' t of {Left bt -> bt; _ -> error "Bad type tuple"}) tps
     in case Ctx.fromList ctps of
          Some ctx -> Left $ Some (WT.BaseStructRepr ctx)
-  AS.TypeArray tp (AS.IxTypeRange (AS.ExprLitInt _) (AS.ExprLitInt _)) ->
-    case computeType' tp of
+  AS.TypeArray tp' (AS.IxTypeRange (AS.ExprLitInt _) (AS.ExprLitInt _)) ->
+    case computeType' tp' of
       Left (Some ty) -> Left $ Some $ WT.BaseArrayRepr (Ctx.empty Ctx.:> WT.BaseIntegerRepr) ty
       Right t' -> error $ "invalid target type for array: " ++ show t'
 

@@ -52,15 +52,11 @@ import           Data.Typeable
 import           Control.Applicative
 import qualified Control.Monad.Writer.Lazy as W
 import           Control.Monad.Identity
-import qualified Control.Monad.Except as E
 import qualified Control.Monad.Trans as MT
-import qualified Control.Monad.Reader as R
-import qualified Control.Monad.RWS as RWS
 import qualified Language.ASL.Syntax as AS
 import qualified Data.Text as T
 import qualified Data.Set as Set
 import qualified Data.Map as Map
-import qualified Control.Monad.State as MSS
 import           Data.Maybe (maybeToList, catMaybes, isJust)
 import           Language.ASL.Types
 import           Data.Parameterized.Classes

@@ -31,10 +31,6 @@ import           Control.Applicative ( Const(..) )
 
 import           Control.Monad.Identity
 import           Control.Monad ( liftM, unless )
-import           Control.Monad.Reader ( ReaderT, MonadReader )
-import qualified Control.Monad.Reader as MR
-import           Control.Monad.Except ( throwError, ExceptT, MonadError )
-import qualified Control.Monad.Except as ME
 import qualified Control.Monad.ST as ST
 import qualified Data.HashTable.Class as H
 
@@ -82,15 +78,6 @@ import qualified Language.ASL.Globals as G
 
 import qualified Text.PrettyPrint.HughesPJClass as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as LPP
-
-import Debug.Trace
-
--- import           Dismantle.Architecture.ARM.Location ( A32 )
--- import qualified Dismantle.Architecture.ARM.Location as AL
--- import qualified Dismantle.Architecture.Location as L
--- import qualified Dismantle.Architecture as A
--- import qualified Dismantle.BoundVar as BV
-
 
 data SimulatorConfig scope =
   SimulatorConfig { simOutputHandle :: IO.Handle
@@ -214,7 +201,7 @@ simulateFunction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
           | otherwise -> X.throwIO (UnexpectedReturnType btr)
 
 
-simulateInstruction :: forall arch sym init globalReads globalWrites tps scope
+simulateInstruction :: forall arch sym init globalReads globalWrites scope
                      . (CB.IsSymInterface sym, OnlineSolver scope sym)
                     => SimulatorConfig scope
                     -> AC.Instruction arch globalReads globalWrites init
@@ -387,7 +374,7 @@ executionFeatures nm sym = do
   timeout <- CS.genericToExecutionFeature <$> CS.timeoutFeature (20.00 :: NominalDiffTime)
   let fts = psf ++ [timeout]
   let cfg = WI.getConfiguration sym
-  pathSetter <- WC.getOptionSetting CBO.solverInteractionFile cfg
+  _pathSetter <- WC.getOptionSetting CBO.solverInteractionFile cfg
   -- res <- WC.setOpt pathSetter (T.pack "./output/yices.out")
   -- X.assert (null res) (return fts)
   return fts

@@ -1,3 +1,14 @@
+{-|
+Module           : Language.ASL.Translation
+Copyright        : (c) Galois, Inc 2020
+Maintainer       : Daniel Matichuk <dmatichuk@galois.com>
+
+Normalization of the translated ASL semantics to remove
+structs and integers.
+
+
+-}
+
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
@@ -21,11 +32,9 @@ module Language.ASL.Formulas.Normalize
 
 import           Prelude hiding ( fail )
 import           GHC.Stack
-import           Math.NumberTheory.Logarithms
 import           GHC.TypeLits
-import           Data.Kind
 
-import           Control.Monad ( liftM, unless, forM, when, void )
+import           Control.Monad ( liftM, forM, void )
 import qualified Control.Monad.ST as ST
 import           Control.Lens hiding (Index, (:>), Empty)
 import           Control.Monad.Fail
@@ -40,11 +49,9 @@ import qualified Control.Monad.IO.Class as IO
 import qualified Control.Concurrent.MVar as IO
 import qualified Control.Concurrent as IO
 
-import           Data.Foldable
-import           Data.Proxy
 import qualified Data.Map.Ordered as OMap
 import           Data.List ( intercalate )
-import           Data.Maybe ( catMaybes, mapMaybe, fromJust )
+import           Data.Maybe ( catMaybes, mapMaybe )
 import qualified Data.Text as T
 import qualified Data.HashTable.Class as H
 import           Data.Set ( Set )
@@ -52,18 +59,14 @@ import qualified Data.Set as Set
 import           Data.Map ( Map )
 import qualified Data.Map as Map
 import qualified Data.IORef as IO
-import qualified Text.PrettyPrint.ANSI.Leijen as LPP
-import           Data.List.NonEmpty (NonEmpty(..))
 
 import           Data.Parameterized.Pair
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Nonce
-import           Data.Parameterized.Map ( MapF )
 import qualified Data.Parameterized.NatRepr as NR
-import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Some ( Some(..), viewSome )
+import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
-import           Data.Parameterized.Context ( type (::>), pattern (:>), EmptyCtx, pattern Empty, (<++>), type (<+>) )
+import           Data.Parameterized.Context ( pattern (:>) )
 import qualified Data.Parameterized.Context as Ctx
 
 -- from this package
@@ -75,14 +78,10 @@ import qualified What4.SemiRing as WI
 import qualified What4.Expr.Builder as WB
 import qualified What4.Expr.WeightedSum as WSum
 import           What4.Utils.Util ( SomeSome(..) )
-import qualified What4.Expr.BoolMap as BM
 
 import qualified What4.Serialize.Printer as WP
 
 import qualified Language.ASL.Formulas.Serialize as FS
-import           Language.ASL.Types ( LabeledValue(..), projectValue, projectLabel )
-
-import           Debug.Trace
 
 data BuilderData t = NoBuilderData
 
@@ -92,7 +91,7 @@ normalizeSymFnEnv funsexpr minstexpr = do
   Some r <- newIONonceGenerator
   sym <- WB.newExprBuilder WB.FloatRealRepr NoBuilderData r
   -- WB.startCaching sym
-  NormalizeSymFnEnv env funsexprsrev proxyFns <- deserializeAndNormalize sym funsexpr
+  NormalizeSymFnEnv _ funsexprsrev proxyFns <- deserializeAndNormalize sym funsexpr
   let normFunSExprs = reverse $ (funsexprsrev)
 
   minstexpr' <- case minstexpr of
@@ -106,14 +105,6 @@ normalizeSymFnEnv funsexpr minstexpr = do
   funsexpr' <- return $ FS.assembleSymFnEnv $ map (uncurry FS.mkSymFnEnvEntry) normFunSExprs
 
   return $ (funsexpr', minstexpr')
-  where
-    serSymFn :: sym ~ WB.ExprBuilder t st fs
-                => sym
-                -> T.Text
-                -> SomeSome (WI.SymFn sym)
-                -> (T.Text, FS.SExpr)
-    serSymFn _ nm (SomeSome symFn) =
-      (nm, FS.serializeSymFn symFn)
 
 forkResult :: IO a -> IO (IO a)
 forkResult f = do
@@ -195,8 +186,8 @@ deserializeAndNormalize sym sexpr = do
       (symFn', normSymFns) <- normalizeSymFn sym nm symFn False
       let
         newnormfns = catMaybes $ map getSymFnEntry normSymFns
-        newnormfnsSer = map (\(nm, SomeSome fn) -> (nm, FS.serializeSymFn fn)) newnormfns
-        env' = foldr (\(nm,fn) env' -> Map.insert nm fn env') env newnormfns
+        newnormfnsSer = map (\(nm', SomeSome fn) -> (nm', FS.serializeSymFn fn)) newnormfns
+        env' = foldr (\(nm',fn) env'' -> Map.insert nm' fn env'') env newnormfns
       return $! NormalizeSymFnEnv
         { envAllFns = Map.insert nm (SomeSome symFn') env'
         , envNormFns = newnormfnsSer ++ normfns
@@ -226,10 +217,10 @@ traverseTreeWithIndex :: forall f g tp m
 traverseTreeWithIndex f tree = go [] tree
   where
     go :: forall tp'. [Integer] -> AssignmentTree f tp' -> m (AssignmentTree g tp')
-    go path tree =  case tree of
+    go path tree' =  case tree' of
       AssignmentTreeLeaf a -> AssignmentTreeLeaf <$> f (reverse path) a
       AssignmentTreeNode nodes -> do
-        nodes' <- Ctx.traverseWithIndex (\idx tree' -> go ((fromIntegral $ Ctx.indexVal idx) : path) tree') nodes
+        nodes' <- Ctx.traverseWithIndex (\idx tree'' -> go ((fromIntegral $ Ctx.indexVal idx) : path) tree'') nodes
         return $ AssignmentTreeNode nodes'
 
 
@@ -273,6 +264,7 @@ flattenZipTreePair tree1 tree2 = case (tree1, tree2) of
   (AssignmentTreeLeaf l1, AssignmentTreeLeaf l2) -> [Pair l1 l2]
   (AssignmentTreeNode trees1, AssignmentTreeNode trees2) ->
     concat $ FC.toListFC (\(Const c) -> c) $ Ctx.zipWith (\a1 a2 -> Const (flattenZipTreePair a1 a2)) trees1 trees2
+  _ -> error $ "flattenZipTreePair: unxpected tree pair"
 
 pairsToAssignments :: forall f g. [Pair f g] -> Pair (Ctx.Assignment f) (Ctx.Assignment g)
 pairsToAssignments = go (Ctx.empty, Ctx.empty)
@@ -292,7 +284,7 @@ getBoundVarsTree :: forall sym t st fs tp
 getBoundVarsTree sym bv = case WB.bvarType bv of
   WI.BaseStructRepr _ -> do
     freshBVTree <- generateTree WB.bvarType mkSubBVar bv
-    freshStruct <- collapseAssignmentTree (\bv -> return $ WI.varExpr sym bv) (WI.mkStruct sym) freshBVTree
+    freshStruct <- collapseAssignmentTree (\bv' -> return $ WI.varExpr sym bv') (WI.mkStruct sym) freshBVTree
     return $ PairF freshStruct freshBVTree
   _ -> return $ PairF (WI.varExpr sym bv) (AssignmentTreeLeaf bv)
   where
@@ -300,11 +292,11 @@ getBoundVarsTree sym bv = case WB.bvarType bv of
                . WB.ExprBoundVar t (WI.BaseStructType ctx)
               -> Ctx.Index ctx tp'
               -> IO (WB.ExprBoundVar t tp')
-    mkSubBVar bv idx = do
+    mkSubBVar bv' idx = do
       let
-        WI.BaseStructRepr reprs = WB.bvarType bv
+        WI.BaseStructRepr reprs = WB.bvarType bv'
         repr = reprs Ctx.! idx
-      WI.freshBoundVar sym ((WB.bvarName bv) `appendToSymbol` ("_" ++ show (Ctx.indexVal idx))) repr
+      WI.freshBoundVar sym ((WB.bvarName bv') `appendToSymbol` ("_" ++ show (Ctx.indexVal idx))) repr
 
 unpackArguments :: forall sym t st fs ctx tp
                  . sym ~ WB.ExprBuilder t st fs
@@ -328,8 +320,8 @@ normalizeSymFn :: forall sym t st fs args ret
                -> WB.ExprSymFn t args ret
                -> Bool
                -> IO (WB.ExprSymFn t args ret, [Some (EmbeddedSymFn t)])
-normalizeSymFn sym name symFn topLevel = case WB.symFnInfo symFn of
-  WB.DefinedFnInfo args initexpr eval -> do
+normalizeSymFn sym name symFn topLevel
+  | WB.DefinedFnInfo args initexpr _eval <- WB.symFnInfo symFn = do
     -- e.g. f ( S :: (Int, (Bool, Int)) ) :: ((Int, Bool), Int) := ((- S[2:2], NOT S[2:1]), S[1] + S[2:2])
     
     -- elimate all struct-type bound variables by flattening them into multiple variables.
@@ -383,7 +375,7 @@ normalizeSymFn sym name symFn topLevel = case WB.symFnInfo symFn of
                    -> RebindM t (WB.Expr t tp, Bool)
       simplifyInts expr = do
         nfCache <- MS.gets rbNormFieldCache
-        expr' <- withSym $ \sym -> normFieldAccs sym nfCache expr
+        expr' <- withSym $ \sym' -> normFieldAccs sym' nfCache expr
         case exprDepthBounded 7 expr' && not topLevel of
           True -> return (expr', True)
           False -> do
@@ -403,6 +395,7 @@ normalizeSymFn sym name symFn topLevel = case WB.symFnInfo symFn of
           symbol = appendToSymbol (WB.symFnName symFn) pathstr
           name' = name <> T.pack pathstr
         in mkSymFn allArgs allFreshExprs symbol name' inline e
+normalizeSymFn _ _ _ _ = error $ "normalizeSymFn: unexpected symFn kind."
 
 -- | True if the expression is not any deeper than the given depth
 exprDepthBounded :: Integer
@@ -411,16 +404,13 @@ exprDepthBounded :: Integer
 exprDepthBounded 0 _ = False
 exprDepthBounded i expr = case expr of
   WB.AppExpr appExpr -> FC.allFC (exprDepthBounded (i-1)) $ WB.appExprApp appExpr
-  WB.NonceAppExpr nae ->
-    case WB.nonceExprApp nae of
-      WB.FnApp symFn args -> FC.allFC (exprDepthBounded (i-1)) $ args
+  WB.NonceAppExpr nae
+    | WB.FnApp _symFn args <- WB.nonceExprApp nae ->
+      FC.allFC (exprDepthBounded (i-1)) $ args
   _ -> True
 
 pathToString :: [Integer] -> String
 pathToString idxpath = intercalate "_" $ map show idxpath
-
-labeledVarExpr :: WB.ExprBuilder t st fs -> WB.ExprBoundVar t tp -> LabeledValue WI.SolverSymbol (WB.Expr t) tp
-labeledVarExpr sym bv = LabeledValue (WB.bvarName bv) (WI.varExpr sym bv)
 
 refreshBoundVar :: forall sym t tp st fs
                   . sym ~ WB.ExprBuilder t st fs
@@ -548,24 +538,6 @@ prettyResult res =
 
   in T.unpack $ FS.printSExpr $ fmap go (WP.resSExpr res)
 
-checkFieldsNorm :: forall t tp. String -> WB.Expr t tp -> IO (WB.Expr t tp)
-checkFieldsNorm msg e = case e of
-  WB.AppExpr appExpr -> do
-    WB.traverseApp (checkFieldsNorm msg) (WB.appExprApp appExpr)
-    go (WB.appExprApp appExpr)
-  WB.NonceAppExpr nae ->
-    case WB.nonceExprApp nae of
-      WB.FnApp _ args -> do
-        _ <- FC.traverseFC (checkFieldsNorm msg) args
-        return e
-  _ -> return e
-  where
-    go :: WB.App (WB.Expr t) tp -> IO (WB.Expr t tp)
-    go (WB.StructField e' idx _) = do
-      fail $ "checkFieldsNorm: unexpected structfield in expression: " ++ msg
-    go _ = return e
-
-
 -- | Normalize struct field accesses to reduce across if-then-else expressions.
 -- i.e. (field 1 (ite b (W X) (Y Z))) --> (ite b W Y)
 normFieldAccs :: forall sym st fs t tp
@@ -650,58 +622,6 @@ bvSize :: WB.Expr t (WI.BaseBVType n) -> NR.NatRepr n
 bvSize e = case WI.exprType e of
   WI.BaseBVRepr sz -> sz
 
-bvExpr :: BVExpr t n -> WB.Expr t (WI.BaseBVType n)
-bvExpr (BVExpr e) = e
-
-bvSize' :: BVExpr t n -> NR.NatRepr n
-bvSize' (BVExpr e) = bvSize e
-
-withBVSize :: WB.Expr t (WI.BaseBVType n) -> (1 NR.<= n => f) -> f
-withBVSize e f = case WI.exprType e of
-    WI.BaseBVRepr _ -> f
-
-matchSizes' :: forall sym st fs t n n'
-            . sym ~ WB.ExprBuilder t st fs
-           => sym
-           -> WB.Expr t (WI.BaseBVType n)
-           -> WB.Expr t (WI.BaseBVType n')
-           -> IO (Pair (BVExpr t) (BVExpr t))
-matchSizes' sym e1 e2 = withBVSize e1 $ withBVSize e2 $ case NR.testNatCases (bvSize e1) (bvSize e2) of
-  NR.NatCaseLT NR.LeqProof -> do
-    e1' <- WI.bvSext sym (bvSize e2) e1
-    return $ Pair (BVExpr e1') (BVExpr e2)
-  NR.NatCaseGT NR.LeqProof -> do
-    e2' <- WI.bvSext sym (bvSize e1) e2
-    return $ Pair (BVExpr e1) (BVExpr e2')
-  NR.NatCaseEQ -> return $ Pair (BVExpr e1) (BVExpr e2)
-
--- | Either sign-extend or truncate a bitvector to the given width.
-matchSizeToS :: forall sym st fs t n' n
-              . sym ~ WB.ExprBuilder t st fs
-             => 1 <= n
-             => sym
-             -> NR.NatRepr n
-             -> WB.Expr t (WI.BaseBVType n')
-             -> IO (WB.Expr t (WI.BaseBVType n))
-matchSizeToS sym nr e = withBVSize e $ case NR.testNatCases (bvSize e) nr of
-  NR.NatCaseLT NR.LeqProof -> WI.bvSext sym nr e
-  NR.NatCaseGT NR.LeqProof -> WI.bvTrunc sym nr e
-  NR.NatCaseEQ -> return $ e
-
-
--- | Either zero-extend or truncate a bitvector to the given width.
-matchSizeToU :: forall sym st fs t n' n
-              . sym ~ WB.ExprBuilder t st fs
-             => 1 <= n
-             => sym
-             -> NR.NatRepr n
-             -> WB.Expr t (WI.BaseBVType n')
-             -> IO (WB.Expr t (WI.BaseBVType n))
-matchSizeToU sym nr e = withBVSize e $ case NR.testNatCases (bvSize e) nr of
-  NR.NatCaseLT NR.LeqProof -> WI.bvZext sym nr e
-  NR.NatCaseGT NR.LeqProof -> WI.bvTrunc sym nr e
-  NR.NatCaseEQ -> return $ e
-
 data WrapInt f g tp where
   WrapIntSimple :: f tp -> g tp -> WrapInt f g tp
   WrapIntInt :: f (WI.BaseBVType n) -> g WI.BaseIntegerType -> WrapInt f g WI.BaseIntegerType
@@ -779,14 +699,14 @@ mkUF nm args ret = do
 runtimeAssert :: WB.Expr t WI.BaseBoolType
               -> WB.Expr t (WI.BaseBVType n)
               -> RebindM t (WB.Expr t (WI.BaseBVType n))
-runtimeAssert pred e = case WI.asConstantPred pred of
+runtimeAssert pred' e = case WI.asConstantPred pred' of
   Just True -> return e
   Just False -> fail $ "runtimeAssert: asserted False for: " ++ showExpr e
   Nothing -> do
     WI.BaseBVRepr n <- return $ WI.exprType e
     let nm = "assertBV_" ++ show (NR.intValue n)
     symFn <- mkUF nm (Ctx.empty Ctx.:> WI.BaseBoolRepr Ctx.:> WI.exprType e) (WI.exprType e)
-    withSym $ \sym -> WI.applySymFn sym symFn (Ctx.empty Ctx.:> pred Ctx.:> e)
+    withSym $ \sym -> WI.applySymFn sym symFn (Ctx.empty Ctx.:> pred' Ctx.:> e)
 
 
 safeMatchSizeTo :: forall t n n'
@@ -826,11 +746,6 @@ safeIntBVAdd e1 e2 = withExpr "safeIntBVAdd 1" e1 $ withExpr "safeIntBVAdd 2" e2
     isValid <- WI.notPred sym isOverflow
     return $ (isValid, result)
   runtimeAssert isValid result
-
-bvToIntegerBV :: forall t n
-               . WB.Expr t (WI.BaseBVType n)
-              -> RebindM t (WB.Expr t IntegerBVType)
-bvToIntegerBV e = safeMatchSizeTo True integerBVSzRepr e
 
 data BVOp t where
   BVOp :: (forall n
@@ -872,7 +787,7 @@ extractInts' expr =  withExpr "extractInts'" expr $ do
           result <- bvOp bv1' bv2'
           withSym $ \sym -> WI.sbvToInteger sym result
 
-    _ | Just (SomeSymFn _ (Ctx.Empty Ctx.:> arg)) <- asSymFn (\nm -> nm == "extractBitVinttobv") expr
+    _ | Just (SomeSymFn _ (Ctx.Empty Ctx.:> _arg)) <- asSymFn (\nm -> nm == "extractBitVinttobv") expr
         -> return expr
 
     _ | Just (expr', AsBVRepr sz) <- asIntegerToSBV expr -> do
@@ -885,14 +800,12 @@ extractInts' expr =  withExpr "extractInts'" expr $ do
       let ret = if ap == ap' then return expr else withSym $ \sym -> WB.sbMakeExpr sym ap'
       goApp ret ap'
 
-    WB.NonceAppExpr nae ->
-      case WB.nonceExprApp nae of
-        WB.FnApp symFn args -> do
-          args' <- FC.traverseFC (extractInts) args
-          if (args == args') then
-            return expr
-          else
-            withSym $ \sym -> WI.applySymFn sym symFn args'
+    WB.NonceAppExpr nae | WB.FnApp symFn args <- WB.nonceExprApp nae -> do
+      args' <- FC.traverseFC (extractInts) args
+      if (args == args') then
+        return expr
+      else
+        withSym $ \sym -> WI.applySymFn sym symFn args'
     _ -> return expr
 
   where
@@ -936,7 +849,7 @@ asSBVToInteger :: WB.Expr t tp
                -> Maybe (Some (BVExpr t), tp :~: WI.BaseIntegerType)
 asSBVToInteger expr = case asSymFn (\nm -> "sbvToInteger_" `T.isPrefixOf` nm) expr of
   Just (SomeSymFn _ (Ctx.Empty Ctx.:> arg))
-    | WI.BaseBVRepr n <- WI.exprType arg
+    | WI.BaseBVRepr _ <- WI.exprType arg
     , WI.BaseIntegerRepr <- WI.exprType expr -> return $ (Some $ BVExpr arg, Refl)
   _ -> case WB.asApp expr of
     Just (WB.SBVToInteger e) -> return (Some $ BVExpr e, Refl)
@@ -948,8 +861,8 @@ asIntegerToSBV' :: (T.Text -> Bool)
 asIntegerToSBV' f expr = case asSymFn f expr of
   Just (SomeSymFn _ (Ctx.Empty Ctx.:> arg))
     | WI.BaseIntegerRepr <- WI.exprType arg
-    , WI.BaseBVRepr n <- WI.exprType expr -> return $ (arg, AsBVRepr (bvSize expr))
-  Nothing -> fail ""
+    , WI.BaseBVRepr _ <- WI.exprType expr -> return $ (arg, AsBVRepr (bvSize expr))
+  _ -> fail ""
 
 asIntegerToSBV :: WB.Expr t tp
                -> Maybe (WB.Expr t WI.BaseIntegerType, AsBVRepr tp)
@@ -986,7 +899,7 @@ extractBitV' expr = withExpr "extractBitV'" expr $ do
     WB.AppExpr appExpr -> do
       expr' <- go $! WB.appExprApp appExpr
       return $! expr'
-    WB.BoundVarExpr bv -> withSym $ \sym -> do
+    WB.BoundVarExpr _ -> withSym $ \sym -> do
       freshIntBV <- WI.freshBoundVar sym WI.emptySymbol WI.BaseIntegerRepr
       fnBody <- WI.integerToBV sym (WI.varExpr sym freshIntBV) integerBVSzRepr
       fn <- WI.definedFn sym
@@ -1108,7 +1021,7 @@ errorHere msg = do
   ME.throwError $ RebindError msg'
 
 newtype RebindM t a =
-  RebindM { unRB :: ME.ExceptT (RebindException t) (MR.ReaderT (RebindEnv t) (MS.StateT (RebindState t) IO)) a }
+  RebindM { _unRB :: ME.ExceptT (RebindException t) (MR.ReaderT (RebindEnv t) (MS.StateT (RebindState t) IO)) a }
   deriving (Functor
            , Applicative
            , Monad
@@ -1139,8 +1052,6 @@ evalRebindM sym nm f = evalRebindM' sym nm f >>= \case
   Left (RebindError msg) -> fail msg
   Right a -> return a
 
-liftIO1 :: IO.MonadIO m => (a -> IO c) -> a -> m c
-liftIO1 f a = IO.liftIO $ f a
 
 liftIO2 :: IO.MonadIO m => (a -> b -> IO c) -> a -> b -> m c
 liftIO2 f a b = IO.liftIO $ f a b
@@ -1150,10 +1061,7 @@ withExpr :: Show a
          -> WB.Expr t tp
          -> RebindM t a
          -> RebindM t a
-withExpr msg e f = do
-  env <- MR.ask
-  ExprPath p s <- rbPath <$> MR.ask
-  MR.local (\env -> env {rbPath = addToPath msg e (rbPath env)}) $ f
+withExpr msg e f = MR.local (\env -> env {rbPath = addToPath msg e (rbPath env)}) $ f
 
 -- | Normalize an integer expression, then extract its bitvector-equivalent.
 extractBitV :: WB.Expr t WI.BaseIntegerType

@@ -31,8 +31,8 @@ module Language.ASL.Globals
   , GlobalsType
   , IndexedSymbol
   , GlobalRef(..)
-  , IsGlobal(..)
-  , IsSimpleGlobal(..)
+  , IsGlobal
+  , IsSimpleGlobal
   , SimpleGlobalRef
   , GPRRef
   , SIMDRef
@@ -124,15 +124,14 @@ import qualified Control.Monad.Except as ME
 
 import           Data.Kind
 import           Data.Proxy
-import           Data.Void
 import qualified Data.Text as T
 import           Data.Map ( Map )
 import qualified Data.Map as Map
-import           Data.Maybe ( catMaybes, fromJust )
+import           Data.Maybe ( catMaybes )
 
 
 import           Data.Parameterized.Context as Ctx
-import           Data.Parameterized.Some ( Some(..), viewSome )
+import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.NatRepr as NR
@@ -159,8 +158,6 @@ import           Language.ASL.Globals.Definitions
 
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as TH
-
-import           Unsafe.Coerce
 
 data GlobalsTypeWrapper :: TyFun Symbol WI.BaseType -> Type
 type instance Apply GlobalsTypeWrapper s = GlobalsType s
@@ -577,11 +574,6 @@ globalRefMap :: MapF CT.SymbolRepr GlobalRef
 globalRefMap = MapF.fromList $
   FC.toListFC (\gb -> Pair (globalRefSymbol gb) gb) allGlobalRefs
 
-ctxSizeRepr :: forall ctx. Size ctx -> NR.NatRepr (CtxSize ctx)
-ctxSizeRepr sz = case viewSize sz of
-  ZeroSize -> NR.knownNat
-  IncSize sz' -> NR.addNat (NR.knownNat @1) (ctxSizeRepr sz')
-
 testGlobalEq :: forall s s'
               . IsGlobal s
              => GlobalRef s'
@@ -631,12 +623,6 @@ lookupGlobalRef :: String -> Maybe (Some GlobalRef)
 lookupGlobalRef str = case CT.someSymbol (T.pack str) of
   Some symb -> Some <$> lookupGlobalRefSymbol symb
 
-lookupSimpleGlobalRef :: String -> Maybe (Some SimpleGlobalRef)
-lookupSimpleGlobalRef str = case lookupGlobalRef str of
-  Just (Some (SimpleGlobalRef sgr)) -> Just $ Some sgr
-  _ -> Nothing
-
-
 instance TH.Lift (GlobalRef s) where
   lift gr = [e| knownGlobalRef :: GlobalRef $(TH.litT (TH.strTyLit (T.unpack $ CT.symbolRepr $ globalRefSymbol gr))) |]
 
@@ -647,7 +633,7 @@ staticConsistencyCheck _
   | pcGref <- knownGlobalRef @"_PC"
   , SimpleGlobalRef pcSref <- knownGlobalRef @"_PC"
   , (pcSref' ::  SimpleGlobalRef "_PC") <- knownSimpleGlobalRef @"_PC"
-  , (pcRepr :: WI.BaseTypeRepr (WI.BaseBVType 32)) <- globalRefRepr pcGref
+  , (_ :: WI.BaseTypeRepr (WI.BaseBVType 32)) <- globalRefRepr pcGref
   , Just Refl <- testEquality pcSref pcSref'
   , gpr13GRef <- knownGlobalRef @"_R13"
   , gpr13Ref' <- knownGPRRef @13

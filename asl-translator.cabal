@@ -22,7 +22,7 @@ flag unsafe-operations
 
 flag asl-lite
   Description: Use a trimmed-down set of instructions for the ASL specification (sufficient to disassemble u-boot).
-  Default: True
+  Default: False
 
 common shared-properties
   default-language:    Haskell2010
