@@ -76,9 +76,12 @@ type MaxSIMD = 31
 type ArrayBaseType idxsz valsz = WI.BaseArrayType(EmptyCtx ::> WI.BaseBVType idxsz) (WI.BaseBVType valsz)
 
 
-type MemoryBaseType = ArrayBaseType 32 8
-type AllGPRBaseType = ArrayBaseType 4 32
-type AllSIMDBaseType = ArrayBaseType 8 128
+-- type MemoryBaseType = ArrayBaseType 32 8
+-- type AllGPRBaseType = ArrayBaseType 4 32
+-- type AllSIMDBaseType = ArrayBaseType 8 128
+type MemoryBaseType = WI.BaseBVType 146
+type AllGPRBaseType = WI.BaseBVType 148
+type AllSIMDBaseType = WI.BaseBVType 149
 
 maxGPRRepr :: NR.NatRepr MaxGPR
 maxGPRRepr = NR.knownNat
@@ -159,12 +162,10 @@ flatTrackedGlobals' =
   <++> simdGlobals'') :> memoryGlobal
 
 memoryGlobal :: Global MemoryBaseType
-memoryGlobal =
-  def "__Memory" (WI.BaseArrayRepr (empty :> WI.BaseBVRepr (WI.knownNat @32))
-    (WI.BaseBVRepr (WI.knownNat @8))) domainUnbounded
+memoryGlobal = def "__Memory" knownRepr domainUnbounded
 
 gprGlobal :: Global AllGPRBaseType
-gprGlobal = def "GPRS" (knownRepr :: WI.BaseTypeRepr AllGPRBaseType) domainUnbounded
+gprGlobal = def "GPRS" knownRepr domainUnbounded
 
 gprGlobals' :: Some (Assignment Global)
 gprGlobals' = Ctx.fromList $
@@ -172,7 +173,7 @@ gprGlobals' = Ctx.fromList $
         (knownRepr :: WI.BaseTypeRepr (WI.BaseBVType 32)) domainUnbounded) [0 .. (NR.intValue maxGPRRepr)]
 
 simdGlobal :: Global AllSIMDBaseType
-simdGlobal = def "SIMDS" (knownRepr :: WI.BaseTypeRepr AllSIMDBaseType) domainUnbounded
+simdGlobal = def "SIMDS" knownRepr domainUnbounded
 
 simdGlobals' :: Some (Assignment Global)
 simdGlobals' = Ctx.fromList $
