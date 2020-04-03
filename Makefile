@@ -14,18 +14,16 @@ cabal.project: cabal.project.newbuild
 ${PARSED}/%.sexpr: ${ASL_PARSER}/asl-parsed/%.sexpr ./data/%.asl
 	cp $< $@
 
-./data/%.asl: ${ASL_PARSER}/asl/%.asl
-	cp $< $@
-
 ${PARSED}/extra_defs.sexpr: ./data/extra_defs.asl
 	cd ${ASL_PARSER}/asl-parser-java && \
 	./gradlew -q run --args="defs $(abspath $<)" > $(abspath $@) && \
 	[[ -s $(abspath $@) ]] || (rm -f $(abspath $@) && exit 1)
 
-${ASL_PARSER}/asl/%.asl:
-	$(MAKE) --directory=${ASL_PARSER} ./asl/$(@F)
+${ASL_PARSER}/asl/%.asl: ./data/%.asl
+	mkdir -p ${ASL_PARSER}/asl
+	cp $< $@
 
-${ASL_PARSER}/asl-parsed/%.sexpr:
+${ASL_PARSER}/asl-parsed/%.sexpr: ${ASL_PARSER}/asl/%.asl
 	$(MAKE) --directory=${ASL_PARSER} ./asl-parsed/$(@F)
 
 SPEC_FILES = arm_defs.sexpr arm_instrs.sexpr support.sexpr arm_regs.sexpr extra_defs.sexpr
