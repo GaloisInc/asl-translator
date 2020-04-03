@@ -61,7 +61,7 @@ module Language.ASL.Globals.Definitions
 
 import           GHC.TypeNats ( KnownNat )
 import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.Context ( EmptyCtx, (::>), Assignment, empty, pattern (:>), (<++>) )
+import           Data.Parameterized.Context ( Assignment, empty, pattern (:>), (<++>) )
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
 
@@ -79,14 +79,14 @@ type MaxGPR = 14
 -- | The maximum index for a vector register
 type MaxSIMD = 31
 
-type ArrayBaseType idxsz valsz = WI.BaseArrayType(EmptyCtx ::> WI.BaseBVType idxsz) (WI.BaseBVType valsz)
+-- type ArrayBaseType idxsz valsz = WI.BaseArrayType(EmptyCtx ::> WI.BaseBVType idxsz) (WI.BaseBVType valsz)
 
--- | The type of the array representing all of memory
-type MemoryBaseType = ArrayBaseType 32 8
--- | The type of the array representing all user registers
-type AllGPRBaseType = ArrayBaseType 4 32
--- | The type of the array representing all vector registers
-type AllSIMDBaseType = ArrayBaseType 8 128
+-- type MemoryBaseType = ArrayBaseType 32 8
+-- type AllGPRBaseType = ArrayBaseType 4 32
+-- type AllSIMDBaseType = ArrayBaseType 8 128
+type MemoryBaseType = WI.BaseBVType 146
+type AllGPRBaseType = WI.BaseBVType 148
+type AllSIMDBaseType = WI.BaseBVType 149
 
 -- | A 'NR.NatRepr' for 'MaxGPR'
 maxGPRRepr :: NR.NatRepr MaxGPR
@@ -171,13 +171,11 @@ flatTrackedGlobals' =
 
 -- | The 'Global' representing all of memory.
 memoryGlobal :: Global MemoryBaseType
-memoryGlobal =
-  def "__Memory" (WI.BaseArrayRepr (empty :> WI.BaseBVRepr (WI.knownNat @32))
-    (WI.BaseBVRepr (WI.knownNat @8))) domainUnbounded
+memoryGlobal = def "__Memory" knownRepr domainUnbounded
 
 -- | The 'Global' reflecting the entire state of the user registers (defined in ASL as "GPRS")
 gprGlobal :: Global AllGPRBaseType
-gprGlobal = def "GPRS" (knownRepr :: WI.BaseTypeRepr AllGPRBaseType) domainUnbounded
+gprGlobal = def "GPRS" knownRepr domainUnbounded
 
 -- | The user registers expanded into a distinct 'Global' for each register.
 gprGlobals' :: Some (Assignment Global)
@@ -187,7 +185,7 @@ gprGlobals' = Ctx.fromList $
 
 -- | The 'Global' reflecting the entire state of the vector registers (defined in ASL as "SIMDS")
 simdGlobal :: Global AllSIMDBaseType
-simdGlobal = def "SIMDS" (knownRepr :: WI.BaseTypeRepr AllSIMDBaseType) domainUnbounded
+simdGlobal = def "SIMDS" knownRepr domainUnbounded
 
 -- | The vector registers expanded into a distinct 'Global' for each register.
 simdGlobals' :: Some (Assignment Global)

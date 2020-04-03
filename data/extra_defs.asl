@@ -102,7 +102,8 @@ boolean __UnpredictableBehavior;
 // de-muxing the general registers into distinct globals
 
 type regidx = bits(4);
-array bits(32) GPRS[regidx];
+//array bits(32) GPRS[regidx];
+bits(148) GPRS;
 
 _R[integer n] = bits(32) value
     assert n >= 0 && n <= 14;
@@ -126,19 +127,26 @@ Rmode[integer n, bits(5) mode] = bits(32) value
     _R[n] = value;
 
 R[integer n] = bits(32) value
-    _R[n] = value;
-    return;
+    if n == 15 then
+        assert FALSE;
+        return;
+    else
+        _R[n] = value;
+        return;
 
 bits(32) R[integer n]
     if n == 15 then
-        offset = (if CurrentInstrSet() == InstrSet_A32 then 8 else 4);
-        return _PC + offset;
+        return PC;
     else
         return _R[n];
 
-type simdidx = bits(8);
-array bits(128) SIMDS[simdidx];
+bits(32) PC
+    offset = (if CurrentInstrSet() == InstrSet_A32 then 8 else 4);
+    return _PC + offset;
 
+type simdidx = bits(8);
+//array bits(128) SIMDS[simdidx];
+bits(149) SIMDS;
 
 _V[integer n] = bits(128) value
     assert n >= 0 && n <= 31;
@@ -219,7 +227,7 @@ ASLSetUnpredictable()
 
 // Memory model
 
-__RAM(32) __Memory;
+bits(146) __Memory;
 
 Mem_Internal_Set(bits(32) address, integer size, bits(8*size) value)
   case size of
@@ -299,7 +307,8 @@ CheckAdvSIMDEnabled()
 
 // Swap out _Dclone for _Vclone by inlining the D getter inside of Din
 
-array bits(128) SIMDS_clone[simdidx];
+//array bits(128) SIMDS_clone[simdidx];
+bits(149) SIMDS_clone;
 
 bits(64) Din[integer n]
     assert n >= 0 && n <= 31;

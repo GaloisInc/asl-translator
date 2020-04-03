@@ -111,6 +111,9 @@ module Language.ASL.Globals
   , getPostcond
   -- final self-test for this module
   , consistencyCheck
+  , MemoryBaseType
+  , AllGPRBaseType
+  , AllSIMDBaseType
   )
 
 where
