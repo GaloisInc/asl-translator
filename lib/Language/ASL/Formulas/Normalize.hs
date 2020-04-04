@@ -709,6 +709,20 @@ runtimeAssert pred' e = case WI.asConstantPred pred' of
     withSym $ \sym -> WI.applySymFn sym symFn (Ctx.empty Ctx.:> pred' Ctx.:> e)
 
 
+unsafeMatchSizeTo :: forall t n n'
+                 . 1 <= n'
+                => Bool
+                -> NR.NatRepr n'
+                -> WB.Expr t (WI.BaseBVType n)
+                -> RebindM t (WB.Expr t (WI.BaseBVType n'))
+unsafeMatchSizeTo signed nr e = withExpr ("unsafeMatchSizeTo " ++ show signed ++ " " ++ show nr) e $ do
+  WI.BaseBVRepr n <- return $ WI.exprType e
+  case NR.testNatCases n nr of
+    NR.NatCaseLT NR.LeqProof -> withSym $ \sym -> do
+      if signed then WI.bvSext sym nr e else WI.bvZext sym nr e
+    NR.NatCaseGT NR.LeqProof -> withSym $ \sym -> WI.bvTrunc sym nr e
+    NR.NatCaseEQ -> return e
+
 safeMatchSizeTo :: forall t n n'
                  . 1 <= n'
                 => Bool
@@ -727,6 +741,12 @@ safeMatchSizeTo signed nr e = withExpr ("safeMatchSizeTo " ++ show signed ++ " "
       runtimeAssert isValid truncBv
     NR.NatCaseEQ -> return e
 
+unsafeIntBVMul :: WB.Expr t IntegerBVType
+               -> WB.Expr t IntegerBVType
+               -> RebindM t (WB.Expr t IntegerBVType)
+unsafeIntBVMul e1 e2 = withExpr "unsafeIntBVMul 1" e1 $ withExpr "unsafeIntBVMul 2" e2 $ do
+  withSym $ \sym -> WI.bvMul sym e1 e2
+
 safeIntBVMul :: WB.Expr t IntegerBVType
              -> WB.Expr t IntegerBVType
              -> RebindM t (WB.Expr t IntegerBVType)
@@ -737,10 +757,16 @@ safeIntBVMul e1 e2 = withExpr "safeIntBVMul 1" e1 $ withExpr "safeIntBVMul 2" e2
     return $ (isValid, result)
   runtimeAssert isValid result
 
+unsafeIntBVAdd :: WB.Expr t IntegerBVType
+               -> WB.Expr t IntegerBVType
+               -> RebindM t (WB.Expr t IntegerBVType)
+unsafeIntBVAdd e1 e2 = withExpr "unsafeIntBVAdd 1" e1 $ withExpr "unsafeIntBVAdd 2" e2 $ do
+  withSym $ \sym -> WI.bvAdd sym e1 e2
+
 safeIntBVAdd :: WB.Expr t IntegerBVType
              -> WB.Expr t IntegerBVType
              -> RebindM t (WB.Expr t IntegerBVType)
-safeIntBVAdd e1 e2 = withExpr "safeIntBVAdd 1" e1 $ withExpr "safeIntBVAdd 2" e2 $do
+safeIntBVAdd e1 e2 = withExpr "safeIntBVAdd 1" e1 $ withExpr "safeIntBVAdd 2" e2 $ do
   (isValid, result) <- withSym $ \sym -> do
     (isOverflow, result) <- WI.addSignedOF sym e1 e2
     isValid <- WI.notPred sym isOverflow
@@ -792,7 +818,7 @@ extractInts' expr =  withExpr "extractInts'" expr $ do
 
     _ | Just (expr', AsBVRepr sz) <- asIntegerToSBV expr -> do
           bv <- extractBitV expr'
-          safeMatchSizeTo True sz bv
+          unsafeMatchSizeTo True sz bv
 
     WB.AppExpr appExpr -> do
       let ap = WB.appExprApp appExpr
@@ -912,11 +938,11 @@ extractBitV' expr = withExpr "extractBitV'" expr $ do
     _ | Just (SomeSymFn _ (Ctx.Empty Ctx.:> arg)) <- asSymFn (\nm -> nm == "extractBitVinttobv") expr
       , Just (Some (BVExpr bv), _) <- asSBVToInteger arg -> do
            bv' <- extractInts bv
-           safeMatchSizeTo True integerBVSzRepr bv'
+           unsafeMatchSizeTo True integerBVSzRepr bv'
 
     _ | Just (Some (BVExpr bv), _) <- asSBVToInteger expr -> do
           bv' <- extractInts bv
-          safeMatchSizeTo True integerBVSzRepr bv'
+          unsafeMatchSizeTo True integerBVSzRepr bv'
 
     _ | Just _ <- asUNDEFINEDInt expr -> withSym $ \sym -> do
           fn <- WI.freshTotalUninterpFn sym (WI.safeSymbol ("UNDEFINED_bitvector_" ++ show integerBVSzRepr)) Ctx.empty integerBVTypeRepr
@@ -942,8 +968,8 @@ extractBitV' expr = withExpr "extractBitV'" expr $ do
 
     go :: WB.App (WB.Expr t) WI.BaseIntegerType -> RebindM t (WB.Expr t IntegerBVType)
 
-    go (WB.BVToInteger bv) = safeMatchSizeTo False integerBVSzRepr bv
-    go (WB.SBVToInteger bv) = safeMatchSizeTo True integerBVSzRepr bv
+    go (WB.BVToInteger bv) = unsafeMatchSizeTo False integerBVSzRepr bv
+    go (WB.SBVToInteger bv) = unsafeMatchSizeTo True integerBVSzRepr bv
     go (WB.BaseIte _ _ test then_ else_) = liftBinop then_ else_ (\sym -> WI.baseTypeIte sym test)
     go (WB.IntMod a1 b1) = liftBinop a1 b1 WI.bvSrem
     go (WB.IntDiv a1 b1) = liftBinop a1 b1 WI.bvSdiv
@@ -959,7 +985,7 @@ extractBitV' expr = withExpr "extractBitV'" expr $ do
     go (WB.SemiRingProd pd) =
       case WSum.prodRepr pd of
         WI.SemiRingIntegerRepr -> do
-          Just result <- WSum.prodEvalM safeIntBVMul extractBitV pd
+          Just result <- WSum.prodEvalM unsafeIntBVMul extractBitV pd
           return result
 
     go (WB.SemiRingSum sm) =
@@ -969,8 +995,8 @@ extractBitV' expr = withExpr "extractBitV'" expr $ do
             mkBV coef_int expr_int = do
               coef_bv <- withSym $ \sym -> WI.bvLit sym integerBVSzRepr coef_int
               expr_bv <- extractBitV expr_int
-              safeIntBVMul coef_bv expr_bv
-          WSum.evalM safeIntBVAdd mkBV (\i -> withSym $ \sym -> WI.bvLit sym integerBVSzRepr i) sm
+              unsafeIntBVMul coef_bv expr_bv
+          WSum.evalM unsafeIntBVAdd mkBV (\i -> withSym $ \sym -> WI.bvLit sym integerBVSzRepr i) sm
 
     go _ = fail $ "extractBitV: unsupported expression shape: " ++ showExpr expr
 
