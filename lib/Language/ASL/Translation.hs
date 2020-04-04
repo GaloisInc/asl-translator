@@ -344,8 +344,6 @@ translateStatement' stmt = do
 
       _ -> throwTrace $ UnsupportedStmt stmt
 
-
-
 -- | Translate a @return@ from the current function, combining the
 -- current value of all global variables into a struct and returning
 -- it with the natural return value of the function.

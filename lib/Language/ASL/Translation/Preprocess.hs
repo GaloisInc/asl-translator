@@ -1047,6 +1047,13 @@ validateEncoding daEnc (SomeInstructionSignature iSig) = do
       WT.BaseBVRepr nr -> return $ Const $ (T.unpack nm, NR.intValue nr)
       _ -> E.throwError $ InvalidInstructionOperand (nm, tr)
 
+wrapConditionCheck :: Bool -> [AS.Stmt] -> [AS.Stmt]
+wrapConditionCheck cond body = case cond of
+  True -> [AS.StmtIf [((AS.ExprCall (AS.VarName "ConditionPassed") []), body)] (Just [])]
+  False -> body
+
+initGlobals :: [AS.Stmt]
+initGlobals = [AS.StmtCall (AS.VarName "initGlobals") []]
 
 -- | Convert an ASL instruction-encoding pair into a function, where the instruction
 -- operands are the natural arguments if the resulting function
@@ -1061,14 +1068,14 @@ computeInstructionSignature daEnc AS.Instruction{..} enc = do
     name = T.pack $ DA.encName daEnc
     iset = AS.encInstrSet enc
     initUnusedFields = initializeUnusedFields (AS.encFields enc) (map AS.encFields instEncodings)
-    initStmts = initializeEncoding daEnc ++ AS.encDecode enc ++ initUnusedFields
+    initStmts = initializeEncoding daEnc ++ initInstrEnc iset ++ AS.encDecode enc ++ initGlobals ++ initUnusedFields
   liftedStmts <- liftOverEnvs instName enc instExecute
 
   let
     instStmts = pruneInfeasableInstrSets iset $
       initStmts
       ++ instPostDecode
-      ++ liftedStmts
+      ++ wrapConditionCheck instConditional liftedStmts
     staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
   labeledArgs <- getFunctionArgSig enc daEnc
 
@@ -1288,6 +1295,16 @@ staticEnvironmentStmt envs stmts =
       (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny var))
       (SE.staticToExpr sv)
 
+initInstrEnc :: AS.InstructionSet -> [AS.Stmt]
+initInstrEnc enc =
+  let
+    e = case enc of
+          AS.A32 -> AS.VarName "__A32"
+          AS.T16 -> AS.VarName "__T16"
+          AS.T32 -> AS.VarName "__T32"
+          AS.A64 -> AS.VarName "__A64"
+  in [AS.StmtAssign (AS.LValVarRef (AS.VarName "__ThisInstrEnc")) (AS.ExprVarRef e)]
+
 pruneInfeasableInstrSets :: AS.InstructionSet -> [AS.Stmt] -> [AS.Stmt]
 pruneInfeasableInstrSets enc stmts = let
   evalInstrSetTest e = case e of
@@ -1305,8 +1322,6 @@ pruneInfeasableInstrSets enc stmts = let
   collector = TR.withKnownSyntaxRepr (\case {TR.SyntaxExprRepr -> evalInstrSetTest; _ -> id})
   in map (TR.mapSyntax collector) stmts
 
-
-
 -- | In general execution bodies may refer to fields that have not been set by
 -- this particular encoding. To account for this, we initialize all fields from
 -- other encodings to undefined values, under the assumption that they should not be read.
@@ -1317,15 +1332,18 @@ initializeUnusedFields encFields allFields =
     getFieldEntry (AS.InstructionField instFieldName _ instFieldOffset) =
       (instFieldName, [instFieldOffset])
     encFieldsSet = Set.fromList (map (\(AS.InstructionField nm _ _) -> nm) encFields)
+    fieldsMap = Map.fromListWith (++) (map getFieldEntry $ concat allFields)
     otherFieldsMap = Map.withoutKeys
-      (Map.fromListWith (++) (map getFieldEntry $ concat allFields))
-      encFieldsSet
+      fieldsMap
+      (Set.insert "cond" encFieldsSet)
 
     getDecl instFieldName [instFieldOffset] =
         Just $ AS.StmtVarsDecl (AS.TypeFun "bits" (AS.ExprLitInt instFieldOffset)) [instFieldName]
     getDecl _ _ = Nothing
-  in
-    Map.elems $ Map.mapMaybeWithKey getDecl otherFieldsMap
+    inits = Map.elems $ Map.mapMaybeWithKey getDecl otherFieldsMap
+  in case Set.member "cond" encFieldsSet of
+    True -> AS.StmtCall (AS.VarName "setCond") [AS.ExprVarRef $ AS.VarName "cond"] : inits
+    False -> inits
 
 -- | Evaluate any known static values for this specific encoding
 addInitializedVariables :: [AS.Stmt] -> StaticEnvMap -> StaticEnvMap

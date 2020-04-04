@@ -98,6 +98,19 @@ boolean __EndOfInstruction;
 boolean __UndefinedBehavior;
 boolean __UnpredictableBehavior;
 
+initGlobals()
+    setDefaultCond();
+
+setDefaultCond()
+    if __ThisInstrEnc == __A32 || PSTATE.IT<3:0> == Zeros(4) then
+        __currentCond = 0xE<3:0>;
+    else
+        __currentCond = PSTATE.IT<7:4>;
+    return;
+
+setCond(bits(4) cond)
+    __currentCond = cond;
+    return;
 
 // de-muxing the general registers into distinct globals
 
@@ -178,7 +191,8 @@ bits(N) ThisInstrAddr()
 
 bits(N) NextInstrAddr()
     if N == 32 then
-        return (_PC + (ThisInstrLength() DIV 8))<N-1:0>;
+        off = if __ThisInstrEnc == __T16 then 2 else 4;
+        return (_PC + off);
     else
         assert FALSE;
         return bits(N) UNKNOWN;

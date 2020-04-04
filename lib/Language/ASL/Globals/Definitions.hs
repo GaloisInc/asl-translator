@@ -109,19 +109,15 @@ simpleGlobals' =
   :> bool "__AssertionFailure"
   :> bool "__UndefinedBehavior"
   :> bool "__UnpredictableBehavior"
-  :> bool "__EndOfInstruction"
   -- meta-state reifying information about this encoding
-  :> bv @3 "__ThisInstrEnc"
   :> bv @32 "__ThisInstr"
-  -- tracking updates to the program counter
-  :> bool "__BranchTaken"
   -- tracking additional execution flags
   :> bool "__PendingInterrupt"
   :> bool "__PendingPhysicalSError"
   :> bool "__Sleeping"
-  
+  :> bool "__BranchTaken"
+  :> bool "__EndOfInstruction"
   :> bool "__conditionPassed"
-  :> bv @4 "__currentCond"   
   :> bv @32 "_PC"
   -- rest of the processor state is unconstrained
   :> bv @1 "PSTATE_A"
@@ -238,6 +234,8 @@ untrackedGlobals' = Some $ empty
   -- this is initialized before it is read, so we don't need to track it
   -- the translator assigns this to a copy of SIMDS as its initial value
   :> def "SIMDS_clone" (knownRepr :: WI.BaseTypeRepr AllSIMDBaseType) domainUnbounded
+  :> bv @4 "__currentCond"
+  :> bv @3 "__ThisInstrEnc"
   -- system registers
   :> bv @32 "CPACR"
   :> bv @32 "CPACR_EL1"

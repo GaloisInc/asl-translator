@@ -544,6 +544,93 @@
     (QualifiedIdentifier Any __UnpredictableBehavior)
     (TypeRef
       (QualifiedIdentifier Any boolean)))
+  (DefCallable
+    (QualifiedIdentifier Any initGlobals)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtCall
+            (QualifiedIdentifier Any setDefaultCond)
+            (list))))))
+  (DefCallable
+    (QualifiedIdentifier Any setDefaultCond)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtIf
+            (ExprBinOp
+              "||"
+              (ExprBinOp
+                "=="
+                (ExprVarRef
+                  (QualifiedIdentifier Any __ThisInstrEnc))
+                (ExprVarRef
+                  (QualifiedIdentifier Any __A32)))
+              (ExprBinOp
+                "=="
+                (ExprSlice
+                  (ExprMember
+                    (ExprVarRef
+                      (QualifiedIdentifier Any PSTATE))
+                    IT)
+                  (list
+                    (SliceRange
+                      (ExprLitNat 3)
+                      (ExprLitNat 0))))
+                (ExprCall
+                  (QualifiedIdentifier Any Zeros)
+                  (list
+                    (ExprLitNat 4)))))
+            (StmtBlock
+              (list
+                (StmtAssign
+                  (LValVarRef
+                    (QualifiedIdentifier Any __currentCond))
+                  (ExprSlice
+                    (ExprLitHex "0xE")
+                    (list
+                      (SliceRange
+                        (ExprLitNat 3)
+                        (ExprLitNat 0)))))))
+            (list)
+            (Just
+              (StmtBlock
+                (list
+                  (StmtAssign
+                    (LValVarRef
+                      (QualifiedIdentifier Any __currentCond))
+                    (ExprSlice
+                      (ExprMember
+                        (ExprVarRef
+                          (QualifiedIdentifier Any PSTATE))
+                        IT)
+                      (list
+                        (SliceRange
+                          (ExprLitNat 7)
+                          (ExprLitNat 4)))))))))
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any setCond)
+    (list
+      (SymDecl
+        cond
+        (TypeFun
+          bits
+          (ExprLitNat 4))))
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any __currentCond))
+            (ExprVarRef
+              (QualifiedIdentifier Any cond)))
+          (StmtReturn Nothing)))))
   (DefTypeAlias
     regidx
     (TypeFun
@@ -1110,27 +1197,27 @@
               (ExprLitNat 32))
             (StmtBlock
               (list
+                (StmtAssign
+                  (LValVarRef
+                    (QualifiedIdentifier Any off))
+                  (ExprIf
+                    (ExprBinOp
+                      "=="
+                      (ExprVarRef
+                        (QualifiedIdentifier Any __ThisInstrEnc))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any __T16)))
+                    (ExprLitNat 2)
+                    (list)
+                    (ExprLitNat 4)))
                 (StmtReturn
                   (Just
-                    (ExprSlice
-                      (ExprBinOp
-                        "+"
-                        (ExprVarRef
-                          (QualifiedIdentifier Any _PC))
-                        (ExprBinOp
-                          "DIV"
-                          (ExprCall
-                            (QualifiedIdentifier Any ThisInstrLength)
-                            (list))
-                          (ExprLitNat 8)))
-                      (list
-                        (SliceRange
-                          (ExprBinOp
-                            "-"
-                            (ExprVarRef
-                              (QualifiedIdentifier Any N))
-                            (ExprLitNat 1))
-                          (ExprLitNat 0))))))))
+                    (ExprBinOp
+                      "+"
+                      (ExprVarRef
+                        (QualifiedIdentifier Any _PC))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any off)))))))
             (list)
             (Just
               (StmtBlock
