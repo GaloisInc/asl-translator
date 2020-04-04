@@ -986,3 +986,5 @@ after a block of statements has been executed
 [fn:what4-serialize]: https://github.com/GaloisInc/what4-serialize/
 [fn:asl-description]: https://alastairreid.github.io/dissecting-ARM-MRA/
 [fn:what4]: https://github.com/GaloisInc/crucible/tree/master/what4/
+[fn:mra_tools]: https://github.com/alastairreid/mra_tools
+[fn:crucible]: https://github.com/GaloisInc/crucible
