@@ -33,7 +33,6 @@ import           Data.Proxy ( Proxy(..) )
 import qualified Data.Text as T
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.CFG.Extension as CCExt
-import qualified Lang.Crucible.CFG.Extension.Safety as CCES
 import qualified Lang.Crucible.Simulator as CS
 import qualified Lang.Crucible.Simulator.ExecutionTree as CSET
 import qualified Lang.Crucible.Simulator.Evaluation as CSE
@@ -250,12 +249,6 @@ instance CCExt.PrettyApp (ASLStmt arch) where
                 , PP.comma
                 , PP.brackets (pp vs)
                 ]
-
-type instance CCES.AssertionClassifier (ASLExt arch) = CCES.NoAssertionClassifier
-
-instance CCES.HasStructuredAssertions (ASLExt arch) where
-  explain _ = \case
-  toPredicate _ _ = \case
 
 
 instance FC.FunctorFC ASLApp where

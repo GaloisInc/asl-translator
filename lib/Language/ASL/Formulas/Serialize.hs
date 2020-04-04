@@ -83,7 +83,7 @@ import qualified What4.Serialize.Parser as WPD
 -- | Environment mapping formal names to ExprSymFns
 type ExprSymFnEnv t = Map T.Text (SomeSome (WB.ExprSymFn t))
 
-type FnNameEnv t = OMap (WP.SomeSymFn t) T.Text
+type FnNameEnv t = OMap (WP.SomeExprSymFn t) T.Text
 
 -- | Convert an s-expression into its textual representation.
 printSExpr :: SExpr -> T.Text
@@ -102,12 +102,15 @@ mkFunSig symFn = FunSig (WI.solverSymbolAsText $ WB.symFnName symFn) (WI.fnArgTy
 mkSigEnv :: FnNameEnv t -> [(T.Text, SomeSome FunSig)]
 mkSigEnv env = map go (OMap.assocs env)
   where
-    go :: (WP.SomeSymFn t, T.Text) -> (T.Text, SomeSome FunSig)
-    go (WP.SomeSymFn symFn, nm) = (nm, SomeSome $ mkFunSig symFn)
+    go :: (WP.SomeExprSymFn t, T.Text) -> (T.Text, SomeSome FunSig)
+    go (WP.SomeExprSymFn symFn, nm) = (nm, SomeSome $ mkFunSig symFn)
+
+aStr :: T.Text -> WP.Atom
+aStr str = AStr (Some WI.UnicodeRepr) str
 
 serializeFunSig :: FunSig args ret -> SExpr
 serializeFunSig (FunSig name args ret) =
-  S.L [ S.A (AStr name)
+  S.L [ S.A (aStr name)
       , S.L (WP.convertBaseTypes args)
       , WP.serializeBaseType ret
       ]
@@ -116,13 +119,13 @@ serializeSigEnv :: [(T.Text, SomeSome FunSig)] -> SExpr
 serializeSigEnv binds = S.L (map go binds)
   where
     go :: (T.Text, SomeSome FunSig) -> SExpr
-    go (nm, SomeSome funsig) = S.L [ S.A (AStr nm), serializeFunSig funsig ]
+    go (nm, SomeSome funsig) = S.L [ S.A (aStr nm), serializeFunSig funsig ]
 
 extractEnv :: FnNameEnv t -> ExprSymFnEnv t
 extractEnv env = Map.fromList $ map go (OMap.assocs env)
   where
-    go :: (WP.SomeSymFn t, T.Text) -> (T.Text, SomeSome (WB.ExprSymFn t))
-    go (WP.SomeSymFn symFn, nm) = (nm, SomeSome symFn)
+    go :: (WP.SomeExprSymFn t, T.Text) -> (T.Text, SomeSome (WB.ExprSymFn t))
+    go (WP.SomeExprSymFn symFn, nm) = (nm, SomeSome symFn)
 
 -- | Serialize a What4 function as an s-expression, and return its
 -- binding environment mapping formal names (appearing in the
@@ -153,7 +156,7 @@ serializeSymFn symFn = fst $ serializeSymFn' symFn
 -- | Pair a serialized function with its name to create a valid
 -- function environment entry.
 mkSymFnEnvEntry :: T.Text -> SExpr -> SExpr
-mkSymFnEnvEntry nm sexpr = S.L [ S.A (AStr nm), sexpr ]
+mkSymFnEnvEntry nm sexpr = S.L [ S.A (aStr nm), sexpr ]
 
 
 -- | Assemble a collection of function environment entries
@@ -199,7 +202,7 @@ deserializeBaseTypes sexprs = case WPD.readBaseTypes (S.L sexprs) of
 
 deserializeFunSig :: MonadFail m => SExpr -> m (SomeSome FunSig)
 deserializeFunSig sexpr = case sexpr of
-  S.L [ S.A (AStr name)
+  S.L [ S.A (AStr _ name)
       , S.L argsSexprs
       , retSexpr
       ] -> do
@@ -216,7 +219,7 @@ deserializeSigEnv sexpr = case sexpr of
   where
     go :: SExpr -> m (T.Text, SomeSome FunSig)
     go sexpr' = case sexpr' of
-      S.L [ S.A (AStr nm), funSigSexpr ] -> do
+      S.L [ S.A (AStr _ nm), funSigSexpr ] -> do
         funSig <- deserializeFunSig funSigSexpr
         return $ (nm, funSig)
       _ -> badSExpr sexpr'
@@ -277,7 +280,7 @@ deserializeSymFn' fnmaker sexpr = do
     mklookup nm = return $ Map.lookup nm symFnEnv
     pcfg = (WPD.defaultConfig (symFromMaker fnmaker)){ WPD.cSymFnLookup = mklookup }
   WPD.SomeSymFn symFn <- liftIO $ do
-    WPD.deserializeSymFnWithConfig pcfg symFnSexpr >>= \case
+    WPD.deserializeSymFnWithConfig (symFromMaker fnmaker) pcfg symFnSexpr >>= \case
       Left err -> throwErr (err ++ "\n" ++ show symFnSexpr)
       Right result -> return result
   return $ SomeSome symFn
@@ -340,7 +343,7 @@ getSymFnEnv = \case
   where
     go :: SExpr -> m (T.Text, SExpr)
     go = \case
-      S.L [ S.A (AStr nm), symFnSExpr ] -> return (nm, symFnSExpr)
+      S.L [ S.A (AStr _ nm), symFnSExpr ] -> return (nm, symFnSExpr)
       x -> badSExpr x
 
 -- | Deserialize a What4 function environment into the given 'env' type.

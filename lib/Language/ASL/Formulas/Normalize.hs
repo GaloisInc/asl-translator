@@ -526,7 +526,7 @@ prettyResult :: WP.Result t  -> String
 prettyResult res =
   let
     revVarEnv = Map.fromList $ map (\(Some bv, nm) -> (nm, (WI.solverSymbolAsText $ WB.bvarName bv) <> "(" <> T.pack (show (WB.bvarType bv)) <> ")")) (OMap.toAscList (WP.resFreeVarEnv res))
-    revFnEnv = Map.fromList $ map (\(WP.SomeSymFn symFn, nm) -> (nm, WI.solverSymbolAsText $ WB.symFnName symFn)) (OMap.toAscList (WP.resSymFnEnv res))
+    revFnEnv = Map.fromList $ map (\(WP.SomeExprSymFn symFn, nm) -> (nm, WI.solverSymbolAsText $ WB.symFnName symFn)) (OMap.toAscList (WP.resSymFnEnv res))
 
     go a = case a of
       WP.AId nm -> case Map.lookup nm revVarEnv  of
