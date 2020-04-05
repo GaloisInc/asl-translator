@@ -1136,6 +1136,28 @@
               (ExprVarRef
                 (QualifiedIdentifier Any _PC))))))))
   (DefCallable
+    (QualifiedIdentifier Any finishInstruction)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtIf
+            (ExprUnOp
+              "!"
+              (ExprVarRef
+                (QualifiedIdentifier Any __BranchTaken)))
+            (StmtBlock
+              (list
+                (StmtAssign
+                  (LValVarRef
+                    (QualifiedIdentifier Any _PC))
+                  (ExprCall
+                    (QualifiedIdentifier Any NextInstrAddr)
+                    (list)))))
+            (list)
+            Nothing)))))
+  (DefCallable
     (QualifiedIdentifier Any ThisInstrAddr)
     (list)
     (Just

@@ -181,6 +181,10 @@ PC[] = bits(32) value
 bits(32) PC[]
     return _PC;
 
+finishInstruction()
+    if !__BranchTaken then
+        _PC = NextInstrAddr();
+
 // Allow us to model the internal PC as a 32 bit value
 bits(N) ThisInstrAddr()
     if N == 32 then

@@ -429,6 +429,7 @@ globalFunctions =
   , ("IntDiv", 2)
   , ("setSlice", 4)
   , ("getSlice", 4)
+  , ("finishInstruction", 0)
   ]
 
 initializeSigM :: ASLSpec -> SigM ext f ()
@@ -1080,7 +1081,7 @@ computeInstructionSignature daEnc AS.Instruction{..} enc = do
   labeledArgs <- getFunctionArgSig enc daEnc
 
   computeSignatures instStmts
-  globalVars <- globalsOfStmts instStmts
+  globalVars <- globalsOfStmts (AS.StmtCall (AS.VarName "finishInstruction") [] : instStmts)
 
   (globalReads, globalWrites) <- return $ unpackGVarRefs globalVars
   missingGlobals <- liftM catMaybes $ forM globalReads $ \(varName, Some varTp) ->
