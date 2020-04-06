@@ -679,3 +679,19 @@ boolean AArch64.WatchpointMatch(integer n, bits(64) vaddress, integer size, bool
                                 AccType acctype, boolean iswrite)
   return FALSE;
 
+bits(N) Align(bits(N) x, integer y)
+    case y of
+        when 4
+            x = x >> 2;
+            x = x << 2;
+            return x;
+        when 8
+            x = x >> 3;
+            x = x << 3;
+            return x;
+        when 16
+            x = x >> 4;
+            x = x << 4;
+            return x;
+        otherwise
+            return Align(UInt(x), y)<N-1:0>;

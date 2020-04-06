@@ -5317,4 +5317,133 @@
           (StmtReturn
             (Just
               (ExprVarRef
-                (QualifiedIdentifier Any FALSE)))))))))
+                (QualifiedIdentifier Any FALSE))))))))
+  (DefCallable
+    (QualifiedIdentifier Any Align)
+    (list
+      (SymDecl
+        x
+        (TypeFun
+          bits
+          (ExprVarRef
+            (QualifiedIdentifier Any N))))
+      (SymDecl
+        y
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprVarRef
+              (QualifiedIdentifier Any N))))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtCase
+            (ExprVarRef
+              (QualifiedIdentifier Any y))
+            (list
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 4))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any x))
+                      (ExprBinOp
+                        ">>"
+                        (ExprVarRef
+                          (QualifiedIdentifier Any x))
+                        (ExprLitNat 2)))
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any x))
+                      (ExprBinOp
+                        "<<"
+                        (ExprVarRef
+                          (QualifiedIdentifier Any x))
+                        (ExprLitNat 2)))
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any x)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 8))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any x))
+                      (ExprBinOp
+                        ">>"
+                        (ExprVarRef
+                          (QualifiedIdentifier Any x))
+                        (ExprLitNat 3)))
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any x))
+                      (ExprBinOp
+                        "<<"
+                        (ExprVarRef
+                          (QualifiedIdentifier Any x))
+                        (ExprLitNat 3)))
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any x)))))))
+              (CaseAltWhen
+                (list
+                  (CasePatternNat 16))
+                Nothing
+                (StmtBlock
+                  (list
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any x))
+                      (ExprBinOp
+                        ">>"
+                        (ExprVarRef
+                          (QualifiedIdentifier Any x))
+                        (ExprLitNat 4)))
+                    (StmtAssign
+                      (LValVarRef
+                        (QualifiedIdentifier Any x))
+                      (ExprBinOp
+                        "<<"
+                        (ExprVarRef
+                          (QualifiedIdentifier Any x))
+                        (ExprLitNat 4)))
+                    (StmtReturn
+                      (Just
+                        (ExprVarRef
+                          (QualifiedIdentifier Any x)))))))
+              (CaseAltOtherwise
+                (StmtBlock
+                  (list
+                    (StmtReturn
+                      (Just
+                        (ExprSlice
+                          (ExprCall
+                            (QualifiedIdentifier Any Align)
+                            (list
+                              (ExprCall
+                                (QualifiedIdentifier Any UInt)
+                                (list
+                                  (ExprVarRef
+                                    (QualifiedIdentifier Any x))))
+                              (ExprVarRef
+                                (QualifiedIdentifier Any y))))
+                          (list
+                            (SliceRange
+                              (ExprBinOp
+                                "-"
+                                (ExprVarRef
+                                  (QualifiedIdentifier Any N))
+                                (ExprLitNat 1))
+                              (ExprLitNat 0))))))))))))))))
