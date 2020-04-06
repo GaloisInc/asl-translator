@@ -1,3 +1,4 @@
+SHELL := /bin/bash
 .PHONY: default genarm genarm-lite archive archive-lite all tests clean realclean deepclean
 default: all
 
