@@ -290,9 +290,9 @@ forallGen :: (forall tp. f tp -> TH.Q TH.Type)
 forallGen mktype inst asn = case Ctx.viewAssign asn of
   Ctx.AssignEmpty -> return []
   Ctx.AssignExtend asn' a -> do
-    decl <- [d| instance $(inst) $(mktype a) |]
+    decl <- TH.instanceD (return []) (TH.appT inst (mktype a)) []
     decls <- forallGen mktype inst asn'
-    return $ decl ++ decls
+    return $ decl : decls
 
 forallSymbols :: TH.Q TH.Type -> Ctx.Assignment CT.SymbolRepr ctx -> TH.DecsQ
 forallSymbols = forallGen (\symb -> mkSymbolT (CT.symbolRepr symb))

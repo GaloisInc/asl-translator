@@ -69,7 +69,11 @@ $(do
     natK <- [t| Nat |]
     symbK <- [t| Symbol |]
     tyHead <- return $ TH.TypeFamilyHead natToSymbol [TH.KindedTV n natK] (TH.KindSig symbK) Nothing
+#if MIN_VERSION_template_haskell(2, 15, 0)
+    let mkSyn i = TH.TySynEqn Nothing (TH.AppT (TH.ConT natToSymbol) (TH.LitT (TH.NumTyLit i))) (TH.LitT $ TH.StrTyLit (show i))
+#else
     let mkSyn i = TH.TySynEqn [TH.LitT (TH.NumTyLit i)] (TH.LitT $ TH.StrTyLit (show i))
+#endif
     return $ [TH.ClosedTypeFamilyD tyHead (map mkSyn [0..31])]
  )
 
@@ -307,7 +311,7 @@ fromMapCtxSize f ctx sz = case viewSize sz of
    -> incSize $ fromMapCtxSize f ctx' sz'
 #endif
 
-data PairF (t1 :: k -> *) (t2 :: k -> *) (t :: k) where
+data PairF (t1 :: k -> Type) (t2 :: k -> Type) (t :: k) where
   PairF :: !(a t) -> !(b t) -> PairF a b t
 
 unzipPairF :: Ctx.Assignment (PairF a b) ctx -> (Ctx.Assignment a ctx, Ctx.Assignment b ctx)

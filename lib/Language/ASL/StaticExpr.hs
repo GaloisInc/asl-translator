@@ -1,11 +1,14 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -17,8 +20,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE LambdaCase #-}
 
 module Language.ASL.StaticExpr
   (
@@ -335,8 +336,11 @@ instance Applicative StaticEnvM where
 instance Monad StaticEnvM where
   StaticEnvM f >>= g =
     StaticEnvM (\env -> concat $ map (\(env', ret) -> getStaticPEnvs (g ret) env') (f env))
-  fail = Fail.fail
   return x = StaticEnvM (\env -> [(env, x)])
+
+#if !(MIN_VERSION_base(4,13,0))
+  fail = Fail.fail
+#endif
 
 instance Fail.MonadFail StaticEnvM where
   fail _ = StaticEnvM (\_ -> [])
