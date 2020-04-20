@@ -35,6 +35,7 @@ normalized, then written out again.
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE CPP #-}
 
 module Language.ASL.Translation.Driver
   ( TranslatorOptions(..)
@@ -191,10 +192,17 @@ defaultFilePaths = FilePathConfig
   , fpRegs = "arm_regs.sexpr"
   , fpSupport = "support.sexpr"
   , fpExtraDefs = "extra_defs.sexpr"
+#ifdef ASL_LITE
+  , fpOutFuns = "./output/functions-lite.what4"
+  , fpOutInstrs = "./output/instructions-lite.what4"
+  , fpNormFuns = "./output/functions-norm-lite.what4"
+  , fpNormInstrs = "./output/instructions-norm-lite.what4"
+#else
   , fpOutFuns = "./output/functions.what4"
   , fpOutInstrs = "./output/instructions.what4"
   , fpNormFuns = "./output/functions-norm.what4"
   , fpNormInstrs = "./output/instructions-norm.what4"
+#endif
   }
 
 -- | Default configuration for translation/simulation

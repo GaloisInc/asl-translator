@@ -12,8 +12,9 @@ main :: IO ()
 main = do
   Log.withLogging "main" (Log.stdErrLogEventConsumer logLvl) $ do
     let opts = (ASL.defaultOptions Log.getLogCfg) { ASL.optParallel = False, ASL.optCheckSerialization = True }
-    sm <- ASL.runWithFilters opts
+    sm <- ASL.translateAndSimulate opts
     ASL.serializeFormulas opts sm
+    ASL.readAndNormalize opts { ASL.optNormalizeMode = ASL.NormalizeAll }
 
 logLvl :: Log.LogEvent -> Bool
 logLvl le = case Log.leLevel le of
