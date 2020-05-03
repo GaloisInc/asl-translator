@@ -6,3 +6,4 @@ packages: *.cabal
           submodules/dismantle/dismantle-arm-xml/
           submodules/crucible/crucible
           submodules/what4/what4
+	  submodules/bv-sized

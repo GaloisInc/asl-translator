@@ -133,6 +133,7 @@ import qualified Data.Map as Map
 import           Data.Maybe ( catMaybes )
 
 
+import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
@@ -329,7 +330,7 @@ concreteToStatic :: WI.ConcreteVal tp -> Maybe StaticValue
 concreteToStatic cv = case cv of
   WI.ConcreteBool b -> Just $ StaticBool b
   WI.ConcreteInteger i -> Just $ StaticInt i
-  WI.ConcreteBV nr bv -> Just $ StaticBV $ integerToBits (WI.intValue nr) bv
+  WI.ConcreteBV nr bv -> Just $ StaticBV $ integerToBits (WI.intValue nr) (BV.asUnsigned bv)
   _ -> Nothing
 
 staticGlobals :: StaticValues

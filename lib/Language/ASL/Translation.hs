@@ -56,7 +56,7 @@ import qualified Control.Monad.Trans as MT
 import qualified Control.Monad.State as MSS
 import           Control.Monad.Trans.Maybe as MaybeT
 import           Data.Typeable
-import qualified Data.BitVector.Sized as BVS
+import qualified Data.BitVector.Sized as BV
 import           Data.Maybe ( fromMaybe )
 import           Data.Void ( Void )
 import qualified Data.Void as Void
@@ -1416,7 +1416,7 @@ translateBinaryOp op e1 e2 tc = do
         Refl <- assertAtomType e2 CT.IntegerRepr a2
         let nr = WT.knownNat @128
         let shift = CCG.App $ CCE.IntegerToBV nr (CCG.AtomExpr a2)
-        let base = CCG.App $ CCE.BVLit nr 1
+        let base = CCG.App $ CCE.BVLit nr (BV.one nr)
         let shifted = CCG.App $ (CCE.BVShl nr base shift)
         Some <$> mkAtom (sbvToInteger nr shifted)
 
@@ -1994,7 +1994,7 @@ lookupVarRef' name = do
         WT.BaseBoolRepr -> return (ExprConstructor (CCG.App (CCE.BoolLit e)) return)
         WT.BaseIntegerRepr -> return (ExprConstructor (CCG.App (CCE.IntLit e)) return)
         WT.BaseBVRepr wRepr ->
-          return (ExprConstructor (CCG.App (CCE.BVLit wRepr (BVS.bvIntegerU e))) return)
+          return (ExprConstructor (CCG.App (CCE.BVLit wRepr e)) return)
         _ -> error "bad const type"
 
 lookupGlobalLabel :: LabeledValue T.Text WT.BaseTypeRepr tp
@@ -2311,7 +2311,7 @@ intToBVRepr nBits = do
 bitsToBVExpr :: [Bool] -> Some (CCG.Expr (ASLExt arch) s)
 bitsToBVExpr bits = do
   case intToBVRepr (fromIntegral $ length bits) of
-   Some (BVRepr nr) -> Some $ CCG.App $ CCE.BVLit nr (bitsToInteger bits)
+   Some (BVRepr nr) -> Some $ CCG.App $ CCE.BVLit nr (BV.mkBV nr (bitsToInteger bits))
 
 
 
@@ -2564,7 +2564,7 @@ polymorphicBVOverrides expr ty env = case expr of
   AS.ExprCall (AS.QualifiedIdentifier _ "IsZero") [argExpr] -> Just $ do
     (Some atom, _) <- translateExpr' argExpr (ConstraintHint $ HintAnyBVSize)
     BVRepr nr <- getAtomBVRepr atom
-    mkAtom' (CCG.App (CCE.BVEq nr (CCG.AtomExpr atom) (CCG.App (CCE.BVLit nr 0))))
+    mkAtom' (CCG.App (CCE.BVEq nr (CCG.AtomExpr atom) (CCG.App (CCE.BVLit nr (BV.zero nr)))))
   AS.ExprCall (AS.QualifiedIdentifier _ "IsOnes") [argExpr] -> Just $ do
     argExpr' <- case argExpr of
       AS.ExprSlice e slices ->
@@ -2596,7 +2596,7 @@ polymorphicBVOverrides expr ty env = case expr of
     | fun == "Zeros" || fun == "Ones"
     , Just mexpr <- list1ToMaybe args -> Just $ do
     Some (BVRepr targetWidth) <- getBVLength mexpr ty
-    zeros <- mkAtom (CCG.App (CCE.BVLit targetWidth 0))
+    zeros <- mkAtom (CCG.App (CCE.BVLit targetWidth (BV.zero targetWidth)))
     case fun of
       "Zeros" -> return (Some zeros, TypeBasic)
       "Ones" -> mkAtom' (CCG.App $ CCE.BVNot targetWidth (CCG.AtomExpr zeros))

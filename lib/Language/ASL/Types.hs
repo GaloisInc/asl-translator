@@ -59,7 +59,7 @@ import qualified Data.Text as T
 import qualified Lang.Crucible.Types as CT
 import What4.BaseTypes as WT
 import           Data.Parameterized.Classes
-import qualified Data.BitVector.Sized as BVS
+import qualified Data.BitVector.Sized as BV
 import qualified Language.ASL.Syntax as AS
 import qualified Data.Map as Map
 
@@ -190,7 +190,7 @@ instance (Show a, ShowF b) => Show (LabeledValue a b tp) where
 type family BaseLitType (tp :: WT.BaseType) :: * where
   BaseLitType WT.BaseIntegerType = Integer
   BaseLitType WT.BaseBoolType = Bool
-  BaseLitType (WT.BaseBVType w) = BVS.BitVector w
+  BaseLitType (WT.BaseBVType w) = BV.BV w
   
 data ConstVal tp =
   ConstVal (WT.BaseTypeRepr tp) (BaseLitType tp)

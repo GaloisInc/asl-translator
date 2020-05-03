@@ -56,7 +56,7 @@ import           Control.Monad (void)
 import           Control.Monad.Identity
 import qualified Control.Monad.Except as E
 import qualified Control.Monad.RWS as RWS
-import qualified Data.BitVector.Sized as BVS
+import qualified Data.BitVector.Sized as BV
 import           Data.Foldable ( find )
 import           Data.List ( nub )
 import           Data.Maybe ( maybeToList, catMaybes, fromMaybe, isJust, fromJust )
@@ -126,7 +126,7 @@ builtinConsts :: [(T.Text, Some ConstVal)]
 builtinConsts =
   [ ("TRUE", Some $ ConstVal WT.BaseBoolRepr True)
   , ("FALSE", Some $ ConstVal WT.BaseBoolRepr False)
-  , ("HIGH", Some $ ConstVal (WT.BaseBVRepr (WT.knownNat @1)) (BVS.bitVector (1 :: Integer)))
+  , ("HIGH", Some $ ConstVal (WT.BaseBVRepr (WT.knownNat @1)) (BV.one WT.knownNat))
   ]
 
 data Callable = Callable { callableName :: AS.QualifiedIdentifier
@@ -375,7 +375,7 @@ buildEnv (spec@ASLSpec{..}) =
           (AS.TypeFun "bits" (AS.ExprLitInt n), AS.ExprLitBin bv) -> case NR.someNat n of
             Just (Some wRepr) -> case NR.testLeq (NR.knownNat @1) wRepr of
               Just NR.LeqProof ->
-                Just (name, Some $ ConstVal (WT.BaseBVRepr wRepr) (BVS.bitVector' wRepr (bitsToInteger bv)))
+                Just (name, Some $ ConstVal (WT.BaseBVRepr wRepr) (BV.mkBV wRepr (bitsToInteger bv)))
               Nothing -> error $ "bv width 0"
             Nothing -> error $ "negative natural " ++ show n
           _ -> Nothing

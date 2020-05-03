@@ -60,6 +60,7 @@ import           Data.Map ( Map )
 import qualified Data.Map as Map
 import qualified Data.IORef as IO
 
+import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.Pair
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Nonce
@@ -949,7 +950,7 @@ extractBitV' expr = withExpr "extractBitV'" expr $ do
           WI.applySymFn sym fn Ctx.empty
 
     _ -> case WI.asInteger expr of
-      Just i -> withSym $ \sym -> WI.bvLit sym integerBVSzRepr i
+      Just i -> withSym $ \sym -> WI.bvLit sym integerBVSzRepr (BV.mkBV integerBVSzRepr i)
       _ -> fail $ "extractBitV: unsupported expression shape: " ++ showExpr expr
   where
     liftBinop :: WB.Expr t WI.BaseIntegerType
@@ -993,10 +994,10 @@ extractBitV' expr = withExpr "extractBitV'" expr $ do
         WI.SemiRingIntegerRepr -> do
           let
             mkBV coef_int expr_int = do
-              coef_bv <- withSym $ \sym -> WI.bvLit sym integerBVSzRepr coef_int
+              coef_bv <- withSym $ \sym -> WI.bvLit sym integerBVSzRepr (BV.mkBV integerBVSzRepr coef_int)
               expr_bv <- extractBitV expr_int
               unsafeIntBVMul coef_bv expr_bv
-          WSum.evalM unsafeIntBVAdd mkBV (\i -> withSym $ \sym -> WI.bvLit sym integerBVSzRepr i) sm
+          WSum.evalM unsafeIntBVAdd mkBV (\i -> withSym $ \sym -> WI.bvLit sym integerBVSzRepr (BV.mkBV integerBVSzRepr i)) sm
 
     go _ = fail $ "extractBitV: unsupported expression shape: " ++ showExpr expr
 

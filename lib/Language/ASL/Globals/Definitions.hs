@@ -60,6 +60,7 @@ module Language.ASL.Globals.Definitions
   ) where
 
 import           GHC.TypeNats ( KnownNat )
+import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.Context ( Assignment, empty, pattern (:>), (<++>) )
 import qualified Data.Parameterized.Context as Ctx
@@ -198,14 +199,14 @@ bool nm = def nm WI.BaseBoolRepr domainUnbounded
 bv :: forall n. 1 <= n => KnownNat n => T.Text -> Global (WI.BaseBVType n)
 bv nm = def nm (WI.BaseBVRepr WI.knownNat) domainUnbounded
 
-bvsingle :: forall n. 1 <= n => KnownNat n => T.Text -> Integer -> Global (WI.BaseBVType n)
-bvsingle nm i = def nm WI.knownRepr (domainSingleton (WI.ConcreteBV WI.knownNat i))
+bvsingle :: forall n. 1 <= n => KnownNat n => T.Text -> BV.BV n -> Global (WI.BaseBVType n)
+bvsingle nm v = def nm WI.knownRepr (domainSingleton (WI.ConcreteBV WI.knownNat v))
 
 bvbits :: forall n. 1 <= n => KnownNat n => String -> T.Text -> Global (WI.BaseBVType n)
 bvbits bits nm  =
   if fromIntegral (length bits) == (WI.intValue $ WI.knownNat @n) then
     def nm WI.knownRepr
-      (domainSingleton (WI.ConcreteBV WI.knownNat (bitsToInteger $ parseBits bits)))
+      (domainSingleton (WI.ConcreteBV WI.knownNat (BV.mkBV WI.knownNat $ bitsToInteger $ parseBits bits)))
   else error $ "Bad bits: " ++ show bits
 
 noflag :: T.Text -> Global WI.BaseBoolType
@@ -224,7 +225,7 @@ parseBits bits = case bits of
 untrackedGlobals' :: Some (Assignment Global)
 untrackedGlobals' = Some $ empty
   -- the debug flag should not be set
-  :> bvsingle @1 "PSTATE_D" 0
+  :> bvsingle @1 "PSTATE_D" (BV.zero WI.knownNat)
    -- processor mode should always be M32_User
   :> bvbits @5 "10000" "PSTATE_M"
   -- memory model
