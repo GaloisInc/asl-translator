@@ -68,7 +68,7 @@ import           Data.Parameterized.Some ( Some(..) )
 
 import qualified Data.BitMask as BM
 import qualified Dismantle.ARM.ASL as DA ( Encoding(..), FieldConstraint(..) )
-import qualified Dismantle.Tablegen.ByteTrie as BT
+import qualified Dismantle.Tablegen.Patterns as BT
 import qualified Data.Text as T
 import           Data.Traversable (forM)
 import qualified Data.Parameterized.TraversableFC as FC
