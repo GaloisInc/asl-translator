@@ -56,7 +56,7 @@ import qualified Control.Monad.Trans as MT
 import qualified Control.Monad.State as MSS
 import           Control.Monad.Trans.Maybe as MaybeT
 import           Data.Typeable
-import qualified Data.BitVector.Sized as BVS
+import qualified Data.BitVector.Sized as BV
 import           Data.Maybe ( fromMaybe )
 import           Data.Void ( Void )
 import qualified Data.Void as Void
@@ -1994,7 +1994,7 @@ lookupVarRef' name = do
         WT.BaseBoolRepr -> return (ExprConstructor (CCG.App (CCE.BoolLit e)) return)
         WT.BaseIntegerRepr -> return (ExprConstructor (CCG.App (CCE.IntLit e)) return)
         WT.BaseBVRepr wRepr ->
-          return (ExprConstructor (CCG.App (CCE.BVLit wRepr (BVS.bvIntegerU e))) return)
+          return (ExprConstructor (CCG.App (CCE.BVLit wRepr (BV.asUnsigned e))) return)
         _ -> error "bad const type"
 
 lookupGlobalLabel :: LabeledValue T.Text WT.BaseTypeRepr tp
