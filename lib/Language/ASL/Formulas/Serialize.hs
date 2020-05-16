@@ -79,6 +79,7 @@ import qualified What4.Serialize.Printer as S ( pattern L, pattern A )
 import           What4.Serialize.Printer ( Atom(..), SExpr )
 import qualified What4.Serialize.Printer as WP
 import qualified What4.Serialize.Parser as WPD
+import qualified What4.Serialize.FastSExpr as WSF
 
 -- | Environment mapping formal names to ExprSymFns
 type ExprSymFnEnv t = Map T.Text (SomeSome (WB.ExprSymFn t))
@@ -186,7 +187,7 @@ badSExpr sexpr = withFrozenCallStack (throwErr $ "Unexpected s-expression: " ++ 
 
 -- | Parse text into a wellformed s-expression, failing on any parse errors.
 parseSExpr :: MonadFail m => T.Text -> m SExpr
-parseSExpr src = case WPD.parseSExpr src of
+parseSExpr src = case WSF.parseSExpr src of
   Left err -> throwErr err
   Right sexpr -> return sexpr
 
@@ -330,11 +331,18 @@ lookupFnSig :: (MonadFail m, WI.IsSymExprBuilder sym)
             -> NamedSymFnEnv sym
             -> FunSig args ret
             -> m (Maybe (WI.SymFn sym args ret))
-lookupFnSig sym env sig = case Map.lookup (fsName sig) env of
-  Just (SomeSome symFn) -> do
-    Refl <- matchSigs sym sig symFn
-    return $ Just symFn
-  _ -> return Nothing
+lookupFnSig sym env sig =
+  case Map.lookup dotName env of
+    Just (SomeSome symFn) -> do
+      Refl <- matchSigs sym sig symFn
+      return $ Just symFn
+    _ -> return Nothing
+  where
+    -- The names in our map have the form @df.foo@, but the symbols coming in
+    -- from what4 start with @df_@ since dots are not allowed in solver symbols.
+    --
+    -- We do a substitution here so that lookups can succeed
+    dotName = T.replace "df_" "df." (fsName sig)
 
 getSymFnEnv :: forall m. MonadFail m => SExpr -> m [(T.Text, SExpr)]
 getSymFnEnv = \case
@@ -460,7 +468,14 @@ expandSymFn sym symFn = case WB.symFnInfo symFn of
 -- given signature.
 uninterpFunctionMaker :: forall sym. WI.IsSymExprBuilder sym => sym -> FunctionMaker sym
 uninterpFunctionMaker sym = FunctionMaker sym $ \_nm sig -> do
-  Right <$> (liftIO $ WI.freshTotalUninterpFn sym (U.makeSymbol (T.unpack (fsName sig))) (fsArgs sig) (fsRet sig))
+  Right <$> (liftIO $ WI.freshTotalUninterpFn sym (U.makeSymbol (toUFIfNeeded (fsName sig))) (fsArgs sig) (fsRet sig))
+
+-- | If a function name doesn't already have a df_ or uf_ prefix, add uf_
+toUFIfNeeded :: T.Text -> String
+toUFIfNeeded t
+  | "uf_" `T.isPrefixOf` t = T.unpack t
+  | "df_" `T.isPrefixOf` t = T.unpack t
+  | otherwise = "uf_" ++ T.unpack t
 
 -- | Create a 'FunctionMaker' which never creates any functions.
 noFunctionMaker :: forall sym. WI.IsSymExprBuilder sym => sym -> FunctionMaker sym
