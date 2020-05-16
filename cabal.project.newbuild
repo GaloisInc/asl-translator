@@ -1,5 +1,4 @@
 packages: *.cabal
-          submodules/parameterized-utils/
           submodules/arm-asl-parser/
           submodules/what4-serialize/
           submodules/dismantle/dismantle-tablegen/
