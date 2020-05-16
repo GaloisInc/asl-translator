@@ -68,4 +68,4 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         cabal v2-test pkg:asl-translator
-        make archive-lite
+
