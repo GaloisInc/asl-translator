@@ -53,7 +53,7 @@ jobs:
     - name: Build
       run: |
         cp cabal.project.newbuild cabal.project
-        cabal v2-configure pkg:asl-translator --write-ghc-environment-files=always -j1
+        cabal v2-configure pkg:asl-translator --write-ghc-environment-files=always -j1 --enable-tests
         cabal v2-build pkg:asl-translator
 
     - name: Install Solvers
@@ -67,5 +67,5 @@ jobs:
     - name: Test
       if: runner.os == 'Linux'
       run: |
-        cabal v2-test pkg:asl-translator
+        cabal v2-run test:asl-translator-genarm-test
 
