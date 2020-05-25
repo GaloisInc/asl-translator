@@ -191,7 +191,7 @@ type family BaseLitType (tp :: WT.BaseType) :: * where
   BaseLitType WT.BaseIntegerType = Integer
   BaseLitType WT.BaseBoolType = Bool
   BaseLitType (WT.BaseBVType w) = BV.BV w
-  
+
 data ConstVal tp =
   ConstVal (WT.BaseTypeRepr tp) (BaseLitType tp)
 
