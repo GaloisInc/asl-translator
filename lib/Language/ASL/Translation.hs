@@ -1960,7 +1960,7 @@ lookupVarRef' name = do
         lookupGlobal ts <|>
         lookupEnum ts <|>
         lookupConst ts) of
-    Just (ExprConstructor e con) -> Just <$> Some <$> con e
+    Just (ExprConstructor e con :: ExprConstructor (ASLExt arch) regs h s ret) -> Just <$> Some <$> con e
     Nothing -> return Nothing
   where
     lookupLocalConst env = do
