@@ -83,7 +83,7 @@ import           What4.Utils.Util ( SomeSome(..) )
 import qualified What4.Serialize.Printer as WP
 
 import qualified Language.ASL.Formulas.Serialize as FS
-
+import qualified Data.Foldable as F
 data BuilderData t = NoBuilderData
 
 -- | Normalize and re-serialize a serialized formula library.
@@ -167,7 +167,6 @@ deserializeAndNormalize :: forall sym t st fs
                                 -> IO (NormalizeSymFnEnv sym)
 deserializeAndNormalize sym sexpr = do
   snd <$> FS.deserializeSymFnEnv' sym (NormalizeSymFnEnv Map.empty [] []) augmentEnv mkFun sexpr
-
   where
     mkFun :: NormalizeSymFnEnv sym -> FS.FunctionMaker sym
     mkFun nenv = FS.envFunctionMaker sym  (envAllFns nenv) `FS.composeMakers` (FS.uninterpFunctionMaker sym)
@@ -393,8 +392,8 @@ normalizeSymFn sym name symFn topLevel
       mkSymFnAt allArgs allFreshExprs inline idxpath e =
         let
           pathstr = "_SUB_" ++ pathToString idxpath
-          symbol = appendToSymbol (WB.symFnName symFn) pathstr
-          name' = name <> T.pack pathstr
+          Right symbol = WI.userSymbol ("df_" ++ T.unpack (WI.solverSymbolAsText (WB.symFnName symFn)) ++ pathstr)
+          name' = "df_" <> name <> T.pack pathstr
         in mkSymFn allArgs allFreshExprs symbol name' inline e
 normalizeSymFn _ _ _ _ = error $ "normalizeSymFn: unexpected symFn kind."
 
@@ -867,14 +866,14 @@ asSymFn f e = case e of
 asUNDEFINEDInt :: WB.Expr t WI.BaseIntegerType
                -> Maybe (WB.Expr t WI.BaseIntegerType)
 asUNDEFINEDInt expr = do
-  SomeSymFn _ args <- asSymFn (\nm -> nm == "UNDEFINED_integer") expr
+  SomeSymFn _ args <- asSymFn (\nm -> nm == "uf_UNDEFINED_integer") expr
   case args of
     Ctx.Empty -> return expr
     _ -> fail ""
 
 asSBVToInteger :: WB.Expr t tp
                -> Maybe (Some (BVExpr t), tp :~: WI.BaseIntegerType)
-asSBVToInteger expr = case asSymFn (\nm -> "sbvToInteger_" `T.isPrefixOf` nm) expr of
+asSBVToInteger expr = case asSymFn (\nm -> "uf_sbvToInteger_" `T.isPrefixOf` nm) expr of
   Just (SomeSymFn _ (Ctx.Empty Ctx.:> arg))
     | WI.BaseBVRepr _ <- WI.exprType arg
     , WI.BaseIntegerRepr <- WI.exprType expr -> return $ (Some $ BVExpr arg, Refl)
@@ -893,7 +892,7 @@ asIntegerToSBV' f expr = case asSymFn f expr of
 
 asIntegerToSBV :: WB.Expr t tp
                -> Maybe (WB.Expr t WI.BaseIntegerType, AsBVRepr tp)
-asIntegerToSBV expr = case asIntegerToSBV' (\nm -> "uu_integerToSBV_" `T.isPrefixOf` nm) expr of
+asIntegerToSBV expr = case asIntegerToSBV' (\nm -> "uf_uu_integerToSBV_" `T.isPrefixOf` nm) expr of
   Just result -> return result
   _ -> case WB.asApp expr of
     Just (WB.IntegerToBV ie sz) -> return $ (ie, AsBVRepr sz)
@@ -946,7 +945,7 @@ extractBitV' expr = withExpr "extractBitV'" expr $ do
           unsafeMatchSizeTo True integerBVSzRepr bv'
 
     _ | Just _ <- asUNDEFINEDInt expr -> withSym $ \sym -> do
-          fn <- WI.freshTotalUninterpFn sym (WI.safeSymbol ("UNDEFINED_bitvector_" ++ show integerBVSzRepr)) Ctx.empty integerBVTypeRepr
+          fn <- WI.freshTotalUninterpFn sym (WI.safeSymbol ("uf_UNDEFINED_bitvector_" ++ show integerBVSzRepr)) Ctx.empty integerBVTypeRepr
           WI.applySymFn sym fn Ctx.empty
 
     _ -> case WI.asInteger expr of

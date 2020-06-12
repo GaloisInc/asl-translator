@@ -121,13 +121,13 @@ bits(148) GPRS;
 _R[integer n] = bits(32) value
     assert n >= 0 && n <= 14;
     bits(37) idx = integerToSBV(n);
-    GPRS = uninterpFn("gpr_set", GPRS, truncate(idx, 4), value);
+    GPRS = uninterpFn("uf_gpr_set", GPRS, truncate(idx, 4), value);
     return;
 
 bits(32) _R[integer n]
     assert n >= 0 && n <= 14;
     bits(37) idx = integerToSBV(n);
-    return uninterpFn("gpr_get", GPRS, truncate(idx, 4));
+    return uninterpFn("uf_gpr_get", GPRS, truncate(idx, 4));
 
 bits(32) Rmode[integer n, bits(5) mode]
     assert n >= 0 && n <= 14;
@@ -164,13 +164,13 @@ bits(149) SIMDS;
 _V[integer n] = bits(128) value
     assert n >= 0 && n <= 31;
     bits(37) idx = integerToSBV(n);
-    SIMDS = uninterpFn("simd_set", SIMDS, truncate(idx, 8), value);
+    SIMDS = uninterpFn("uf_simd_set", SIMDS, truncate(idx, 8), value);
     return;
 
 bits(128) _V[integer n]
     assert n >= 0 && n <= 31;
     bits(37) idx = integerToSBV(n);
-    return uninterpFn("simd_get", SIMDS, truncate(idx, 8));
+    return uninterpFn("uf_simd_get", SIMDS, truncate(idx, 8));
 
 bits(32) _PC;
 

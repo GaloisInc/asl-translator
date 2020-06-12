@@ -1960,7 +1960,7 @@ lookupVarRef' name = do
         lookupGlobal ts <|>
         lookupEnum ts <|>
         lookupConst ts) of
-    Just (ExprConstructor e con) -> Just <$> Some <$> con e
+    Just (ExprConstructor e con :: ExprConstructor (ASLExt arch) regs h s ret) -> Just <$> Some <$> con e
     Nothing -> return Nothing
   where
     lookupLocalConst env = do
@@ -2146,7 +2146,7 @@ mkUF :: T.Text -> CT.TypeRepr tp -> Generator h s arch ret (CCG.Atom s tp)
 mkUF nm repr' = do
   let repr = asBaseType' repr'
   Just Refl <- return $ toFromBaseProof repr'
-  let uf = UF nm UFFresh repr Ctx.empty Ctx.empty
+  let uf = UF ("uf_" <> nm) UFFresh repr Ctx.empty Ctx.empty
   mkAtom (CCG.App (CCE.ExtensionApp uf))
 
 mkExtendedTypeData :: AS.Type

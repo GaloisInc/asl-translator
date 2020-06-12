@@ -688,7 +688,7 @@
             (ExprCall
               (QualifiedIdentifier Any uninterpFn)
               (list
-                (ExprLitString "gpr_set")
+                (ExprLitString "uf_gpr_set")
                 (ExprVarRef
                   (QualifiedIdentifier Any GPRS))
                 (ExprCall
@@ -745,7 +745,7 @@
               (ExprCall
                 (QualifiedIdentifier Any uninterpFn)
                 (list
-                  (ExprLitString "gpr_get")
+                  (ExprLitString "uf_gpr_get")
                   (ExprVarRef
                     (QualifiedIdentifier Any GPRS))
                   (ExprCall
@@ -1032,7 +1032,7 @@
             (ExprCall
               (QualifiedIdentifier Any uninterpFn)
               (list
-                (ExprLitString "simd_set")
+                (ExprLitString "uf_simd_set")
                 (ExprVarRef
                   (QualifiedIdentifier Any SIMDS))
                 (ExprCall
@@ -1089,7 +1089,7 @@
               (ExprCall
                 (QualifiedIdentifier Any uninterpFn)
                 (list
-                  (ExprLitString "simd_get")
+                  (ExprLitString "uf_simd_get")
                   (ExprVarRef
                     (QualifiedIdentifier Any SIMDS))
                   (ExprCall
