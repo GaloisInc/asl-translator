@@ -6,6 +6,7 @@
 
 module Main ( main ) where
 
+import qualified Data.BitVector.Sized as BV
 import qualified Data.Map as M
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some ( Some(..) )
@@ -72,7 +73,7 @@ randomSymExpr sym tp = case tp of
       False -> return (WI.falsePred sym)
   WI.BaseBVRepr w -> do
     randInt <- randomIO
-    WI.bvLit sym w randInt
+    WI.bvLit sym w (BV.mkBV w randInt)
   WI.BaseNatRepr -> do
     randInt <- randomIO
     WI.natLit sym (fromInteger randInt)

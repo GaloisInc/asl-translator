@@ -133,6 +133,7 @@ test-suite asl-translator-formula-test
 executable asl-translator-concrete-test
   main-is: Concrete.hs
   build-depends:       base >= 4.10.0.0 && < 5,
+                       bv-sized,
                        filepath,
                        what4-serialize,
                        what4,
