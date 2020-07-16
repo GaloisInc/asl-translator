@@ -46,6 +46,7 @@ module What4.Expr.ExprTree
   , normExprVarsIO
   , withExprBuilder
   , withExprBuilder'
+  , normFieldAccs
   -- FIXME: move
   , forWithIndex
   ) where
@@ -428,3 +429,96 @@ normExprVarsIO :: forall sym st fs f t ctx tp
 normExprVarsIO sym nops bvs expr = do
   NormExprVarsRet ret <- withExprBuilder' sym (NormExprVarsRet @t @tp @f <$> normExprVars (unliftIOExprOps nops) bvs expr)
   return ret
+
+
+-- | normalize struct field accesses to reduce across if-then-else expressions.
+-- i.e. (field 1 (ite b (W X) (Y Z))) --> (ite b W Y)
+normFieldAccs :: forall sym st fs t tp
+               . sym ~ WB.ExprBuilder t st fs
+              => sym
+              -> WB.Expr t tp
+              -> IO (WB.Expr t tp)
+normFieldAccs sym e = do
+  cache <- WB.newIdxCache
+  normFieldAccs' sym cache e
+
+normFieldAccs' :: forall sym st fs t tp
+               . sym ~ WB.ExprBuilder t st fs
+              => sym
+              -> WB.IdxCache t (WB.Expr t)
+              -> WB.Expr t tp
+              -> IO (WB.Expr t tp)
+normFieldAccs' sym cache e = do
+  case WB.exprMaybeId e of
+    Just idx -> WB.lookupIdx cache idx >>= \case
+      Just e' -> return e'
+      Nothing -> do
+        e' <- go
+        WB.insertIdxValue cache idx e'
+        return e'
+    Nothing -> go
+  where
+    go :: IO (WB.Expr t tp)
+    go = case e of
+      WB.AppExpr appExpr -> do
+        let a = WB.appExprApp appExpr
+        ap' <- WB.traverseApp (normFieldAccs' sym cache) a
+        let ret = if a == ap' then return e else WB.sbMakeExpr sym ap'
+        goApp ret ap'
+      WB.NonceAppExpr nae ->
+        case WB.nonceExprApp nae of
+          WB.FnApp symFn args -> do
+            args' <- FC.traverseFC (normFieldAccs' sym cache) args
+            case (args' == args) of
+              True -> return e
+              False -> WI.applySymFn sym symFn args'
+          _ -> return e
+      _ -> return e
+
+    goApp :: IO (WB.Expr t tp) -> WB.App (WB.Expr t) tp -> IO (WB.Expr t tp)
+    goApp ret a = case a of
+      (WB.StructCtor _ flds) -> do
+        flds' <- traverseWithIndex (\idx _ -> normField sym cache e idx) flds
+        case flds' == flds of
+          True -> ret
+          False -> WI.mkStruct sym flds'
+      (WB.StructField e' idx _) -> normField' sym cache e' idx >>= \case
+        Just fld -> normFieldAccs' sym cache fld
+        Nothing -> ret
+      _ -> ret
+
+normField :: forall sym st fs t ctx tp
+           . sym ~ WB.ExprBuilder t st fs
+          => sym
+          -> WB.IdxCache t (WB.Expr t)
+          -> WB.Expr t (WI.BaseStructType ctx)
+          -> Index ctx tp
+          -> IO (WB.Expr t tp)
+normField sym cache e idx = normField' sym cache e idx >>= \case
+  Just e' -> return e'
+  Nothing -> WI.structField sym e idx
+
+
+normField' :: forall sym st fs t ctx tp
+           . sym ~ WB.ExprBuilder t st fs
+          => sym
+          -> WB.IdxCache t (WB.Expr t)
+          -> WB.Expr t (WI.BaseStructType ctx)
+          -> Index ctx tp
+          -> IO (Maybe (WB.Expr t tp))
+normField' sym cache e idx = case e of
+  WB.AppExpr appExpr' -> case (WB.appExprApp appExpr') of
+    WB.StructField e' idx' _  -> do
+      e'' <- normFieldAccs' sym cache e'
+      normField' sym cache e'' idx' >>= \case
+        Just fld -> normField' sym cache fld idx
+        Nothing -> return Nothing
+
+    WB.StructCtor _ flds -> Just <$> (normFieldAccs' sym cache $ flds ! idx)
+    WB.BaseIte _ _ test then_ else_ -> do
+      test' <- normFieldAccs' sym cache test
+      then' <- normField sym cache then_ idx
+      else' <- normField sym cache else_ idx
+      Just <$> (WI.baseTypeIte sym test' then' else')
+    _ -> return Nothing
+  _ -> return Nothing

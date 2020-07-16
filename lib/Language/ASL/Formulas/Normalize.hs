@@ -141,7 +141,7 @@ reserializeInstr env name sexpr = do
       let functionMaker = FS.lazyFunctionMaker sym (env, ref) (FS.uninterpFunctionMaker sym) `FS.composeMakers` FS.uninterpFunctionMaker sym
       SomeSome symFn <- FS.deserializeSymFn' functionMaker sexpr
       putStrLn $ "Reserializing Instruction: " ++ (T.unpack name)
-      symFn' <- reduceSymFn sym name symFn
+      symFn' <- reduceSymFn sym symFn
       return $! (name, FS.serializeSymFn symFn')
 
 
@@ -243,13 +243,12 @@ normIntRepr repr = case intToBVRepr repr of
 reduceSymFn :: forall sym t st fs args ret
              . sym ~ WB.ExprBuilder t st fs
             => sym
-            -> T.Text
             -> WB.ExprSymFn t args ret
             -> IO (WB.ExprSymFn t args ret)
-reduceSymFn sym' name symFn = case WB.symFnInfo symFn of
-  WB.DefinedFnInfo args expr eval -> evalRebindM sym' name $ do
-    expr' <- normFieldAccs expr
-    withSym $ \sym -> WI.definedFn sym (WB.symFnName symFn) args expr' eval
+reduceSymFn sym symFn = case WB.symFnInfo symFn of
+  WB.DefinedFnInfo args expr eval -> do
+    expr' <- AT.normFieldAccs sym expr
+    WI.definedFn sym (WB.symFnName symFn) args expr' eval
   _ -> fail "reduceSymFn: unexpected function kind"
 
 -- | Normalize a symfn by expanding its body into one-dimensional struct, and then wrapping
@@ -271,7 +270,7 @@ normalizeSymFn' :: WB.ExprSymFn t args ret
                      , WB.ExprSymFn t (AT.NormBaseTypeCtx IntToBVWrapper args) (AT.NormBaseType IntToBVWrapper ret))
 normalizeSymFn' symFn = case WB.symFnInfo symFn of
   WB.DefinedFnInfo args expr_0 _eval -> withExpr "normalize" expr_0 $ do
-    expr_1 <- normFieldAccs expr_0
+    expr_1 <- withSym $ \sym -> AT.normFieldAccs sym expr_0
     (expr_2, exprBoundVars, flattenBoundVars) <- AT.normExprVars intNormOps args expr_1
     (expr_3, unflattenExpr) <- AT.flatExpr intNormOps expr_2
     let innerName = ((WB.symFnName symFn) `appendToSymbol` "_inner")
@@ -333,96 +332,6 @@ prettyResult res =
       _ -> a
 
   in T.unpack $ FS.printSExpr $ fmap go (WP.resSExpr res)
-
--- | normalize struct field accesses to reduce across if-then-else expressions.
--- i.e. (field 1 (ite b (W X) (Y Z))) --> (ite b W Y)
-normFieldAccs :: WB.Expr t tp -> RebindM t (WB.Expr t tp)
-normFieldAccs e = do
-  cache <- MS.gets rbNormFieldCache
-  withSym $ \sym -> normFieldAccs' sym cache e
-
-
-normFieldAccs' :: forall sym st fs t tp
-               . sym ~ WB.ExprBuilder t st fs
-              => sym
-              -> WB.IdxCache t (WB.Expr t)
-              -> WB.Expr t tp
-              -> IO (WB.Expr t tp)
-normFieldAccs' sym cache e = do
-  case WB.exprMaybeId e of
-    Just idx -> WB.lookupIdx cache idx >>= \case
-      Just e' -> return e'
-      Nothing -> do
-        e' <- go
-        WB.insertIdxValue cache idx e'
-        return e'
-    Nothing -> go
-  where
-    go :: IO (WB.Expr t tp)
-    go = case e of
-      WB.AppExpr appExpr -> do
-        let ap = WB.appExprApp appExpr
-        ap' <- WB.traverseApp (normFieldAccs' sym cache) ap
-        let ret = if ap == ap' then return e else WB.sbMakeExpr sym ap'
-        goApp ret ap'
-      WB.NonceAppExpr nae ->
-        case WB.nonceExprApp nae of
-          WB.FnApp symFn args -> do
-            args' <- FC.traverseFC (normFieldAccs' sym cache) args
-            case (args' == args) of
-              True -> return e
-              False -> WI.applySymFn sym symFn args'
-          _ -> return e
-      _ -> return e
-
-    goApp :: IO (WB.Expr t tp) -> WB.App (WB.Expr t) tp -> IO (WB.Expr t tp)
-    goApp ret ap = case ap of
-      (WB.StructCtor _ flds) -> do
-        flds' <- Ctx.traverseWithIndex (\idx _ -> normField sym cache e idx) flds
-        case flds' == flds of
-          True -> ret
-          False -> WI.mkStruct sym flds'
-      (WB.StructField e' idx _) -> normField' sym cache e' idx >>= \case
-        Just fld -> normFieldAccs' sym cache fld
-        Nothing -> ret
-      _ -> ret
-
-normField :: forall sym st fs t ctx tp
-           . sym ~ WB.ExprBuilder t st fs
-          => sym
-          -> WB.IdxCache t (WB.Expr t)
-          -> WB.Expr t (WI.BaseStructType ctx)
-          -> Ctx.Index ctx tp
-          -> IO (WB.Expr t tp)
-normField sym cache e idx = normField' sym cache e idx >>= \case
-  Just e' -> return e'
-  Nothing -> WI.structField sym e idx
-
-
-normField' :: forall sym st fs t ctx tp
-           . sym ~ WB.ExprBuilder t st fs
-          => sym
-          -> WB.IdxCache t (WB.Expr t)
-          -> WB.Expr t (WI.BaseStructType ctx)
-          -> Ctx.Index ctx tp
-          -> IO (Maybe (WB.Expr t tp))
-normField' sym cache e idx = case e of
-  WB.AppExpr appExpr' -> case (WB.appExprApp appExpr') of
-    WB.StructField e' idx' _  -> do
-      e'' <- normFieldAccs' sym cache e'
-      normField' sym cache e'' idx' >>= \case
-        Just fld -> normField' sym cache fld idx
-        Nothing -> return Nothing
-
-    WB.StructCtor _ flds -> Just <$> (normFieldAccs' sym cache $ flds Ctx.! idx)
-    WB.BaseIte _ _ test then_ else_ -> do
-      test' <- normFieldAccs' sym cache test
-      then' <- normField sym cache then_ idx
-      else' <- normField sym cache else_ idx
-      Just <$> (WI.baseTypeIte sym test' then' else')
-    _ -> return Nothing
-  _ -> return Nothing
-
 
 data BVExpr t n where
   BVExpr :: 1 <= n => WB.Expr t (WI.BaseBVType n) -> BVExpr t n
@@ -794,9 +703,7 @@ data RebindEnv t where
                } -> RebindEnv t
 
 data RebindState t =
-  RebindState { rbNormFieldCache :: WB.IdxCache t (WB.Expr t)
-               -- ^ cache for normFieldAccs
-              , rbExtractIntsCache :: WB.IdxCache t (WB.Expr t)
+  RebindState { rbExtractIntsCache :: WB.IdxCache t (WB.Expr t)
                -- ^ cache for extractInts
               , rbFnCache :: Map String (SomeSome (WB.ExprSymFn t))
               }
@@ -840,9 +747,8 @@ instance MonadFail (RebindM t) where
 
 evalRebindM' :: WB.ExprBuilder t st fs -> T.Text -> RebindM t a -> IO (Either (RebindException t) a)
 evalRebindM' sym nm (RebindM f) = do
-  nfCache <- WB.newIdxCache
   eiCache <- WB.newIdxCache
-  MS.evalStateT (MR.runReaderT (ME.runExceptT f) (RebindEnv sym emptyExprPath nm)) (RebindState nfCache eiCache Map.empty)
+  MS.evalStateT (MR.runReaderT (ME.runExceptT f) (RebindEnv sym emptyExprPath nm)) (RebindState eiCache Map.empty)
 
 evalRebindM :: WB.ExprBuilder t st fs -> T.Text -> RebindM t a -> IO a
 evalRebindM sym nm f = evalRebindM' sym nm f >>= \case
