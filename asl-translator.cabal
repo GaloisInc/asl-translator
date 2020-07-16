@@ -57,6 +57,7 @@ common shared-properties
                        vector,
                        directory,
                        bytestring,
+                       unliftio-core,
                        zlib
 
   if flag(unsafe-operations)
@@ -86,9 +87,11 @@ library
                        Language.ASL.Globals.Definitions
                        Language.ASL.Globals.ConsistencyCheck
                        Data.Parameterized.CtxFuns
+                       Data.Parameterized.AssignTree
                        Language.ASL.Formulas.Attach
                        Language.ASL.Formulas
                        Util.Log
+                       What4.Expr.ExprTree
   other-modules:       Paths_asl_translator
   hs-source-dirs:      lib
   ghc-options:         -Wcompat -Wall

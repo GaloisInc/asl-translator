@@ -31,6 +31,7 @@ module Data.Parameterized.CtxFuns
   , TyFun
   , Apply
   , MapCtx
+  , MapCtxWrapper
   , applyMapCtx
   , traverseMapCtx
   , revApplyMapCtx
@@ -177,6 +178,10 @@ type family MapCtx (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1) :: Ctx.Ctx k2 w
   MapCtx f Ctx.EmptyCtx = Ctx.EmptyCtx
   MapCtx f (xs Ctx.::> x) = MapCtx f xs Ctx.::> Apply f x
 
+-- | Lift the 'MapCtx' type family to a 'TyFun'
+data MapCtxWrapper :: (TyFun k1 k2 -> Type) -> TyFun (Ctx k1) (Ctx k2) -> Type
+type instance Apply (MapCtxWrapper f) t = MapCtx f t
+
 applyMapCtx :: forall k1 k2 (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1)
                  (g :: k2 -> Type) (h :: k1 -> Type)
                . Proxy f -> (forall (x :: k1). h x -> g (Apply f x))
@@ -314,6 +319,7 @@ fromMapCtxSize f ctx sz = case viewSize sz of
 
 data PairF (t1 :: k -> Type) (t2 :: k -> Type) (t :: k) where
   PairF :: !(a t) -> !(b t) -> PairF a b t
+
 
 unzipPairF :: Ctx.Assignment (PairF a b) ctx -> (Ctx.Assignment a ctx, Ctx.Assignment b ctx)
 unzipPairF asn = case Ctx.viewAssign asn of
