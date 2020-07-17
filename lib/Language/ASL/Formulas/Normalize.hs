@@ -240,16 +240,15 @@ normIntRepr repr = case intToBVRepr repr of
   IntToBVInt -> integerBVTypeRepr
   IntToBVElse _ -> repr
 
-reduceSymFn :: forall sym t st fs args ret
-             . sym ~ WB.ExprBuilder t st fs
-            => sym
-            -> WB.ExprSymFn t args ret
-            -> IO (WB.ExprSymFn t args ret)
-reduceSymFn sym symFn = case WB.symFnInfo symFn of
-  WB.DefinedFnInfo args expr eval -> do
-    expr' <- AT.normFieldAccs sym expr
-    WI.definedFn sym (WB.symFnName symFn) args expr' eval
-  _ -> fail "reduceSymFn: unexpected function kind"
+reduceSymFn :: WB.ExprSymFn t args ret
+            -> RebindM t (WB.ExprSymFn t args ret)
+reduceSymFn symFn = case WB.symFnInfo symFn of
+  WB.DefinedFnInfo args expr eval -> withExpr "reduceSymFn" expr $ do
+    expr' <- withSym $ \sym -> AT.normFieldAccs sym expr
+    validateNormalForm expr'
+    withSym $ \sym -> WI.definedFn sym (WB.symFnName symFn) args expr' eval
+  _ -> errorHere "reduceSymFn: unexpected function kind"
+
 
 -- | Normalize a symfn by expanding its body into one-dimensional struct, and then wrapping
 -- this inner function in an outer function which projects out the original struct shape. This
@@ -273,6 +272,7 @@ normalizeSymFn' symFn = case WB.symFnInfo symFn of
     expr_1 <- withSym $ \sym -> AT.normFieldAccs sym expr_0
     (expr_2, exprBoundVars, flattenBoundVars) <- AT.normExprVars intNormOps args expr_1
     (expr_3, unflattenExpr) <- AT.flatExpr intNormOps expr_2
+    validateNormalForm expr_3
     let innerName = ((WB.symFnName symFn) `appendToSymbol` "_inner")
     innerSymFn <- withSym $ \sym ->
       WI.definedFn sym innerName exprBoundVars expr_3 (FC.allFC WI.baseIsConcrete)
@@ -305,6 +305,29 @@ exprDepthBounded i expr = case expr of
     | WB.FnApp _symFn args <- WB.nonceExprApp nae ->
       FC.allFC (exprDepthBounded (i-1)) $ args
   _ -> True
+
+-- | Final check that the resulting function body is in normal form:
+-- containing no integers or nested structs.
+validateNormalForm :: WB.Expr t tp -> RebindM t ()
+validateNormalForm expr = withExpr "validateNormalForm" expr $ do
+  go expr
+  case expr of
+    WB.AppExpr appExpr -> FC.traverseFC_ go (WB.appExprApp appExpr)
+    WB.NonceAppExpr nappExpr -> FC.traverseFC_ go (WB.nonceExprApp nappExpr)
+    _ -> return ()
+  where
+    go :: WB.Expr t tp -> RebindM t ()
+    go e = withExpr "go" e $ case WI.exprType e of
+      WI.BaseStructRepr reprs -> case FC.anyFC isStruct reprs of
+        True -> errorHere $ "Illegal nested struct type"
+        False -> return ()
+      WI.BaseIntegerRepr -> errorHere $ "Illegal integer type"
+      _ -> return ()
+
+    isStruct :: WI.BaseTypeRepr tp -> Bool
+    isStruct repr = case repr of
+      WI.BaseStructRepr _ -> True
+      _ -> False
 
 
 appendToSymbol ::  WI.SolverSymbol -> String -> WI.SolverSymbol
