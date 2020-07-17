@@ -243,10 +243,11 @@ normIntRepr repr = case intToBVRepr repr of
 reduceSymFn :: WB.ExprSymFn t args ret
             -> RebindM t (WB.ExprSymFn t args ret)
 reduceSymFn symFn = case WB.symFnInfo symFn of
-  WB.DefinedFnInfo args expr eval -> withExpr "reduceSymFn" expr $ do
-    expr' <- withSym $ \sym -> AT.normFieldAccs sym expr
-    validateNormalForm expr'
-    withSym $ \sym -> WI.definedFn sym (WB.symFnName symFn) args expr' eval
+  WB.DefinedFnInfo args expr_0 eval -> withExpr "reduceSymFn" expr_0 $ do
+    expr_1 <- withSym $ \sym -> AT.normFieldAccs sym expr_0
+    expr_2 <- extractInts expr_1
+    validateNormalForm expr_2
+    withSym $ \sym -> WI.definedFn sym (WB.symFnName symFn) args expr_2 eval
   _ -> errorHere "reduceSymFn: unexpected function kind"
 
 
