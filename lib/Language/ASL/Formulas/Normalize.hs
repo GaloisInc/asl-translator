@@ -141,7 +141,7 @@ reserializeInstr env name sexpr = do
       let functionMaker = FS.lazyFunctionMaker sym (env, ref) (FS.uninterpFunctionMaker sym) `FS.composeMakers` FS.uninterpFunctionMaker sym
       SomeSome symFn <- FS.deserializeSymFn' functionMaker sexpr
       putStrLn $ "Reserializing Instruction: " ++ (T.unpack name)
-      symFn' <- reduceSymFn sym symFn
+      symFn' <- evalRebindM sym name $ reduceSymFn symFn
       return $! (name, FS.serializeSymFn symFn')
 
 
@@ -187,7 +187,7 @@ deserializeAndNormalize sym sexpr = do
       False -> do
         putStrLn $ "Normalizing Function: " ++ (T.unpack nm)
         putStrLn $ "Number of functions so far: " ++ show (length normfns)
-        (symFn', innerSymFn) <- normalizeSymFn sym nm symFn
+        (symFn', innerSymFn) <- evalRebindM sym nm $ normalizeSymFn symFn
         let
           nm' = WI.solverSymbolAsText (WB.symFnName innerSymFn)
           env' = Map.insert nm' (SomeSome innerSymFn) env
@@ -254,20 +254,11 @@ reduceSymFn symFn = case WB.symFnInfo symFn of
 -- this inner function in an outer function which projects out the original struct shape. This
 -- outer function is unconditionally unfolded, so it won't appear the body of any normalized
 -- functions.
-normalizeSymFn :: forall sym t st fs args ret
-                . sym ~ WB.ExprBuilder t st fs
-               => sym
-               -> T.Text
-               -> WB.ExprSymFn t args ret
-               -> IO ( WB.ExprSymFn t args ret
-                     , WB.ExprSymFn t (AT.NormBaseTypeCtx IntToBVWrapper args) (AT.NormBaseType IntToBVWrapper ret))
-normalizeSymFn sym' name symFn = evalRebindM sym' name (normalizeSymFn' symFn)
-
-normalizeSymFn' :: WB.ExprSymFn t args ret
-                -> RebindM t
-                     ( WB.ExprSymFn t args ret
-                     , WB.ExprSymFn t (AT.NormBaseTypeCtx IntToBVWrapper args) (AT.NormBaseType IntToBVWrapper ret))
-normalizeSymFn' symFn = case WB.symFnInfo symFn of
+normalizeSymFn :: WB.ExprSymFn t args ret
+               -> RebindM t
+                    ( WB.ExprSymFn t args ret
+                    , WB.ExprSymFn t (AT.NormBaseTypeCtx IntToBVWrapper args) (AT.NormBaseType IntToBVWrapper ret))
+normalizeSymFn symFn = case WB.symFnInfo symFn of
   WB.DefinedFnInfo args expr_0 _eval -> withExpr "normalize" expr_0 $ do
     expr_1 <- withSym $ \sym -> AT.normFieldAccs sym expr_0
     (expr_2, exprBoundVars, flattenBoundVars) <- AT.normExprVars intNormOps args expr_1
