@@ -5,7 +5,7 @@ default: all
 ASL_PARSER = ./submodules/arm-asl-parser
 PARSED = ./data/parsed
 
-HS_SOURCES := $(shell find ./lib ./exe -name '*.hs' -not -path '*/\.*' -not -name 'Normalize.hs') $(shell find . -name '*.cabal')
+HS_SOURCES := $(shell find ./lib ./exe -name '*.hs' -not -path '*/\.*' -not -name 'Normalize.hs' -not -name 'ExprTree.hs') $(shell find . -name '*.cabal')
 
 cabal.project: cabal.project.newbuild
 	cp $< $@
