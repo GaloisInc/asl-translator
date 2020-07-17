@@ -265,7 +265,8 @@ normalizeSymFn symFn = case WB.symFnInfo symFn of
     (expr_2, exprBoundVars, flattenBoundVars) <- AT.normExprVars intNormOps args expr_1
     (expr_3, unflattenExpr) <- AT.flatExpr intNormOps expr_2
     validateNormalForm expr_3
-    let innerName = ((WB.symFnName symFn) `appendToSymbol` "_inner")
+    let Right innerName =
+          WI.userSymbol ("df_" ++ T.unpack (WI.solverSymbolAsText (WB.symFnName symFn)) ++ "_norm")
     innerSymFn <- withSym $ \sym ->
       WI.definedFn sym innerName exprBoundVars expr_3 (FC.allFC WI.baseIsConcrete)
     argExprs <- withSym $ \sym -> return $ FC.fmapFC (WI.varExpr sym) args
@@ -320,13 +321,6 @@ validateNormalForm expr = withExpr "validateNormalForm" expr $ do
     isStruct repr = case repr of
       WI.BaseStructRepr _ -> True
       _ -> False
-
-
-appendToSymbol ::  WI.SolverSymbol -> String -> WI.SolverSymbol
-appendToSymbol symbol str =
-  let
-    symbolstr = T.unpack $ WI.solverSymbolAsText symbol
-  in WI.safeSymbol (symbolstr ++ str)
 
 showExpr :: WB.Expr t ret -> String
 --showExpr e = (LPP.displayS (LPP.renderPretty 0.4 80 (WI.printSymExpr e)) "")
