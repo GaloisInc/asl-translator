@@ -485,9 +485,6 @@ extractInts' expr =  withExpr "extractInts'" expr $ do
           result <- bvOp bv1' bv2'
           withSym $ \sym -> WI.sbvToInteger sym result
 
-    _ | Just (SomeSymFn _ (Ctx.Empty Ctx.:> _arg)) <- asSymFn (\nm -> nm == "extractBitVinttobv") expr
-        -> return expr
-
     _ | Just (expr', AsBVRepr sz) <- asIntegerToSBV expr -> do
           bv <- extractBitV expr'
           unsafeMatchSizeTo True sz bv
@@ -577,11 +574,6 @@ exprIsVar e = case WB.asApp e of
     WB.BoundVarExpr _ -> True
     _ -> False
 
-intIsBound :: Ctx.Assignment (WB.Expr t) (Ctx.EmptyCtx Ctx.::> WI.BaseIntegerType)
-          -> Bool
-intIsBound (Ctx.Empty Ctx.:> e) = not $ exprIsVar e
-
-
 type IntegerBVType = WI.BaseBVType 65
 
 integerBVSzRepr :: NR.NatRepr 65
@@ -602,11 +594,6 @@ extractBitV' expr = withExpr "extractBitV'" expr $ do
       return $! expr'
     WB.BoundVarExpr _ -> wrapInFn
 
-    _ | Just (SomeSymFn _ (Ctx.Empty Ctx.:> arg)) <- asSymFn (\nm -> nm == "extractBitVinttobv") expr
-      , Just (Some (BVExpr bv), _) <- asSBVToInteger arg -> do
-           bv' <- extractInts bv
-           unsafeMatchSizeTo True integerBVSzRepr bv'
-
     _ | Just (Some (BVExpr bv), _) <- asSBVToInteger expr -> do
           bv' <- extractInts bv
           unsafeMatchSizeTo True integerBVSzRepr bv'
@@ -620,15 +607,7 @@ extractBitV' expr = withExpr "extractBitV'" expr $ do
       _ -> errorHere $ "extractBitV: unsupported expression shape: " ++ showExpr expr
   where
     wrapInFn :: RebindM t (WB.Expr t IntegerBVType)
-    wrapInFn =  withSym $ \sym -> do
-      freshIntBV <- WI.freshBoundVar sym WI.emptySymbol WI.BaseIntegerRepr
-      fnBody <- WI.integerToBV sym (WI.varExpr sym freshIntBV) integerBVSzRepr
-      fn <- WI.definedFn sym
-              (WI.safeSymbol "extractBitVinttobv")
-              (Ctx.empty Ctx.:> freshIntBV)
-              fnBody
-              intIsBound
-      WI.applySymFn sym fn (Ctx.empty Ctx.:> expr)
+    wrapInFn = withSym $ \sym -> WI.integerToBV sym expr integerBVSzRepr
 
     liftBinop :: WB.Expr t WI.BaseIntegerType
               -> WB.Expr t WI.BaseIntegerType
