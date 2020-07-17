@@ -771,23 +771,12 @@ extractBitV expr = extractInts' expr >>= extractBitV'
 extractInts :: forall t tp
              . WB.Expr t tp
             -> RebindM t (WB.Expr t tp)
-extractInts expr = do
-  case WB.exprMaybeId expr of
-    Just idx -> do
-      eiCache <- MS.gets rbExtractIntsCache
-      (IO.liftIO $ WB.lookupIdx eiCache idx) >>= \case
-        Just expr' -> return expr'
-        _ -> do
-          expr' <- go
-          WB.insertIdxValue eiCache idx expr'
-          return expr'
-    Nothing -> go
-  where
-    go :: RebindM t (WB.Expr t tp)
-    go = do
-      expr' <- extractInts' expr
-      case WI.exprType expr' of
-        WI.BaseIntegerRepr -> do
-          expr'' <- extractBitV' expr'
-          withSym $ \sym -> WI.sbvToInteger sym expr''
-        _ -> return expr'
+extractInts e = do
+  cache <- MS.gets rbExtractIntsCache
+  WB.idxCacheEval cache e $ do
+    expr' <- extractInts' e
+    case WI.exprType expr' of
+      WI.BaseIntegerRepr -> do
+        expr'' <- extractBitV' expr'
+        withSym $ \sym -> WI.sbvToInteger sym expr''
+      _ -> return expr'
