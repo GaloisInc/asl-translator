@@ -43,6 +43,7 @@ import           Control.Monad ( forM, void )
 import           Control.Lens hiding (Index, (:>), Empty)
 import           Control.Monad.Fail
 
+import qualified Control.Monad.ST as ST
 import qualified Control.Monad.Trans.State as MS hiding ( get, put, gets, modify )
 import qualified Control.Monad.Trans.Reader as MR hiding ( reader, local, ask, asks )
 import qualified Control.Monad.Trans.Except as ME
@@ -55,6 +56,7 @@ import qualified Control.Concurrent as IO
 
 import           Data.Kind
 import qualified Data.Map.Ordered as OMap
+import           Data.Maybe ( catMaybes )
 import           Data.List ( intercalate )
 import qualified Data.Text as T
 import           Data.Set ( Set )
@@ -62,10 +64,12 @@ import qualified Data.Set as Set
 import           Data.Map ( Map )
 import qualified Data.Map as Map
 import qualified Data.IORef as IO
+import qualified Data.HashTable.Class as H
 
 import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Nonce
+import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
@@ -187,7 +191,7 @@ deserializeAndNormalize sym sexpr = do
       False -> do
         putStrLn $ "Normalizing Function: " ++ (T.unpack nm)
         putStrLn $ "Number of functions so far: " ++ show (length normfns)
-        (symFn', innerSymFn) <- evalRebindM sym nm $ normalizeSymFn symFn
+        (symFn', SomeSome innerSymFn) <- evalRebindM sym nm $ normalizeSymFn symFn
         let
           nm' = WI.solverSymbolAsText (WB.symFnName innerSymFn)
           env' = Map.insert nm' (SomeSome innerSymFn) env
@@ -258,34 +262,140 @@ reduceSymFn symFn = case WB.symFnInfo symFn of
 normalizeSymFn :: WB.ExprSymFn t args ret
                -> RebindM t
                     ( WB.ExprSymFn t args ret
-                    , WB.ExprSymFn t (AT.NormBaseTypeCtx IntToBVWrapper args) (AT.NormBaseType IntToBVWrapper ret))
+                    , SomeSome (WB.ExprSymFn t))
 normalizeSymFn symFn = case WB.symFnInfo symFn of
-  WB.DefinedFnInfo args expr_0 _eval -> withExpr "normalize" expr_0 $ do
-    expr_1 <- withSym $ \sym -> AT.normFieldAccs sym expr_0
-    (expr_2, exprBoundVars, flattenBoundVars) <- AT.normExprVars intNormOps args expr_1
-    (expr_3, unflattenExpr) <- AT.flatExpr intNormOps expr_2
-    validateNormalForm expr_3
-    let Right innerName =
-          WI.userSymbol ("df_" ++ T.unpack (WI.solverSymbolAsText (WB.symFnName symFn)) ++ "_norm")
-    innerSymFn <- withSym $ \sym ->
-      WI.definedFn sym innerName exprBoundVars expr_3 (FC.allFC WI.baseIsConcrete)
-    argExprs <- withSym $ \sym -> return $ FC.fmapFC (WI.varExpr sym) args
-    flatArgExprs <- flattenBoundVars $ argExprs
-    outerSymFnExpr <- withSym $ \sym -> do
-      inner <- WI.applySymFn sym innerSymFn flatArgExprs
-      innerExpanded <- WB.evalBoundVars sym expr_3 exprBoundVars flatArgExprs
-      WI.BaseStructRepr reprs <- return $ WI.exprType inner
-      -- inline any results which are simply some unmodified argument
-      flds <- forWithIndex reprs $ \idx _ -> do
-        fldExpanded <- WI.structField sym innerExpanded idx
-        case exprIsVar fldExpanded of
-          True -> return fldExpanded
-          False -> WI.structField sym inner idx
-      WI.mkStruct sym flds
-    outerSymFnBody <-  unflattenExpr outerSymFnExpr
-    outerSymFn <- withSym $ \sym -> WI.definedFn sym (WB.symFnName symFn) args outerSymFnBody (\_ -> True)
-    return $ (outerSymFn, innerSymFn)
+  WB.DefinedFnInfo args expr_0 _eval -> withExpr "normalize" expr_0 $ validateVars expr_0 args >>= \case
+    True -> do
+      expr_1 <- withSym $ \sym -> AT.normFieldAccs sym expr_0
+      (expr_2, exprBoundVars, flattenBoundVars) <- AT.normExprVars intNormOps args expr_1
+      (expr_3, unflattenExpr) <- AT.flatExpr intNormOps expr_2
+      validateNormalForm expr_3
+      let Right innerName =
+            WI.userSymbol ("df_" ++ T.unpack (WI.solverSymbolAsText (WB.symFnName symFn)) ++ "_norm")
+      freshArgs <- withSym $ \sym -> FC.traverseFC (refreshBoundVar sym) args
+      argExprs <- withSym $ \sym -> return $ FC.fmapFC (WI.varExpr sym) freshArgs
+      flatArgExprs <- flattenBoundVars $ argExprs
+      (expr_4, innerSymFn) <- simplifiedSymFn innerName expr_3 exprBoundVars flatArgExprs
+      outerSymFnBody <- unflattenExpr expr_4
+      outerSymFn <- withSym $ \sym -> WI.definedFn sym (WB.symFnName symFn) freshArgs outerSymFnBody (\_ -> True)
+      return $ (outerSymFn, innerSymFn)
+    False -> errorHere "Invalid bound vars"
+
   _ -> errorHere $ "Unexpected symFn kind"
+
+
+refreshBoundVar :: forall sym t tp st fs
+                 . sym ~ WB.ExprBuilder t st fs
+                => sym
+                -> WB.ExprBoundVar t tp
+                -> IO (WB.ExprBoundVar t tp)
+refreshBoundVar sym bv = WI.freshBoundVar sym (WB.bvarName bv) (WB.bvarType bv)
+
+
+validateVars :: WB.Expr t tp
+             -> Ctx.Assignment (WB.ExprBoundVar t) args
+             -> RebindM t Bool
+validateVars expr allbvs = do
+  usedbvsSet <- IO.liftIO $ ME.liftM (Set.unions . map snd) $ ST.stToIO $ H.toList =<< WB.boundVars expr
+  case mkSubAssigment usedbvsSet allbvs of
+    Just _ -> return True
+    Nothing -> do
+      PolyFn varExpr <- asPure WI.varExpr
+      errorHere
+        $ "Invalid expression: used bound variables not a subset of arguments:" ++ showExpr expr
+          ++ "\n Used:" ++ (show (map (\(Some bv) -> showExpr (varExpr bv)) (Set.toList usedbvsSet)))
+          ++ "\n All:" ++ (show (FC.toListFC (\bv -> showExpr (varExpr bv)) allbvs))
+
+data PolyFn a b where
+  PolyFn :: forall a b. (forall tp. a tp -> b tp) -> PolyFn a b
+
+asPure :: AT.HasExprBuilder t m
+       => (forall st fs tp. WB.ExprBuilder t st fs -> a tp -> b tp)
+       -> m (PolyFn a b)
+asPure f = withSym $ \sym -> return $ PolyFn $ f sym
+
+simplifiedSymFn :: forall t rets args
+                 . WI.SolverSymbol
+                -> WB.Expr t (WI.BaseStructType rets)
+                -> Ctx.Assignment (WB.ExprBoundVar t) args
+                -> Ctx.Assignment (WB.Expr t) args
+                -> RebindM t (WB.Expr t (WI.BaseStructType rets), SomeSome (WB.ExprSymFn t))
+simplifiedSymFn name expr allbvs args = withSym $ \sym -> do
+  WI.BaseStructRepr reprs <- return $ WI.exprType expr
+  flds <- forWithIndex reprs $ \idx _ -> WI.structField sym expr idx
+  subFlds <- return $ filterSubAssignment (not . exprIsVar) flds
+  SubAssignment embed subAsn <- return subFlds
+  body <- WI.mkStruct sym subAsn
+  usedbvsSet <- IO.liftIO $ ME.liftM (Set.unions . map snd) $ ST.stToIO $ H.toList =<< WB.boundVars body
+  SubAssignment embedding subbvs <- case mkSubAssigment usedbvsSet allbvs of
+    Just subbvs -> return subbvs
+    Nothing -> fail
+        $ "Invalid expression: used bound variables not a subset of arguments:" ++ showExpr expr
+          ++ "\n Used:" ++ (show (map (\(Some bv) -> showExpr (WI.varExpr sym bv)) (Set.toList usedbvsSet)))
+          ++ "\n All:" ++ (show (FC.toListFC (\bv -> showExpr (WI.varExpr sym bv)) allbvs))
+  subArgs <- forWithIndex subbvs $ \idx _ -> return $ args Ctx.! (Ctx.applyEmbedding' embedding idx)
+  symFn <- WI.definedFn sym name subbvs body (FC.allFC WI.baseIsConcrete)
+  appliedFn <- WI.applySymFn sym symFn subArgs
+  fieldProjs <- forWithIndex subAsn $ \idx _ -> WI.structField sym appliedFn idx
+  exprApplied <- WB.evalBoundVars sym expr allbvs args
+  fldsApplied <- forWithIndex reprs $ \idx _ -> WI.structField sym exprApplied idx
+  finalBody <- WI.mkStruct sym $ overlaySub fldsApplied (SubAssignment embed fieldProjs)
+  return $ (finalBody, SomeSome symFn)
+
+data SubAssignment f ctx where
+  SubAssignment :: Ctx.CtxEmbedding ctx' ctx -> Ctx.Assignment f ctx' -> SubAssignment f ctx
+
+
+embedToMap :: Ctx.CtxEmbedding ctx' ctx
+           -> MapF.MapF (Ctx.Index ctx) (Ctx.Index ctx')
+embedToMap (Ctx.CtxEmbedding _ idxasn) = runIdentity $ do
+  pairsF <- Ctx.traverseWithIndex (\inner_idx outer_idx -> return $ PairF inner_idx outer_idx) idxasn
+  pairs <- return $ FC.toListFC (\(PairF inner_idx outer_idx) -> MapF.Pair outer_idx inner_idx) pairsF
+  return $ MapF.fromList pairs
+
+overlaySub :: forall f ctx
+            . Ctx.Assignment f ctx
+           -> SubAssignment f ctx
+           -> Ctx.Assignment f ctx
+overlaySub asn (SubAssignment embed asn') =
+  let
+    getElem :: forall tp. Ctx.Index ctx tp -> f tp -> Identity (f tp)
+    getElem idx a = case MapF.lookup idx $ embedToMap embed of
+      Just idx' -> return $ asn' Ctx.! idx'
+      Nothing -> return $ a
+  in runIdentity $ Ctx.traverseWithIndex getElem asn
+
+
+filterSubAssignment :: OrdF f
+                    => (forall tp. f tp -> Bool)
+                    -> Ctx.Assignment f ctx
+                    -> SubAssignment f ctx
+filterSubAssignment f asn =
+  let
+    sub = Set.fromList
+      $ catMaybes
+      $ FC.toListFC (\a -> if f a then Just (Some a) else Nothing)  asn
+  in case mkSubAssigment sub asn of
+    Just asn' -> asn'
+    Nothing -> error "Impossible"
+
+mkSubAssigment :: OrdF f
+               => Set (Some f)
+               -> Ctx.Assignment f ctx
+               -> Maybe (SubAssignment f ctx)
+mkSubAssigment elems asn = case Ctx.viewAssign asn of
+  Ctx.AssignEmpty ->
+    case Set.null elems of
+      True -> return $ SubAssignment (Ctx.identityEmbedding Ctx.zeroSize) Ctx.empty
+      False -> fail "Did not use all provided elements"
+  Ctx.AssignExtend asn' f ->
+    case Set.member (Some f) elems of
+      True -> do
+        SubAssignment embed subasn' <- mkSubAssigment (Set.delete (Some f) elems) asn'
+        return $ SubAssignment (Ctx.extendEmbeddingBoth embed) (subasn' Ctx.:> f)
+      False -> do
+        SubAssignment embed subasn' <- mkSubAssigment elems asn'
+        return $ SubAssignment (Ctx.extendEmbeddingRight embed) subasn'
 
 -- | True if the expression is not any deeper than the given depth
 exprDepthBounded :: Integer
