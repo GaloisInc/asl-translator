@@ -174,7 +174,7 @@ simulateFunction :: forall arch sym init globalReads globalWrites tps scope
                   . (CB.IsSymInterface sym, OnlineSolver scope sym)
                  => SimulatorConfig scope
                  -> AC.Function arch globalReads globalWrites init tps
-                 -> IO (S.ExprSymFn scope (init Ctx.::> WT.BaseStructType globalReads) (WT.BaseStructType (AS.FuncReturnCtx globalWrites tps)))
+                 -> IO (S.ExprSymFn scope (S.Expr scope) (init Ctx.::> WT.BaseStructType globalReads) (WT.BaseStructType (AS.FuncReturnCtx globalWrites tps)))
 simulateFunction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
   where
     sig = AC.funcSig crucFunc
@@ -194,7 +194,7 @@ simulateFunction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
                 solverSymbolName
                 allArgBvs
                 (CS.regValue re)
-                (const False )
+                WI.NeverUnfold
               checkClosedTerm allArgBvs (CS.regValue re)
               
               return $ fn
@@ -205,7 +205,7 @@ simulateInstruction :: forall arch sym init globalReads globalWrites scope
                      . (CB.IsSymInterface sym, OnlineSolver scope sym)
                     => SimulatorConfig scope
                     -> AC.Instruction arch globalReads globalWrites init
-                    -> IO (S.ExprSymFn scope (init Ctx.::> WT.BaseStructType G.StructGlobalsCtx) (WT.BaseStructType G.StructGlobalsCtx))
+                    -> IO (S.ExprSymFn scope (S.Expr scope) (init Ctx.::> WT.BaseStructType G.StructGlobalsCtx) (WT.BaseStructType G.StructGlobalsCtx))
 simulateInstruction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
   where
     sig = AC.funcSig crucFunc
@@ -238,7 +238,7 @@ simulateInstruction symCfg crucFunc = genSimulation symCfg crucFunc extractResul
                 solverSymbolName
                 allArgBvs
                 finalStruct
-                (const False )
+                WI.NeverUnfold
               checkClosedTerm allArgBvs finalStruct
               return $ fn
           | otherwise -> X.throwIO (UnexpectedReturnType btr)
@@ -356,7 +356,7 @@ initGlobals _ globalExprs globalVars = do
       in CSG.insertGlobal gv (globalExprs Ctx.! idx) gs
 
 executionFeatures :: sym ~ CBO.OnlineBackend scope solver fs
-                  => WPO.OnlineSolver scope solver
+                  => WPO.OnlineSolver solver
                   => CB.IsSymInterface sym
                   => CCE.IsSyntaxExtension ext
                   => T.Text -> sym -> IO [CS.ExecutionFeature p sym ext rtp]

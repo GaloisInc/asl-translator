@@ -174,7 +174,7 @@ deserializeAndNormalize sym sexpr = do
 
     -- Trivial functions shouldn't be normalized, but instead simply inlined everywhere
     -- they appear
-    shouldInline :: WB.ExprSymFn t args ret -> Bool
+    shouldInline :: WB.ExprSymFn t (WB.Expr t) args ret -> Bool
     shouldInline symFn = case WB.symFnInfo symFn of
       WB.DefinedFnInfo _ expr _ -> exprDepthBounded 7 expr
       _ -> False
@@ -248,8 +248,8 @@ normIntRepr repr = case intToBVRepr repr of
   IntToBVInt -> integerBVTypeRepr
   IntToBVElse _ -> repr
 
-reduceSymFn :: WB.ExprSymFn t args ret
-            -> RebindM t (WB.ExprSymFn t args ret)
+reduceSymFn :: WB.ExprSymFn t (WB.Expr t) args ret
+            -> RebindM t (WB.ExprSymFn t (WB.Expr t) args ret)
 reduceSymFn symFn = case WB.symFnInfo symFn of
   WB.DefinedFnInfo args expr_0 eval -> withExpr "reduceSymFn" expr_0 $ do
     expr_1 <- withSym $ \sym -> AT.normFieldAccs sym expr_0
@@ -264,27 +264,25 @@ reduceSymFn symFn = case WB.symFnInfo symFn of
 -- this inner function in an outer function which projects out the original struct shape. This
 -- outer function is unconditionally unfolded, so it won't appear the body of any normalized
 -- functions.
-normalizeSymFn :: WB.ExprSymFn t args ret
+normalizeSymFn :: WB.ExprSymFn t (WB.Expr t) args ret
                -> RebindM t
-                    ( WB.ExprSymFn t args ret
-                    , SomeSome (WB.ExprSymFn t))
+                    ( WB.ExprSymFn t (WB.Expr t) args ret
+                    , SomeSome (WB.ExprSymFn t (WB.Expr t)))
 normalizeSymFn symFn = case WB.symFnInfo symFn of
-  WB.DefinedFnInfo args expr_0 _eval -> withExpr "normalize" expr_0 $ validateVars expr_0 args >>= \case
-    True -> do
-      expr_1 <- withSym $ \sym -> AT.normFieldAccs sym expr_0
-      (expr_2, exprBoundVars, flattenBoundVars) <- AT.normExprVars intNormOps args expr_1
-      (expr_3, unflattenExpr) <- AT.flatExpr intNormOps expr_2
-      validateNormalForm expr_3
-      let Right innerName =
-            WI.userSymbol ("df_" ++ T.unpack (WI.solverSymbolAsText (WB.symFnName symFn)) ++ "_norm")
-      freshArgs <- withSym $ \sym -> FC.traverseFC (refreshBoundVar sym) args
-      argExprs <- withSym $ \sym -> return $ FC.fmapFC (WI.varExpr sym) freshArgs
-      flatArgExprs <- flattenBoundVars $ argExprs
-      (expr_4, innerSymFn) <- simplifiedSymFn innerName expr_3 exprBoundVars flatArgExprs
-      outerSymFnBody <- unflattenExpr expr_4
-      outerSymFn <- withSym $ \sym -> WI.definedFn sym (WB.symFnName symFn) freshArgs outerSymFnBody (\_ -> True)
-      return $ (outerSymFn, innerSymFn)
-    False -> errorHere "Invalid bound vars"
+  WB.DefinedFnInfo args expr_0 _eval -> withExpr "normalize" expr_0 $ do
+    expr_1 <- withSym $ \sym -> AT.normFieldAccs sym expr_0
+    (expr_2, exprBoundVars, flattenBoundVars) <- AT.normExprVars intNormOps args expr_1
+    (expr_3, unflattenExpr) <- AT.flatExpr intNormOps expr_2
+    validateNormalForm expr_3
+    let Right innerName =
+          WI.userSymbol ("df_" ++ T.unpack (WI.solverSymbolAsText (WB.symFnName symFn)) ++ "_norm")
+    freshArgs <- withSym $ \sym -> FC.traverseFC (refreshBoundVar sym) args
+    argExprs <- withSym $ \sym -> return $ FC.fmapFC (WI.varExpr sym) freshArgs
+    flatArgExprs <- flattenBoundVars $ argExprs
+    (expr_4, innerSymFn) <- simplifiedSymFn innerName expr_3 exprBoundVars flatArgExprs
+    outerSymFnBody <- unflattenExpr expr_4
+    outerSymFn <- withSym $ \sym -> WI.definedFn sym (WB.symFnName symFn) freshArgs outerSymFnBody WI.AlwaysUnfold
+    return $ (outerSymFn, innerSymFn)
 
   _ -> errorHere $ "Unexpected symFn kind"
 
@@ -297,19 +295,13 @@ refreshBoundVar :: forall sym t tp st fs
 refreshBoundVar sym bv = WI.freshBoundVar sym (WB.bvarName bv) (WB.bvarType bv)
 
 
-validateVars :: WB.Expr t tp
-             -> Ctx.Assignment (WB.ExprBoundVar t) args
-             -> RebindM t Bool
-validateVars expr allbvs = do
+getUsedBVs :: Ctx.Assignment (WB.ExprBoundVar t) args
+           -> WB.Expr t tp
+           -> RebindM t (Set (Some (WB.ExprBoundVar t)))
+getUsedBVs asn expr = do
+  let allBvs = Set.fromList $ FC.toListFC Some asn
   usedbvsSet <- IO.liftIO $ ME.liftM (Set.unions . map snd) $ ST.stToIO $ H.toList =<< WB.boundVars expr
-  case mkSubAssigment usedbvsSet allbvs of
-    Just _ -> return True
-    Nothing -> do
-      PolyFn varExpr <- asPure WI.varExpr
-      errorHere
-        $ "Invalid expression: used bound variables not a subset of arguments:" ++ showExpr expr
-          ++ "\n Used:" ++ (show (map (\(Some bv) -> showExpr (varExpr bv)) (Set.toList usedbvsSet)))
-          ++ "\n All:" ++ (show (FC.toListFC (\bv -> showExpr (varExpr bv)) allbvs))
+  return $ Set.intersection allBvs usedbvsSet
 
 data PolyFn a b where
   PolyFn :: forall a b. (forall tp. a tp -> b tp) -> PolyFn a b
@@ -324,7 +316,7 @@ simplifiedSymFn :: forall t rets args
                 -> WB.Expr t (WI.BaseStructType rets)
                 -> Ctx.Assignment (WB.ExprBoundVar t) args
                 -> Ctx.Assignment (WB.Expr t) args
-                -> RebindM t (WB.Expr t (WI.BaseStructType rets), SomeSome (WB.ExprSymFn t))
+                -> RebindM t (WB.Expr t (WI.BaseStructType rets), SomeSome (WB.ExprSymFn t (WB.Expr t)))
 simplifiedSymFn name expr allbvs args = do
   WI.BaseStructRepr reprs <- return $ WI.exprType expr
   flds <- withSym $ \sym -> forWithIndex reprs $ \idx _ -> WI.structField sym expr idx
@@ -332,8 +324,8 @@ simplifiedSymFn name expr allbvs args = do
   SubAssignment embed subAsn <- return subFlds
   body_0 <- withSym $ \sym -> WI.mkStruct sym subAsn
   body <- identifyExprs body_0
+  usedbvsSet <- getUsedBVs allbvs body
   withSym $ \sym -> do
-    usedbvsSet <- IO.liftIO $ ME.liftM (Set.unions . map snd) $ ST.stToIO $ H.toList =<< WB.boundVars body
     SubAssignment embedding subbvs <- case mkSubAssigment usedbvsSet allbvs of
       Just subbvs -> return subbvs
       Nothing -> fail
@@ -341,7 +333,7 @@ simplifiedSymFn name expr allbvs args = do
             ++ "\n Used:" ++ (show (map (\(Some bv) -> showExpr (WI.varExpr sym bv)) (Set.toList usedbvsSet)))
             ++ "\n All:" ++ (show (FC.toListFC (\bv -> showExpr (WI.varExpr sym bv)) allbvs))
     subArgs <- forWithIndex subbvs $ \idx _ -> return $ args Ctx.! (Ctx.applyEmbedding' embedding idx)
-    symFn <- WI.definedFn sym name subbvs body (FC.allFC WI.baseIsConcrete)
+    symFn <- WI.definedFn sym name subbvs body WI.NeverUnfold
     appliedFn <- WI.applySymFn sym symFn subArgs
     fieldProjs <- forWithIndex subAsn $ \idx _ -> WI.structField sym appliedFn idx
     exprApplied <- WB.evalBoundVars sym expr allbvs args
@@ -476,7 +468,7 @@ bvSize e = case WI.exprType e of
 mkUF :: String
      -> Ctx.Assignment WI.BaseTypeRepr args
      -> WI.BaseTypeRepr ret
-     -> RebindM t (WB.ExprSymFn t args ret)
+     -> RebindM t (WB.ExprSymFn t (WB.Expr t) args ret)
 mkUF nm args ret = do
   fnCache <- MS.gets rbFnCache
   case Map.lookup nm fnCache of
@@ -645,7 +637,7 @@ extractInts' expr =  withExpr "extractInts'" expr $ do
       _ -> ret
 
 data SomeSymFn t tp where
-  SomeSymFn :: WB.ExprSymFn t args tp -> Ctx.Assignment (WB.Expr t) args -> SomeSymFn t tp
+  SomeSymFn :: WB.ExprSymFn t (WB.Expr t) args tp -> Ctx.Assignment (WB.Expr t) args -> SomeSymFn t tp
 
 data AsBVRepr tp where
   AsBVRepr :: 1 <= n => NR.NatRepr n -> AsBVRepr (WI.BaseBVType n)
@@ -881,7 +873,7 @@ data RebindState t =
   RebindState { rbExtractIntsCache :: WB.IdxCache t (WB.Expr t)
                -- ^ cache for extractInts
               , rbSymFnMap :: MapF.MapF (Nonce t)  (FnCallCache t)
-              , rbFnCache :: Map String (SomeSome (WB.ExprSymFn t))
+              , rbFnCache :: Map String (SomeSome (WB.ExprSymFn t (WB.Expr t)))
               }
 
 instance Show (ExprPath t) where

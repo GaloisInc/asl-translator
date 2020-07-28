@@ -570,9 +570,9 @@ mkUninterpretedFun key sig = do
   addFormula key symFn
 
 data SomeSymFn where
-  SomeSymFn :: B.ExprSymFn scope args ret -> SomeSymFn
+  SomeSymFn :: B.ExprSymFn scope (B.Expr scope) args ret -> SomeSymFn
 
-addFormula :: ElemKey -> B.ExprSymFn scope args ret -> SigMapM arch ()
+addFormula :: ElemKey -> B.ExprSymFn scope (B.Expr scope) args ret -> SigMapM arch ()
 addFormula key symFn = do
   let serializedSymFn = FS.serializeSymFn symFn
   let result = return serializedSymFn
@@ -582,8 +582,8 @@ data SimulationException where
   SimulationDeserializationFailure :: String -> T.Text -> SimulationException
   SimulationDeserializationMismatch :: forall t args args' ret ret'
                                      . T.Text
-                                    -> (B.ExprSymFn t args ret)
-                                    -> (B.ExprSymFn t args' ret')
+                                    -> (B.ExprSymFn t (B.Expr t) args ret)
+                                    -> (B.ExprSymFn t (B.Expr t) args' ret')
                                     -> SimulationException
   SimulationFailure :: T.Text -> SimulationException
 
@@ -604,7 +604,7 @@ instance Show SimulationException where
     SimulationFailure msg -> "SimulationFailure:" ++ T.unpack msg
 instance X.Exception SimulationException
 
-prettySymFn :: B.ExprSymFn t args ret -> PP.Doc
+prettySymFn :: B.ExprSymFn t (B.Expr t) args ret -> PP.Doc
 prettySymFn symFn =
   PP.hcat $ [
       PP.text (show $ B.symFnName symFn)
@@ -614,7 +614,7 @@ prettySymFn symFn =
     , PP.text (show $ WI.fnReturnType symFn)
     ]
 
-prettySymFnBody :: B.ExprSymFn t args ret -> PP.Doc
+prettySymFnBody :: B.ExprSymFn t (B.Expr t) args ret -> PP.Doc
 prettySymFnBody symFn = case B.symFnInfo symFn of
   B.DefinedFnInfo _ fnexpr _ -> showExpr fnexpr
   _ -> PP.text "[[uninterpreted]]"
@@ -625,13 +625,13 @@ showExpr e = PP.text (LPP.displayS (LPP.renderPretty 0.4 80 (WI.printSymExpr e))
 doSimulation :: TranslatorOptions
              -> CFH.HandleAllocator
              -> T.Text
-             -> (forall scope. ASL.SimulatorConfig scope -> IO (U.SomeSome (B.ExprSymFn scope)))
+             -> (forall scope. ASL.SimulatorConfig scope -> IO (U.SomeSome (B.ExprSymFn scope (B.Expr scope))))
              -> IO FS.SExpr
 doSimulation opts handleAllocator name p = do
   let
     trySimulation :: forall scope
                    . ASL.SimulatorConfig scope
-                  -> IO (U.SomeSome (B.ExprSymFn scope))
+                  -> IO (U.SomeSome (B.ExprSymFn scope (B.Expr scope)))
     trySimulation cfg = do
       p cfg
         `X.catch`
@@ -663,7 +663,7 @@ doSimulation opts handleAllocator name p = do
 -- | Simulate the given crucible CFG, and if it is a function add it to
 -- the formula map.
 simulateGenFunction :: ElemKey
-                    -> (forall scope. ASL.SimulatorConfig scope -> IO (U.SomeSome (B.ExprSymFn scope)))
+                    -> (forall scope. ASL.SimulatorConfig scope -> IO (U.SomeSome (B.ExprSymFn scope (B.Expr scope))))
                     -> SigMapM arch ()
 simulateGenFunction key p = do
   opts <- MSS.gets sOptions
