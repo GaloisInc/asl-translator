@@ -430,6 +430,7 @@ globalFunctions =
   , ("setSlice", 4)
   , ("getSlice", 4)
   , ("finishInstruction", 0)
+  , ("doAssert", 1)
   ]
 
 initializeSigM :: ASLSpec -> SigM ext f ()
@@ -534,10 +535,10 @@ unpackGVarRefs (greads, gwrites) =
   in (Set.toList globalReads, Set.toList globalWrites)
 
 builtinReads :: Set.Set (T.Text, Some WT.BaseTypeRepr)
-builtinReads = Set.fromList [("__AssertionFailure", Some CT.BaseBoolRepr)]
+builtinReads = Set.fromList [("__AssertionFailure", Some (WT.knownRepr :: CT.BaseTypeRepr (G.GlobalsType "__AssertionFailure")))]
 
 builtinWrites :: Set.Set (T.Text, Some WT.BaseTypeRepr)
-builtinWrites = Set.fromList [("__AssertionFailure", Some CT.BaseBoolRepr)]
+builtinWrites = Set.fromList [("__AssertionFailure", Some (WT.knownRepr :: CT.BaseTypeRepr (G.GlobalsType "__AssertionFailure")))]
 
 -- deriving instance Show (SigEnv ext f)
 

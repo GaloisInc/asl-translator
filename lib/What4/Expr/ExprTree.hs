@@ -414,7 +414,7 @@ normFieldAccs sym expr = do
         let a = WB.appExprApp appExpr
         ap' <- WB.traverseApp go_rec a
         let ret = if a == ap' then return e else WB.sbMakeExpr sym ap'
-        case a of
+        case ap' of
           (WB.StructCtor _ flds) -> do
             flds' <- traverseWithIndex (\idx _ -> normField sym go_rec e idx) flds
             case flds' == flds of

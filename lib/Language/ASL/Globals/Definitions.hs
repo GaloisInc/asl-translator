@@ -110,6 +110,7 @@ simpleGlobals' =
   :> bool "__AssertionFailure"
   :> bool "__UndefinedBehavior"
   :> bool "__UnpredictableBehavior"
+  :> bool "__DummyValue"
   -- meta-state reifying information about this encoding
   :> bv @32 "__ThisInstr"
   -- tracking additional execution flags

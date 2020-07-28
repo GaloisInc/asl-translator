@@ -98,6 +98,19 @@ boolean __EndOfInstruction;
 boolean __UndefinedBehavior;
 boolean __UnpredictableBehavior;
 
+// Never used directly, but needed later in the pipeline for technical reasons
+boolean __DummyValue;
+
+
+constant boolean KeepAssertions = FALSE;
+
+doAssert(boolean b)
+    if (NOT b) && KeepAssertions then
+        __AssertionFailure = TRUE;
+    else
+        return;
+
+
 initGlobals()
     setDefaultCond();
 
@@ -233,13 +246,17 @@ EndOfInstruction()
 
 // UNDEFINED is rewritten into this
 ASLSetUndefined()
-  __UndefinedBehavior = TRUE;
-  return;
+  if KeepAssertions then
+    __UndefinedBehavior = TRUE;
+  else
+    return;
 
 // UNPREDICTABLE is rewritten into this
 ASLSetUnpredictable()
-  __UnpredictableBehavior = TRUE;
-  return;
+  if KeepAssertions then
+    __UnpredictableBehavior = TRUE;
+  else
+    return;
 
 // Concretizing some IMPLEMENTATION_DEFINED blocks
 

@@ -544,6 +544,48 @@
     (QualifiedIdentifier Any __UnpredictableBehavior)
     (TypeRef
       (QualifiedIdentifier Any boolean)))
+  (DefVariable
+    (QualifiedIdentifier Any __DummyValue)
+    (TypeRef
+      (QualifiedIdentifier Any boolean)))
+  (DefConst
+    KeepAssertions
+    (TypeRef
+      (QualifiedIdentifier Any boolean))
+    (ExprVarRef
+      (QualifiedIdentifier Any FALSE)))
+  (DefCallable
+    (QualifiedIdentifier Any doAssert)
+    (list
+      (SymDecl
+        b
+        (TypeRef
+          (QualifiedIdentifier Any boolean))))
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtIf
+            (ExprBinOp
+              "&&"
+              (ExprUnOp
+                "NOT"
+                (ExprVarRef
+                  (QualifiedIdentifier Any b)))
+              (ExprVarRef
+                (QualifiedIdentifier Any KeepAssertions)))
+            (StmtBlock
+              (list
+                (StmtAssign
+                  (LValVarRef
+                    (QualifiedIdentifier Any __AssertionFailure))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any TRUE)))))
+            (list)
+            (Just
+              (StmtBlock
+                (list
+                  (StmtReturn Nothing)))))))))
   (DefCallable
     (QualifiedIdentifier Any initGlobals)
     (list)
@@ -1330,12 +1372,21 @@
     (Just
       (StmtBlock
         (list
-          (StmtAssign
-            (LValVarRef
-              (QualifiedIdentifier Any __UndefinedBehavior))
+          (StmtIf
             (ExprVarRef
-              (QualifiedIdentifier Any TRUE)))
-          (StmtReturn Nothing)))))
+              (QualifiedIdentifier Any KeepAssertions))
+            (StmtBlock
+              (list
+                (StmtAssign
+                  (LValVarRef
+                    (QualifiedIdentifier Any __UndefinedBehavior))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any TRUE)))))
+            (list)
+            (Just
+              (StmtBlock
+                (list
+                  (StmtReturn Nothing)))))))))
   (DefCallable
     (QualifiedIdentifier Any ASLSetUnpredictable)
     (list)
@@ -1343,12 +1394,21 @@
     (Just
       (StmtBlock
         (list
-          (StmtAssign
-            (LValVarRef
-              (QualifiedIdentifier Any __UnpredictableBehavior))
+          (StmtIf
             (ExprVarRef
-              (QualifiedIdentifier Any TRUE)))
-          (StmtReturn Nothing)))))
+              (QualifiedIdentifier Any KeepAssertions))
+            (StmtBlock
+              (list
+                (StmtAssign
+                  (LValVarRef
+                    (QualifiedIdentifier Any __UnpredictableBehavior))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any TRUE)))))
+            (list)
+            (Just
+              (StmtBlock
+                (list
+                  (StmtReturn Nothing)))))))))
   (DefVariable
     (QualifiedIdentifier Any __Memory)
     (TypeFun

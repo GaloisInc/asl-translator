@@ -570,12 +570,12 @@ assertAtom test mexpr msg = do
     Just expr ->
       liftGenerator $ CCG.assertExpr (CCG.AtomExpr test) (CCG.App (CCE.StringLit $ WT.UnicodeLiteral $ msg <> (T.pack $ "Expression: " <> show expr)))
     _ -> liftGenerator $ CCG.assertExpr (CCG.AtomExpr test) (CCG.App (CCE.StringLit $ WT.UnicodeLiteral msg))
-  Some assertTrippedE <- lookupVarRef assertionfailureVarName
-  assertTripped <- mkAtom assertTrippedE
-  Refl <- assertAtomType' CT.BoolRepr assertTripped
-  let testFailed = CCG.App $ CCE.Not (CCG.AtomExpr test)
-  result <- mkAtom $ CCG.App (CCE.Or (CCG.AtomExpr assertTripped) testFailed)
-  translateAssignment' (AS.LValVarRef (AS.QualifiedIdentifier AS.ArchQualAny assertionfailureVarName)) result TypeBasic Nothing
+  let doAssert = void $ translateFunctionCall (AS.VarName "doAssert") [Some test] ConstraintNone
+  case mexpr of
+    Just expr -> getStaticValue expr >>= \case
+      Just (StaticBool True) -> return ()
+      _ -> doAssert
+    _ -> doAssert
 
 -- * Assignments
 
@@ -2064,11 +2064,6 @@ unpredictableVarName = T.pack "__UnpredictableBehavior"
 -- state indicating that the processor is in the UNDEFINED state.
 undefinedVarName :: T.Text
 undefinedVarName = T.pack "__UndefinedBehavior"
-
--- | The distinguished name of the global variable that represents the bit of
--- state indicating that an assertion has been tripped.
-assertionfailureVarName :: T.Text
-assertionfailureVarName = T.pack "__AssertionFailure"
 
 --  The distinguished name of the global variable that represents the bit of
 -- state indicating that instruction processing is finished
