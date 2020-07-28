@@ -42,9 +42,10 @@ import           GHC.TypeLits
 import           Control.Monad ( forM, void )
 import           Control.Lens hiding (Index, (:>), Empty)
 import           Control.Monad.Fail
+import qualified Data.Foldable as F
 
 import qualified Control.Monad.ST as ST
-import qualified Control.Monad.Trans.State as MS hiding ( get, put, gets, modify )
+import qualified Control.Monad.Trans.State as MS hiding ( get, put, gets, modify, modify' )
 import qualified Control.Monad.Trans.Reader as MR hiding ( reader, local, ask, asks )
 import qualified Control.Monad.Trans.Except as ME
 import qualified Control.Monad.Reader as MR
@@ -54,15 +55,18 @@ import qualified Control.Monad.IO.Class as IO
 import qualified Control.Concurrent.MVar as IO
 import qualified Control.Concurrent as IO
 
+
+import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Kind
 import qualified Data.Map.Ordered as OMap
-import           Data.Maybe ( catMaybes )
+import           Data.Maybe ( catMaybes, fromMaybe )
 import           Data.List ( intercalate )
 import qualified Data.Text as T
 import           Data.Set ( Set )
 import qualified Data.Set as Set
 import           Data.Map ( Map )
 import qualified Data.Map as Map
+import qualified Data.Map.Merge.Strict as Map
 import qualified Data.IORef as IO
 import qualified Data.HashTable.Class as H
 
@@ -89,9 +93,9 @@ import qualified Language.ASL.Formulas.Serialize as FS
 import           Data.Parameterized.CtxFuns
 import qualified What4.Expr.ExprTree as AT
 import           What4.Expr.ExprTree ( withSym, forWithIndex )
+import qualified What4.Expr.BoolMap as BM
 
 data BuilderData t = NoBuilderData
-
 
 -- | Normalize and re-serialize a serialized formula library.
 normalizeSymFnEnv :: FS.SExpr -> Maybe FS.SExpr -> IO (FS.SExpr, Maybe FS.SExpr)
@@ -250,8 +254,9 @@ reduceSymFn symFn = case WB.symFnInfo symFn of
   WB.DefinedFnInfo args expr_0 eval -> withExpr "reduceSymFn" expr_0 $ do
     expr_1 <- withSym $ \sym -> AT.normFieldAccs sym expr_0
     expr_2 <- extractInts expr_1
-    validateNormalForm expr_2
-    withSym $ \sym -> WI.definedFn sym (WB.symFnName symFn) args expr_2 eval
+    expr_3 <- identifyExprs expr_2
+    validateNormalForm expr_3
+    withSym $ \sym -> WI.definedFn sym (WB.symFnName symFn) args expr_3 eval
   _ -> errorHere "reduceSymFn: unexpected function kind"
 
 
@@ -320,27 +325,29 @@ simplifiedSymFn :: forall t rets args
                 -> Ctx.Assignment (WB.ExprBoundVar t) args
                 -> Ctx.Assignment (WB.Expr t) args
                 -> RebindM t (WB.Expr t (WI.BaseStructType rets), SomeSome (WB.ExprSymFn t))
-simplifiedSymFn name expr allbvs args = withSym $ \sym -> do
+simplifiedSymFn name expr allbvs args = do
   WI.BaseStructRepr reprs <- return $ WI.exprType expr
-  flds <- forWithIndex reprs $ \idx _ -> WI.structField sym expr idx
+  flds <- withSym $ \sym -> forWithIndex reprs $ \idx _ -> WI.structField sym expr idx
   subFlds <- return $ filterSubAssignment (not . exprIsVar) flds
   SubAssignment embed subAsn <- return subFlds
-  body <- WI.mkStruct sym subAsn
-  usedbvsSet <- IO.liftIO $ ME.liftM (Set.unions . map snd) $ ST.stToIO $ H.toList =<< WB.boundVars body
-  SubAssignment embedding subbvs <- case mkSubAssigment usedbvsSet allbvs of
-    Just subbvs -> return subbvs
-    Nothing -> fail
-        $ "Invalid expression: used bound variables not a subset of arguments:" ++ showExpr expr
-          ++ "\n Used:" ++ (show (map (\(Some bv) -> showExpr (WI.varExpr sym bv)) (Set.toList usedbvsSet)))
-          ++ "\n All:" ++ (show (FC.toListFC (\bv -> showExpr (WI.varExpr sym bv)) allbvs))
-  subArgs <- forWithIndex subbvs $ \idx _ -> return $ args Ctx.! (Ctx.applyEmbedding' embedding idx)
-  symFn <- WI.definedFn sym name subbvs body (FC.allFC WI.baseIsConcrete)
-  appliedFn <- WI.applySymFn sym symFn subArgs
-  fieldProjs <- forWithIndex subAsn $ \idx _ -> WI.structField sym appliedFn idx
-  exprApplied <- WB.evalBoundVars sym expr allbvs args
-  fldsApplied <- forWithIndex reprs $ \idx _ -> WI.structField sym exprApplied idx
-  finalBody <- WI.mkStruct sym $ overlaySub fldsApplied (SubAssignment embed fieldProjs)
-  return $ (finalBody, SomeSome symFn)
+  body_0 <- withSym $ \sym -> WI.mkStruct sym subAsn
+  body <- identifyExprs body_0
+  withSym $ \sym -> do
+    usedbvsSet <- IO.liftIO $ ME.liftM (Set.unions . map snd) $ ST.stToIO $ H.toList =<< WB.boundVars body
+    SubAssignment embedding subbvs <- case mkSubAssigment usedbvsSet allbvs of
+      Just subbvs -> return subbvs
+      Nothing -> fail
+          $ "Invalid expression: used bound variables not a subset of arguments:" ++ showExpr expr
+            ++ "\n Used:" ++ (show (map (\(Some bv) -> showExpr (WI.varExpr sym bv)) (Set.toList usedbvsSet)))
+            ++ "\n All:" ++ (show (FC.toListFC (\bv -> showExpr (WI.varExpr sym bv)) allbvs))
+    subArgs <- forWithIndex subbvs $ \idx _ -> return $ args Ctx.! (Ctx.applyEmbedding' embedding idx)
+    symFn <- WI.definedFn sym name subbvs body (FC.allFC WI.baseIsConcrete)
+    appliedFn <- WI.applySymFn sym symFn subArgs
+    fieldProjs <- forWithIndex subAsn $ \idx _ -> WI.structField sym appliedFn idx
+    exprApplied <- WB.evalBoundVars sym expr allbvs args
+    fldsApplied <- forWithIndex reprs $ \idx _ -> WI.structField sym exprApplied idx
+    finalBody <- WI.mkStruct sym $ overlaySub fldsApplied (SubAssignment embed fieldProjs)
+    return $ (finalBody, SomeSome symFn)
 
 data SubAssignment f ctx where
   SubAssignment :: Ctx.CtxEmbedding ctx' ctx -> Ctx.Assignment f ctx' -> SubAssignment f ctx
@@ -778,6 +785,76 @@ extractBitV' expr = withExpr "extractBitV'" expr $ do
 
     go _ = errorHere $ "extractBitV: unsupported expression shape: " ++ showExpr expr
 
+-- | Rewrite expressions to maximize term sharing
+identifyExprs :: forall t tp
+               . WB.Expr t tp
+              -> RebindM t (WB.Expr t tp)
+identifyExprs expr = do
+  cache <- WB.newIdxCache
+  fieldCache <- WB.newIdxCache
+  let
+    go :: forall tp'. WB.Expr t tp' -> RebindM t (WB.Expr t tp')
+    go e = WB.idxCacheEval cache e $ case e of
+      WB.AppExpr appExpr -> do
+        let a = WB.appExprApp appExpr
+        a' <- WB.traverseApp go a
+        let ret = if a == a' then return e else withSym $ \sym -> WB.sbMakeExpr sym a'
+        identifyFieldAccs fieldCache a' >>= \case
+          Just e' -> return e'
+          Nothing -> ret
+
+      WB.NonceAppExpr naeE -> do
+        nae <- return $ WB.nonceExprApp naeE
+        nae' <- FC.traverseFC go nae
+        let ret = if nae == nae' then return e else withSym $ \sym -> WB.sbNonceExpr sym nae'
+        identifyCalls nae' >>= \case
+          Just e' -> return e'
+          Nothing -> ret
+      _ -> return e
+  go expr
+
+
+data FnCallCache t tp where
+  FnCallCache :: Map (Ctx.Assignment (WB.Expr t) args) (WB.Expr t ret) -> FnCallCache t (args Ctx.::> ret)
+
+identifyCalls :: WB.NonceApp t (WB.Expr t) tp
+              -> RebindM t (Maybe (WB.Expr t tp))
+identifyCalls nap = case nap of
+  WB.FnApp symFn args -> do
+    let n = WB.symFnId symFn
+    ccache <- MS.gets rbSymFnMap
+    case MapF.lookup n ccache of
+      Just (FnCallCache env) -> case Map.lookup args env of
+        Just e -> return $ Just e
+        Nothing -> do
+          e <- withSym $ \sym -> WI.applySymFn sym symFn args
+          let env' = FnCallCache $ Map.insert args e env
+          MS.modify' $ \s -> s { rbSymFnMap = MapF.insert n env' ccache }
+          return $ Just e
+      Nothing -> do
+        e <- withSym $ \sym -> WI.applySymFn sym symFn args
+        let env' = FnCallCache $ Map.singleton args e
+        MS.modify' $ \s -> s { rbSymFnMap = MapF.insert n env' ccache }
+        return $ Just e
+  _ -> return Nothing
+
+data RevStructCache t tp where
+  RevStructCache :: Ctx.Assignment (WB.Expr t) ctx -> RevStructCache t (WI.BaseStructType ctx)
+
+identifyFieldAccs :: WB.IdxCache t (RevStructCache t)
+                  -> WB.App (WB.Expr t) tp
+                  -> RebindM t (Maybe (WB.Expr t tp))
+identifyFieldAccs fieldCache a = case a of
+  WB.StructField struct idx _ -> WB.lookupIdxValue fieldCache struct >>= \case
+    Just (RevStructCache asn) -> return $ Just $ asn Ctx.! idx
+    Nothing | Just n <- WB.exprMaybeId struct -> do
+      WI.BaseStructRepr reprs <- return $ WI.exprType struct
+      flds <- Ctx.traverseWithIndex (\idx' _ -> withSym $ \sym -> WI.structField sym struct idx') reprs
+      WB.insertIdxValue fieldCache n (RevStructCache flds)
+      return $ Just $ flds Ctx.! idx
+    _ -> return Nothing
+  _ -> return Nothing
+
 
 data ExprPath t where
   ExprPath :: [(Some (WB.Expr t), String)] -> Set (Some (WB.Expr t)) -> ExprPath t
@@ -803,6 +880,7 @@ data RebindEnv t where
 data RebindState t =
   RebindState { rbExtractIntsCache :: WB.IdxCache t (WB.Expr t)
                -- ^ cache for extractInts
+              , rbSymFnMap :: MapF.MapF (Nonce t)  (FnCallCache t)
               , rbFnCache :: Map String (SomeSome (WB.ExprSymFn t))
               }
 
@@ -846,7 +924,7 @@ instance MonadFail (RebindM t) where
 evalRebindM' :: WB.ExprBuilder t st fs -> T.Text -> RebindM t a -> IO (Either (RebindException t) a)
 evalRebindM' sym nm (RebindM f) = do
   eiCache <- WB.newIdxCache
-  MS.evalStateT (MR.runReaderT (ME.runExceptT f) (RebindEnv sym emptyExprPath nm)) (RebindState eiCache Map.empty)
+  MS.evalStateT (MR.runReaderT (ME.runExceptT f) (RebindEnv sym emptyExprPath nm)) (RebindState eiCache MapF.empty Map.empty)
 
 evalRebindM :: WB.ExprBuilder t st fs -> T.Text -> RebindM t a -> IO a
 evalRebindM sym nm f = evalRebindM' sym nm f >>= \case
