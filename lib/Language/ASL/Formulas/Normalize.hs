@@ -454,7 +454,7 @@ exprDepthBounded i expr = case expr of
   _ -> True
 
 -- | Final check that the resulting function body is in normal form:
--- containing no integers or nested structs.
+-- containing no integers or nested (non-empty) structs.
 validateNormalForm :: WB.Expr t tp -> RebindM t ()
 validateNormalForm expr = withExpr "validateNormalForm" expr $ do
   go expr
@@ -473,7 +473,7 @@ validateNormalForm expr = withExpr "validateNormalForm" expr $ do
 
     isStruct :: WI.BaseTypeRepr tp -> Bool
     isStruct repr = case repr of
-      WI.BaseStructRepr _ -> True
+      WI.BaseStructRepr (Ctx.Empty Ctx.:> _)  -> True
       _ -> False
 
 showExpr :: WB.Expr t ret -> String

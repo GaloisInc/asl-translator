@@ -544,10 +544,6 @@
     (QualifiedIdentifier Any __UnpredictableBehavior)
     (TypeRef
       (QualifiedIdentifier Any boolean)))
-  (DefVariable
-    (QualifiedIdentifier Any __DummyValue)
-    (TypeRef
-      (QualifiedIdentifier Any boolean)))
   (DefConst
     KeepAssertions
     (TypeRef

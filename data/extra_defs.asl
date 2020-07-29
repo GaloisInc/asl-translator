@@ -98,10 +98,6 @@ boolean __EndOfInstruction;
 boolean __UndefinedBehavior;
 boolean __UnpredictableBehavior;
 
-// Never used directly, but needed later in the pipeline for technical reasons
-boolean __DummyValue;
-
-
 constant boolean KeepAssertions = FALSE;
 
 doAssert(boolean b)
