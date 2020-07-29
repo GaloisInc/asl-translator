@@ -14,5 +14,5 @@
 	path = submodules/what4
 	url = https://github.com/GaloisInc/what4
 [submodule "deps/parameterized-utils"]
-	path = deps/parameterized-utils
+	path = submodules/parameterized-utils
 	url = https://github.com/GaloisInc/parameterized-utils
