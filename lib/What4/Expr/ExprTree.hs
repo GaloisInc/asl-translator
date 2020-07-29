@@ -261,6 +261,37 @@ withExprBuilder' sym f = evalExperBuilderM sym (unliftHasBuilder f)
 -- | Flatten an expression of a nested struct type into a 1-dimensional struct, applying
 -- the given type-changing normalization function to each atomic field. Returns an inversion
 -- function to take expressions from the normalized type back to the original type.
+--
+-- This allows us to rephrase an expression as an equivalent expression which contains
+-- no struct-typed sub-expressions, except for bound variables and function calls.
+--
+--
+-- Example:
+-- 
+-- Given the function :
+--
+-- @
+-- f(i : int, s : (bool, int)) : (int, (bool, int))
+--  = (s(1), (s(0) + i, i))
+-- @
+--
+-- And normalization operations:
+-- @
+-- normExprLeaf (e : int) : bits(65) = integerToBV(e)
+-- unNormExpr (e : bits(65)) : int = bvToInteger(e)
+-- @
+--
+-- When applied to the function body, this returns the expression:
+-- @
+-- (integerToBV(s(0)) + integerToBV(i), s_1, integerToBV(i)) : (bits(65), bool, bits(65))
+-- @
+-- And corresponding unwrapping function:
+-- @
+-- \(s_0 : bits(65), b : bool, s_1 : bits(65))
+--   -> (bvToInteger(s_1), (b, bvToInteger(s_2))) : (int, (bool, int))
+-- @
+
+
 flatExpr :: forall m f t tp
           . HasExprBuilder t m
          => ExprNormOps f t m
@@ -347,8 +378,40 @@ getBoundVarsTree nops bv = do
 
 
 -- | Replace bound variables in the given term with fresh variables, producing
--- distinct variables for the fields in each struct-typed variable, and producing normalized-typed
--- variables (which are un-normalized back into the original expression).
+-- distinct variables for the fields in each struct-typed variable, and
+-- producing normalized-typed variables (according to the given 'ExprNormOps'
+-- (which are un-normalized back into the original expression).
+--
+-- This allows us to rephrase the body of a function, which was originally
+-- defined over struct-typed non-normalized arguments, to instead be defined
+-- over a flat list of non-struct normalized arguments.
+--
+-- Example:
+-- Given the function:
+-- @
+-- f(s : (int, int), b : bool) : int
+--   = if b then s(0) + s(1) else s(0)
+-- @
+--
+-- And normalization operations:
+-- @
+-- normExprLeaf (e : int) : bits(65) = integerToBV(e)
+-- unNormExpr (e : bits(65)) : int = bvToInteger(e)
+-- @
+--
+-- When applied to the function body, this returns:
+-- @
+-- bvToInteger(if b then s_0 + s_1 else s_0)
+-- @
+-- With the list of fresh bound variables:
+-- @
+-- [s_0 : bits(65), s_1 : bits(65), b : bool]
+-- @
+-- And unwrapping function
+-- @
+-- \[s : (int, int), b : bool]
+--   -> [integerToBV(s(0)) : bits(65), integerToBV(s(1)) : bits(65), b : bool]
+-- @
 normExprVars :: forall f t m ctx tp
               . HasExprBuilder t m
              => ExprNormOps f t m

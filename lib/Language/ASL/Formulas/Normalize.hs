@@ -4,7 +4,42 @@ Copyright        : (c) Galois, Inc 2020
 Maintainer       : Daniel Matichuk <dmatichuk@galois.com>
 
 Normalization of the translated ASL semantics to remove
-structs and integers.
+nested structs and integers.
+
+
+Each function from the ASL specification is read in, converted into a normal
+form, and then wrapped in a proxy function which dispatches to the normalized
+variant. The proxy function has the same signature as the original, but is
+unconditionally unfolded.  In subsequent functions (and instructions), calls to
+this function are therefore immediately evaluated into its equivalent normal
+form.
+
+Integers are converted into 65-bit bivectors, with integer operations
+rewritten into equivalent bitvector operations.
+
+Example:
+
+Original:
+
+@
+f(i : int, s : (bool, int)) : (int, (bool, int))
+  = (s(1), (s(0) + i, i))
+@
+
+Normalized:
+
+@
+f_norm(i : bits(65), s_0 : bool, s_1 : bits(65)) : (bits(65), bool, bits(65))
+  = (s_0 + i , s_1, i)
+@
+
+Proxy:
+
+@
+f(i : int, s : (bool, int)) : (int, (bool, int))
+  = let (r_0, r_1, r_2) = f_norm(integerToBV(i), s(0), integerToBV(s(1)));
+    in (bvToInteger(r_0), (r_1, bvToInteger(r_2)))
+@
 
 
 -}
@@ -94,6 +129,16 @@ import           Data.Parameterized.CtxFuns
 import qualified What4.Expr.ExprTree as AT
 import           What4.Expr.ExprTree ( withSym, forWithIndex )
 import qualified What4.Expr.BoolMap as BM
+
+
+-- | Integers in the original expression are translated into 65-bit bitvectors.
+type IntegerBVType = WI.BaseBVType 65
+
+integerBVSzRepr :: NR.NatRepr 65
+integerBVSzRepr = NR.knownNat
+
+integerBVTypeRepr :: WI.BaseTypeRepr IntegerBVType
+integerBVTypeRepr = knownRepr
 
 data BuilderData t = NoBuilderData
 
@@ -692,13 +737,6 @@ exprIsVar e = case WB.asApp e of
     WB.BoundVarExpr _ -> True
     _ -> False
 
-type IntegerBVType = WI.BaseBVType 65
-
-integerBVSzRepr :: NR.NatRepr 65
-integerBVSzRepr = NR.knownNat
-
-integerBVTypeRepr :: WI.BaseTypeRepr IntegerBVType
-integerBVTypeRepr = knownRepr
 
 -- | Extract a bitvector from an integer expression, assuming it is already
 -- in normal form.
