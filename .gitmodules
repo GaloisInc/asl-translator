@@ -13,6 +13,6 @@
 [submodule "submodules/what4"]
 	path = submodules/what4
 	url = https://github.com/GaloisInc/what4
-[submodule "submodules/parameterized-utils"]
-	path = submodules/parameterized-utils
+[submodule "deps/parameterized-utils"]
+	path = submodules/parameterized-utils/parameterized-utils
 	url = https://github.com/GaloisInc/parameterized-utils
