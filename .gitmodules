@@ -15,4 +15,4 @@
 	url = https://github.com/GaloisInc/what4
 [submodule "deps/parameterized-utils"]
 	path = deps/parameterized-utils
-	url = git@github.com:GaloisInc/parameterized-utils
+	url = https://github.com/GaloisInc/parameterized-utils
