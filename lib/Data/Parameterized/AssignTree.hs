@@ -30,15 +30,21 @@ module Data.Parameterized.AssignTree
   , CtxLeaf
   , CtxBranch
   , AssignTree(..)
+  , IndexTree
+  , flattenTreeIndex
+  , treeLookup
+  , SizeTree
+  , flattenTreeSize
   , FlattenCtxTrees
   , FlattenCtxTree
   , MapCtxTree
   , CollapseCtxTree
+  , flatMapFlatten
   , zipWithM
   , flattenAsnTrees
   , flattenAsnTree
   , collapseAssignTree
-  , collapseUnflatten
+  , collapseApplied
   , traverseMapCtxTree
   , revTraverseMapCtxTree
   ) where
@@ -108,6 +114,9 @@ type family FlattenCtxTree (ctx :: CtxTree k) :: Ctx k where
   FlattenCtxTree ('CtxLeaf k) = EmptyCtx ::> k
   FlattenCtxTree ('CtxBranch trees) = FlattenCtxTrees trees
 
+data FlattenCtxTreeWrapper :: TyFun (CtxTree k) (Ctx k) -> Type
+type instance Apply FlattenCtxTreeWrapper t = FlattenCtxTree t
+
 flattenAsnTrees :: Assignment (AssignTree f) ctx
                 -> Assignment f (FlattenCtxTrees ctx)
 flattenAsnTrees trees = case viewAssign trees of
@@ -151,12 +160,6 @@ assignTreeIndexes trees = case viewAssign trees of
         in left1 :> AssignTreeLeaf (nextIndex (size left_flat))
   AssignEmpty -> empty
 
-assignTreeIndex :: forall f ctxts
-                 . AssignTree f ctxts
-                -> AssignTree (Index (FlattenCtxTree ctxts)) ctxts
-assignTreeIndex tree = case tree of
-  AssignTreeLeaf _ -> AssignTreeLeaf (nextIndex zeroSize)
-  AssignTreeBranch trees -> AssignTreeBranch (assignTreeIndexes trees)
 
 -- | Collapse a 'CtxTree' by recursively applying the given function to its leaves
 type family CollapseCtxTree (f :: TyFun (Ctx k) k -> Type) (ctxt :: CtxTree k) :: k where
@@ -165,6 +168,60 @@ type family CollapseCtxTree (f :: TyFun (Ctx k) k -> Type) (ctxt :: CtxTree k) :
 
 data CollapseCtxTreeWrapper :: (TyFun (Ctx k) k -> Type) -> TyFun (CtxTree k) k -> Type
 type instance Apply (CollapseCtxTreeWrapper f) t = CollapseCtxTree f t
+
+newtype IndexTree (ctxts :: CtxTree k) (tp :: k) where
+  IndexTree :: Index (FlattenCtxTree ctxts) tp -> IndexTree ctxts tp
+
+newtype SizeTree (ctxts :: CtxTree k) where
+  SizeTree :: Size (FlattenCtxTree ctxts) -> SizeTree ctxts
+
+treeLookup :: AssignTree f ctxt
+           -> IndexTree ctxt tp
+           -> f tp
+treeLookup tree (IndexTree idxt) = flattenAsnTree tree Ctx.! idxt
+
+flattenTreeIndex :: IndexTree ctxt tp -> Index (FlattenCtxTree ctxt) tp
+flattenTreeIndex (IndexTree idx) = idx
+
+treeSize :: AssignTree f ctxt
+         -> SizeTree ctxt
+treeSize tree = SizeTree $ Ctx.size $ flattenAsnTree tree
+
+flattenTreeSize :: SizeTree ctxt -> Size (FlattenCtxTree ctxt)
+flattenTreeSize (SizeTree sz) = sz
+
+flatMapFlattenTrees :: Proxy f
+                    -> Assignment (AssignTree g) ctx
+                    -> MapCtx f (FlattenCtxTrees ctx) :~: FlattenCtxTree (CtxBranch (MapCtx (MapCtxTreeWrapper f) ctx))
+flatMapFlattenTrees pf trees = case Ctx.viewAssign trees of
+  Ctx.AssignEmpty -> Refl
+  Ctx.AssignExtend (trees' :: Assignment (AssignTree g) ctx1) (a :: AssignTree g tp)
+    | Refl <- flatMapFlatten pf a
+    , Refl <- flatMapFlattenTrees pf trees'
+    , SizeTree sz <- treeSize a
+    , Refl <- mapCtxAppend pf (Proxy @(FlattenCtxTrees ctx1)) sz
+    -> Refl
+
+flatMapFlatten :: Proxy f
+               -> AssignTree g ctxt
+               -> MapCtx f (FlattenCtxTree ctxt) :~: FlattenCtxTree (MapCtxTree f ctxt)
+flatMapFlatten pf tree = case tree of
+  AssignTreeLeaf _ -> Refl
+  AssignTreeBranch trees | Refl <- flatMapFlattenTrees pf trees -> Refl
+
+mapCtxIndexTree :: Proxy f
+                -> SizeTree ctxt
+                -> IndexTree ctxt tp
+                -> AssignTree g ctxt
+                -> IndexTree (MapCtxTree f ctxt) (Apply f tp)
+mapCtxIndexTree f (SizeTree sz) (IndexTree idx) tree | Refl <- flatMapFlatten f tree = IndexTree $ mapCtxIndex f sz idx
+
+assignTreeIndex :: forall f ctxts
+                 . AssignTree f ctxts
+                -> AssignTree (IndexTree ctxts) ctxts
+assignTreeIndex tree =  FC.fmapFC IndexTree $ case tree of
+  AssignTreeLeaf _ -> AssignTreeLeaf (nextIndex zeroSize)
+  AssignTreeBranch trees -> AssignTreeBranch (assignTreeIndexes trees)
 
 -- | Collapse an 'AssignTree' by recursively applying the given collapsing function to its leaves
 collapseAssignTree :: forall k (h :: TyFun (Ctx k) k -> Type) m (ctxt :: CtxTree k) f g
@@ -180,6 +237,18 @@ collapseAssignTree ph g f tree = case tree of
     trees' <- traverseMapCtx (Proxy @(CollapseCtxTreeWrapper h)) (collapseAssignTree ph g f) trees
     f trees'
 
+-- | Collapse an 'AssignTree' by recursively applying the given collapsing function to its leaves,
+-- with an 'IndexTree' for each leaf element.
+collapseAssignTreeIdx :: forall k (h :: TyFun (Ctx k) k -> Type) m (ctxt :: CtxTree k) f g
+                    . Monad m
+                   => Proxy h
+                   -> (forall (tp' :: k). IndexTree ctxt tp' -> f tp' -> m (g tp'))
+                   -> (forall ctx. Assignment g ctx -> m (g (Apply h ctx)))
+                   -> AssignTree f ctxt
+                   -> m (g (CollapseCtxTree h ctxt))
+collapseAssignTreeIdx ph g f tree =
+  collapseAssignTree ph (\(PairF idx a) -> g idx a) f $ zipPairF (assignTreeIndex tree) tree
+
 data Applied g f tp where
   Applied :: g (Apply f tp) -> Applied g f tp
 
@@ -189,25 +258,26 @@ appliedTree :: Proxy f
 appliedTree pf tree =
   runIdentity $ revTraverseMapCtxTree pf (\x -> return $ Applied x) tree
 
+  
 -- | Collapse a pair of 'AssignTree's, where one is the result of a type-level map.
-collapseUnflatten :: forall k
+collapseApplied :: forall k
                         (h :: TyFun (Ctx k) k -> Type)
                         (j :: TyFun k k -> Type)
                                m (ctxt :: CtxTree k) f g l
                      . Monad m
                     => Proxy h
                     -> Proxy j
-                    -> (forall tp'. Index (FlattenCtxTree (MapCtxTree j ctxt)) (Apply j tp') -> l tp' -> f (Apply j tp') -> m (g tp'))
+                    -> (forall tp'. IndexTree (MapCtxTree j ctxt) (Apply j tp') -> l tp' -> f (Apply j tp') -> m (g tp'))
                     -> (forall ctx. Assignment g ctx -> m (g (Apply h ctx)))
                     -> AssignTree l ctxt
                     -> AssignTree f (MapCtxTree j ctxt)
                     -> m (g (CollapseCtxTree h ctxt))
-collapseUnflatten ph pj g f tree revTree =
+collapseApplied ph pj g f tree revTree =
   let
     appTree = appliedTree pj revTree
-    idxTree = appliedTree pj (assignTreeIndex revTree)
-    ttree = zipPairF appTree (zipPairF idxTree tree)
-  in collapseAssignTree ph (\(PairF (Applied f_j_tp) (PairF (Applied idx_j_tp) l_tp)) -> g idx_j_tp l_tp f_j_tp) f ttree
+    ttree = zipPairF appTree tree
+    sz = treeSize tree
+  in collapseAssignTreeIdx ph (\idx_j_tp (PairF (Applied f_j_tp) l_tp) -> g (mapCtxIndexTree pj sz idx_j_tp tree) l_tp f_j_tp) f ttree
 
 
 -- | Map the given type-level function over a 'CtxTree'

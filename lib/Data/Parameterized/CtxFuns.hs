@@ -41,8 +41,10 @@ module Data.Parameterized.CtxFuns
   , IndexApplied(..)
   , fromMapCtxSize
   , fromMapCtxIndex
+  , mapCtxAppend
   , PairF(..)
   , unzipPairF
+  
   ) where
 
 import           GHC.TypeLits
@@ -177,6 +179,7 @@ type family Apply (f :: TyFun k1 k2 -> Type) (x :: k1) :: k2
 type family MapCtx (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1) :: Ctx.Ctx k2 where
   MapCtx f Ctx.EmptyCtx = Ctx.EmptyCtx
   MapCtx f (xs Ctx.::> x) = MapCtx f xs Ctx.::> Apply f x
+
 
 -- | Lift the 'MapCtx' type family to a 'TyFun'
 data MapCtxWrapper :: (TyFun k1 k2 -> Type) -> TyFun (Ctx k1) (Ctx k2) -> Type
@@ -316,6 +319,16 @@ fromMapCtxSize f ctx sz = case viewSize sz of
    , (ctx', _) <- headTailProxies ctx
    -> incSize $ fromMapCtxSize f ctx' sz'
 #endif
+
+
+mapCtxAppend :: forall f ctx1 ctx2
+              . Proxy f
+             -> Proxy ctx1
+             -> Ctx.Size ctx2
+             -> MapCtx f (ctx1 Ctx.<+> ctx2) :~: MapCtx f ctx1 Ctx.<+> MapCtx f ctx2
+mapCtxAppend pf p_ctx1 sz2 = case Ctx.viewSize sz2 of
+  Ctx.ZeroSize -> Refl
+  Ctx.IncSize sz' | Refl <- mapCtxAppend pf p_ctx1 sz' -> Refl
 
 data PairF (t1 :: k -> Type) (t2 :: k -> Type) (t :: k) where
   PairF :: !(a t) -> !(b t) -> PairF a b t

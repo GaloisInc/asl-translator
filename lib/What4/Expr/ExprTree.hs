@@ -3,8 +3,8 @@ Module           : Language.ASL.Formulas.ExprTree
 Copyright        : (c) Galois, Inc 2020
 Maintainer       : Daniel Matichuk <dmatichuk@galois.com>
 
-Functions for manipulating what4 expressions containing
-nested structs.
+Functions for manipulating and flattening what4 expressions containing nested
+structs.
 
 
 -}
@@ -303,19 +303,19 @@ flatExpr nops e = do
   flatTrees <- return $ flattenAsnTree tree'
   struct <- withSym $ \sym -> WI.mkStruct sym flatTrees
   let unflatten struct' =
-        collapseUnflatten (Proxy @BaseStructWrapper) (Proxy @f) (getField struct')
+        collapseApplied (Proxy @BaseStructWrapper) (Proxy @f) (getField struct')
           (\flds -> withSym $ \sym -> WI.mkStruct sym flds) tree tree'
   Refl <- return $ collapseEq (WI.exprType e)
   return (struct, unflatten)
   where
     getField :: forall tp'
               . WB.Expr t (NormBaseType f tp)
-             -> Index (FlattenCtxTree (MapCtxTree f (AsBaseTypeTree tp))) (Apply f tp')
+             -> IndexTree (MapCtxTree f (AsBaseTypeTree tp)) (Apply f tp')
              -> WB.Expr t tp'
              -> WB.Expr t (Apply f tp')
              -> m (WB.Expr t tp')
     getField struct idx e' _ = do
-      fld <- withSym $ \sym -> WI.structField sym struct idx
+      fld <- withSym $ \sym -> WI.structField sym struct (flattenTreeIndex idx)
       (unNormExpr nops) (WI.exprType e') fld
 
 newtype NormExprRet t f tp a where
