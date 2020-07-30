@@ -42,7 +42,7 @@ common shared-properties
                        transformers,
                        lens,
                        ansi-wl-pprint,
-                       parameterized-utils,
+                       parameterized-utils >= 2.1.1,
                        pretty,
                        crucible,
                        what4,
