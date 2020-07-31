@@ -23,8 +23,6 @@ install:
   - ghc --version
   - cabal --version
   - git submodule update --init
-  - ln -s cabal.project.newbuild cabal.project
-  - cabal v2-configure
 
 addons:
   apt:
