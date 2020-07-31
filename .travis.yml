@@ -9,6 +9,7 @@ cache:
 
 matrix:
   include:
+  - ghc: 8.4.4
   - ghc: 8.6.5
 
 # Handle submodules manually, since we don't want a recursive checkouts
