@@ -62,7 +62,6 @@ f(i : int, s : (bool, int)) : (int, (bool, int))
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 module Language.ASL.Formulas.Normalize
