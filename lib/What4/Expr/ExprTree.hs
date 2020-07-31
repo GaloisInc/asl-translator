@@ -154,12 +154,11 @@ exprToTree expr = do
     go :: forall tp'. WB.Expr t tp' -> m (BaseTypeTree (WB.Expr t) tp')
     go e = WB.idxCacheEval cache e $ case WB.asApp e of
       Just (WB.StructCtor _ flds) -> branchTrees <$> FC.traverseFC go flds
-      Just (WB.StructField struct idx _) -> go struct >>= \case
-        BaseTypeTree _ (AssignTreeBranch trees) ->
-          let
-            WI.BaseStructRepr reprs = WI.exprType struct
-            idx' = mapCtxIndex (Proxy @AsBaseTypeTreeWrapper) (size reprs) idx
-          in return $ BaseTypeTree (WI.exprType e) $ trees ! idx'
+      Just (WB.StructField struct idx _)
+        | WI.BaseStructRepr reprs <- WI.exprType struct -> go struct >>= \case
+          BaseTypeTree _ (AssignTreeBranch trees) -> do
+            idx' <- return $ mapCtxIndex (Proxy @AsBaseTypeTreeWrapper) (size reprs) idx
+            return $ BaseTypeTree (WI.exprType e) $ trees ! idx'
       Just (WB.BaseIte repr _ test then_ else_) -> do
         BaseTypeTree _ thenTree <- go then_
         BaseTypeTree _ elseTree <- go else_
@@ -278,7 +277,7 @@ withExprBuilder' sym f = evalExperBuilderM sym (unliftHasBuilder f)
 -- And normalization operations:
 -- @
 -- normExprLeaf (e : int) : bits(65) = integerToBV(e)
--- unNormExpr (e : bits(65)) : int = bvToInteger(e)
+  -- unnormexpr (e : bits(65)) : int = bvToInteger(e)
 -- @
 --
 -- When applied to the function body, this returns the expression:
