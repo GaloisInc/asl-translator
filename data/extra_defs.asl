@@ -98,6 +98,15 @@ boolean __EndOfInstruction;
 boolean __UndefinedBehavior;
 boolean __UnpredictableBehavior;
 
+constant boolean KeepAssertions = FALSE;
+
+doAssert(boolean b)
+    if (NOT b) && KeepAssertions then
+        __AssertionFailure = TRUE;
+    else
+        return;
+
+
 initGlobals()
     setDefaultCond();
 
@@ -233,13 +242,17 @@ EndOfInstruction()
 
 // UNDEFINED is rewritten into this
 ASLSetUndefined()
-  __UndefinedBehavior = TRUE;
-  return;
+  if KeepAssertions then
+    __UndefinedBehavior = TRUE;
+  else
+    return;
 
 // UNPREDICTABLE is rewritten into this
 ASLSetUnpredictable()
-  __UnpredictableBehavior = TRUE;
-  return;
+  if KeepAssertions then
+    __UnpredictableBehavior = TRUE;
+  else
+    return;
 
 // Concretizing some IMPLEMENTATION_DEFINED blocks
 

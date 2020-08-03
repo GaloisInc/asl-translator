@@ -57,6 +57,7 @@ module Language.ASL.Globals.Definitions
   , AllSIMDBaseType
   , maxGPRRepr
   , maxSIMDRepr
+  , UnitType
   ) where
 
 import           GHC.TypeNats ( KnownNat )
@@ -88,6 +89,7 @@ type MaxSIMD = 31
 type MemoryBaseType = WI.BaseBVType 146
 type AllGPRBaseType = WI.BaseBVType 148
 type AllSIMDBaseType = WI.BaseBVType 149
+type UnitType = WI.BaseStructType Ctx.EmptyCtx
 
 -- | A 'NR.NatRepr' for 'MaxGPR'
 maxGPRRepr :: NR.NatRepr MaxGPR
@@ -110,6 +112,7 @@ simpleGlobals' =
   :> bool "__AssertionFailure"
   :> bool "__UndefinedBehavior"
   :> bool "__UnpredictableBehavior"
+  :> def "__DummyValue" (knownRepr :: WI.BaseTypeRepr UnitType) domainUnbounded
   -- meta-state reifying information about this encoding
   :> bv @32 "__ThisInstr"
   -- tracking additional execution flags

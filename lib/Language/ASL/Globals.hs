@@ -114,6 +114,7 @@ module Language.ASL.Globals
   , MemoryBaseType
   , AllGPRBaseType
   , AllSIMDBaseType
+  , UnitType
   )
 
 where
