@@ -27,9 +27,8 @@ import           Data.IORef
 import qualified Control.Exception as X
 import           Control.Lens ( (^.) )
 import           Control.Applicative ( Const(..) )
--- import           Control.Applicative ( (<|>) )
-
-import           Control.Monad.Identity
+import qualified Control.Monad.Fail as MF
+import qualified Control.Monad.Identity as I
 import           Control.Monad ( liftM, unless )
 import qualified Control.Monad.ST as ST
 import qualified Data.HashTable.Class as H
@@ -38,9 +37,7 @@ import qualified Data.Map as Map
 import           Data.Time.Clock
 import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.NatRepr
--- import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
--- import qualified Data.Parameterized.List as PL
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Text as T
@@ -48,7 +45,7 @@ import           Data.Set ( Set )
 import qualified Data.Set as Set
 import qualified Data.Vector as V
 import           Data.Maybe ( catMaybes )
--- import qualified Dismantle.XML.AArch32 as DA
+
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.CFG.Core as CCC
 import qualified Lang.Crucible.CFG.Expr as CCE
@@ -128,7 +125,8 @@ genSimulation symCfg crucFunc extractResult =
       let globalState = initGlobals symCfg globalsInitEs globalsInitVars
       (s0, _) <- initialSimulatorState symCfg globalState econt retRepr
       ft <- executionFeatures (AS.funcName $ AC.funcSig crucFunc) (simSym symCfg)
-      CBO.withSolverProcess sym $ \p -> do
+      let onlineDisabled = MF.fail "`concretize` requires online solving to be enabled"
+      CBO.withSolverProcess sym onlineDisabled $ \p -> do
         let argBVs = FC.fmapFC freshArgBoundVar initArgs
         let allBVs = getBVs initArgs ++ [Some gbv]
         eres <- WPO.inNewFrameWithVars p allBVs $ do
@@ -149,11 +147,11 @@ extractSubCtx :: forall f g outer inner
               -> Ctx.Assignment f outer
               -> Ctx.Assignment g inner
               -> Pair (Ctx.Assignment f) (Ctx.Assignment g)
-extractSubCtx idxMap asnf asng = runIdentity $ do
+extractSubCtx idxMap asnf asng = I.runIdentity $ do
   asnpaired <- Ctx.traverseWithIndex getVal asnf
   return $ pairToCtxs $ catMaybes $ FC.toListFC (\(Const v) -> v) $ asnpaired
   where
-    getVal :: forall tp. Ctx.Index outer tp -> f tp -> Identity (Const (Maybe (Pair f g)) tp)
+    getVal :: forall tp. Ctx.Index outer tp -> f tp -> I.Identity (Const (Maybe (Pair f g)) tp)
     getVal idx f = case idxMap idx of
       Just gidx -> return $ Const $ Just (Pair f (asng Ctx.! gidx))
       Nothing -> return $ Const Nothing

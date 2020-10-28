@@ -50,6 +50,7 @@ module Language.ASL.Types
   ) where
 
 
+import           Data.Kind ( Type )
 import qualified Data.Parameterized.List as PL
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.TraversableFC as FC
@@ -187,7 +188,7 @@ instance (Show a, ShowF b) => ShowF (LabeledValue a b) where
 instance (Show a, ShowF b) => Show (LabeledValue a b tp) where
   show (LabeledValue l v) = concat [ "LabeledValue ", show l, " ", showF v ]
 
-type family BaseLitType (tp :: WT.BaseType) :: * where
+type family BaseLitType (tp :: WT.BaseType) :: Type where
   BaseLitType WT.BaseIntegerType = Integer
   BaseLitType WT.BaseBoolType = Bool
   BaseLitType (WT.BaseBVType w) = BV.BV w
