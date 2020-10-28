@@ -52,8 +52,8 @@ module Language.ASL.Translation.Preprocess
 import           Math.NumberTheory.Logarithms
 import           Control.Applicative ( (<|>), Const(..) )
 import qualified Control.Monad.Fail as F
-import           Control.Monad (void)
-import           Control.Monad.Identity
+import           Control.Monad (void, unless, liftM, forM_)
+import qualified Control.Monad.Identity as I
 import qualified Control.Monad.Except as E
 import qualified Control.Monad.RWS as RWS
 import qualified Data.BitVector.Sized as BV
@@ -875,7 +875,7 @@ varDepsOfStmts :: Bool
                -> [AS.Stmt]
                -> VarDeps
 varDepsOfStmts forward stmts = let
-  collectors :: forall t. TR.KnownSyntaxRepr t => t -> Identity VarDeps
+  collectors :: forall t. TR.KnownSyntaxRepr t => t -> I.Identity VarDeps
   collectors = TR.useKnownSyntaxRepr $ \syn -> \case
     TR.SyntaxStmtRepr -> case syn of
       _ | Just _ <- unletInStmt syn ->
@@ -888,7 +888,7 @@ varDepsOfStmts forward stmts = let
         return $ varDependsExpr var lo <> varDependsExpr var hi
       _ -> return mempty
     _ -> return mempty
-  in runIdentity $ collectStmts "varDepsOfStmts" collectors stmts
+  in I.runIdentity $ collectStmts "varDepsOfStmts" collectors stmts
   where
     varDependsExpr lval e =
       if forward then mconcat $ map (\var -> varDependsOn var lval) $ directVarsOfExpr e
@@ -1191,7 +1191,7 @@ liftOverEnvs instName enc stmts = case dependentVariablesOfStmts stmts of
     decodeVarDeps = varDepsOfStmts True decodes
     decodeVars =
       let
-        collectors :: forall t. TR.KnownSyntaxRepr t => t -> Identity (Set.Set T.Text)
+        collectors :: forall t. TR.KnownSyntaxRepr t => t -> I.Identity (Set.Set T.Text)
         collectors = TR.useKnownSyntaxRepr $ \syn -> \case
           TR.SyntaxLValRepr
             | AS.LValVarRef (AS.VarName nm) <- syn ->
@@ -1203,7 +1203,7 @@ liftOverEnvs instName enc stmts = case dependentVariablesOfStmts stmts of
                return $ Set.fromList nms
              _ -> return mempty
           _ -> return mempty
-        decodeLVals = runIdentity $ mconcat <$> traverse (TR.collectSyntax collectors) decodes
+        decodeLVals = I.runIdentity $ mconcat <$> traverse (TR.collectSyntax collectors) decodes
         in decodeLVals
     varDeps = varDepsOfStmts True stmts <> decodeVarDeps
 
@@ -1234,7 +1234,7 @@ liftOverEnvs instName enc stmts = case dependentVariablesOfStmts stmts of
 -- | Scan the instruction body for function calls to overly type-dependent functions
 dependentVariablesOfStmts :: [AS.Stmt] -> ([T.Text], [T.Text])
 dependentVariablesOfStmts stmts = let
-  collectors :: forall t. TR.KnownSyntaxRepr t => t -> Identity (Set.Set T.Text, Set.Set T.Text)
+  collectors :: forall t. TR.KnownSyntaxRepr t => t -> I.Identity (Set.Set T.Text, Set.Set T.Text)
   collectors = TR.useKnownSyntaxRepr $ \syn -> \case
     TR.SyntaxStmtRepr -> case syn of
       _ | Just _ <- unletInStmt syn -> return mempty
@@ -1271,7 +1271,7 @@ dependentVariablesOfStmts stmts = let
         return $ directVarsOf saturate_to
       _ -> return mempty
     _ -> return mempty
-  (vars, optvars) = runIdentity $ mconcat <$> traverse (TR.collectSyntax collectors) stmts
+  (vars, optvars) = I.runIdentity $ mconcat <$> traverse (TR.collectSyntax collectors) stmts
  in (Set.toList vars, Set.toList optvars)
   where
     directVarsOf e = (Set.fromList $ directVarsOfExpr e, Set.empty)

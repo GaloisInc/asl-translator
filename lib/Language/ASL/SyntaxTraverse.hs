@@ -48,10 +48,9 @@ module Language.ASL.SyntaxTraverse
   )
 where
 
-import           Data.Typeable
-import           Control.Applicative
+import           Control.Applicative ( liftA2 )
 import qualified Control.Monad.Writer.Lazy as W
-import           Control.Monad.Identity
+import qualified Control.Monad.Identity as I
 import qualified Control.Monad.Trans as MT
 import qualified Language.ASL.Syntax as AS
 import qualified Data.Text as T
@@ -59,7 +58,7 @@ import qualified Data.Set as Set
 import qualified Data.Map as Map
 import           Data.Maybe (maybeToList, catMaybes, isJust)
 import           Language.ASL.Types
-import           Data.Parameterized.Classes
+import qualified Data.Parameterized.Classes as PC
 
 import           Util.Log ( MonadLog(..), indentLog, unindentLog )
 
@@ -68,9 +67,9 @@ pattern VarName nm <- AS.QualifiedIdentifier _ nm where
   VarName nm = AS.QualifiedIdentifier AS.ArchQualAny nm
 
 varsOfExpr :: AS.Expr -> [T.Text]
-varsOfExpr e = runIdentity $ collectSyntax getVar e
+varsOfExpr e = I.runIdentity $ collectSyntax getVar e
   where
-    getVar :: forall t. KnownSyntaxRepr t => t -> Identity [T.Text]
+    getVar :: forall t. KnownSyntaxRepr t => t -> I.Identity [T.Text]
     getVar = useKnownSyntaxRepr $ \syn -> \case
       SyntaxExprRepr
         | AS.ExprVarRef (VarName ident) <- syn ->
@@ -325,13 +324,13 @@ data SyntaxRepr t where
   SyntaxLValRepr :: SyntaxRepr AS.LValExpr
   SyntaxCallRepr :: SyntaxRepr (AS.QualifiedIdentifier, [AS.Expr])
 
-instance TestEquality SyntaxRepr where
+instance PC.TestEquality SyntaxRepr where
   testEquality repr repr' = case (repr, repr') of
-    (SyntaxStmtRepr, SyntaxStmtRepr) -> Just Refl
-    (SyntaxExprRepr, SyntaxExprRepr) -> Just Refl
-    (SyntaxTypeRepr, SyntaxTypeRepr) -> Just Refl
-    (SyntaxLValRepr, SyntaxLValRepr) -> Just Refl
-    (SyntaxCallRepr, SyntaxCallRepr) -> Just Refl
+    (SyntaxStmtRepr, SyntaxStmtRepr) -> Just PC.Refl
+    (SyntaxExprRepr, SyntaxExprRepr) -> Just PC.Refl
+    (SyntaxTypeRepr, SyntaxTypeRepr) -> Just PC.Refl
+    (SyntaxLValRepr, SyntaxLValRepr) -> Just PC.Refl
+    (SyntaxCallRepr, SyntaxCallRepr) -> Just PC.Refl
     _ -> Nothing
 
 deriving instance Eq (SyntaxRepr t)
@@ -399,9 +398,9 @@ collectSyntax writes e = W.execWriterT (traverseSyntax (writeToTraverser writes)
 
 -- | Recursive syntax mapping. The given map is applied top-down to each sub-element.
 mapSyntax :: KnownSyntaxRepr t => SyntaxMap -> t -> t
-mapSyntax smap t = runIdentity $ traverseSyntax (mapsToTraverser smap) t
+mapSyntax smap t = I.runIdentity $ traverseSyntax (mapsToTraverser smap) t
   where
-    mapsToTraverser :: SyntaxMap -> SyntaxTraverser Identity
+    mapsToTraverser :: SyntaxMap -> SyntaxTraverser I.Identity
     mapsToTraverser syntaxMap = (\t' -> return $ syntaxMap t')
 
 -- | Recursive syntax traversal. Each sub-element is replaced by the result of the given monadic function.
