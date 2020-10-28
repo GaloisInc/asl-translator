@@ -125,7 +125,8 @@ genSimulation symCfg crucFunc extractResult =
       let globalState = initGlobals symCfg globalsInitEs globalsInitVars
       (s0, _) <- initialSimulatorState symCfg globalState econt retRepr
       ft <- executionFeatures (AS.funcName $ AC.funcSig crucFunc) (simSym symCfg)
-      CBO.withSolverProcess sym $ \p -> do
+      let onlineDisabled = MF.fail "`concretize` requires online solving to be enabled"
+      CBO.withSolverProcess sym onlineDisabled $ \p -> do
         let argBVs = FC.fmapFC freshArgBoundVar initArgs
         let allBVs = getBVs initArgs ++ [Some gbv]
         eres <- WPO.inNewFrameWithVars p allBVs $ do
