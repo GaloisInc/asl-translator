@@ -124,6 +124,7 @@ simpleGlobals' =
   :> bool "__conditionPassed"
   :> bv @32 "_PC"
   -- rest of the processor state is unconstrained
+  :> bv @32 "FPSCR"
   :> bv @1 "PSTATE_A"
   :> bv @2 "PSTATE_BTYPE"
   :> bv @1 "PSTATE_C"
@@ -266,7 +267,6 @@ untrackedGlobals' = Some $ empty
   :> bv @32 "ELR_hyp"
   :> bv @1 "EventRegister"
   :> bv @32 "FPEXC"
-  :> bv @32 "FPSCR"
   :> bv @32 "FPSID"
   :> bv @32 "FPSR"
   :> bv @32 "HCPTR"
