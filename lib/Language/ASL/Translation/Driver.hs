@@ -64,8 +64,8 @@ import qualified Control.Exception as X
 import qualified Control.Concurrent as IO
 import           Control.Concurrent.MVar
 
-import           Control.Monad.Identity
-import           Control.Monad (forM_, when)
+import qualified Control.Monad.Identity as I
+import           Control.Monad (forM_, when, void, forM)
 import qualified Control.Monad.State.Lazy as MSS
 import qualified Control.Monad.Except as E
 import           Control.Monad.IO.Class
@@ -507,9 +507,9 @@ withOnlineBackend key action = catchIO key $ withOnlineBackend' action
 
 -- Extremely vague measure of function body size
 measureStmts :: [AS.Stmt] -> Int
-measureStmts stmts = getSum $ runIdentity $ mconcat <$> traverse (TR.collectSyntax doCollect) stmts
+measureStmts stmts = getSum $ I.runIdentity $ mconcat <$> traverse (TR.collectSyntax doCollect) stmts
   where
-    doCollect :: TR.KnownSyntaxRepr t => t -> Identity (Sum Int)
+    doCollect :: TR.KnownSyntaxRepr t => t -> I.Identity (Sum Int)
     doCollect _ = return 1
 
 -- | Translate an ASL instruction or function into a crucible CFG.

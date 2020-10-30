@@ -76,7 +76,6 @@ import           GHC.TypeLits
 import           Control.Monad ( forM, void )
 import           Control.Lens hiding (Index, (:>), Empty)
 import           Control.Monad.Fail
-import qualified Data.Foldable as F
 
 import qualified Control.Monad.ST as ST
 import qualified Control.Monad.Trans.State as MS hiding ( get, put, gets, modify, modify' )
@@ -90,17 +89,15 @@ import qualified Control.Concurrent.MVar as IO
 import qualified Control.Concurrent as IO
 
 
-import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Kind
 import qualified Data.Map.Ordered as OMap
-import           Data.Maybe ( catMaybes, fromMaybe )
+import           Data.Maybe ( catMaybes )
 import           Data.List ( intercalate )
 import qualified Data.Text as T
 import           Data.Set ( Set )
 import qualified Data.Set as Set
 import           Data.Map ( Map )
 import qualified Data.Map as Map
-import qualified Data.Map.Merge.Strict as Map
 import qualified Data.IORef as IO
 import qualified Data.HashTable.Class as H
 
@@ -127,7 +124,6 @@ import qualified Language.ASL.Formulas.Serialize as FS
 import           Data.Parameterized.CtxFuns
 import qualified What4.Expr.ExprTree as AT
 import           What4.Expr.ExprTree ( withSym, forWithIndex )
-import qualified What4.Expr.BoolMap as BM
 
 
 -- | Integers in the original expression are translated into 65-bit bitvectors.
@@ -346,14 +342,6 @@ getUsedBVs asn expr = do
   let allBvs = Set.fromList $ FC.toListFC Some asn
   usedbvsSet <- IO.liftIO $ ME.liftM (Set.unions . map snd) $ ST.stToIO $ H.toList =<< WB.boundVars expr
   return $ Set.intersection allBvs usedbvsSet
-
-data PolyFn a b where
-  PolyFn :: forall a b. (forall tp. a tp -> b tp) -> PolyFn a b
-
-asPure :: AT.HasExprBuilder t m
-       => (forall st fs tp. WB.ExprBuilder t st fs -> a tp -> b tp)
-       -> m (PolyFn a b)
-asPure f = withSym $ \sym -> return $ PolyFn $ f sym
 
 simplifiedSymFn :: forall t rets args
                  . WI.SolverSymbol

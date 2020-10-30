@@ -77,7 +77,6 @@ import qualified Data.Set as Set
 import           Data.Map ( Map )
 import qualified Data.Map as Map
 import qualified Data.Text as T
-import           Data.Parameterized.NatRepr ( type (<=) )
 import qualified What4.Interface as WI
 import qualified What4.Concrete as WI
 

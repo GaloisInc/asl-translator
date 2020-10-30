@@ -54,7 +54,7 @@ import           Prelude hiding ( fail )
 
 import           GHC.Stack ( HasCallStack, callStack, getCallStack, withFrozenCallStack, prettySrcLoc )
 import           Control.Monad ( foldM )
-import           Control.Monad.Fail ( MonadFail, fail )
+import qualified Control.Monad.Fail as MF
 import           Control.Monad.IO.Class ( MonadIO(..) )
 
 import qualified Data.Text as T
@@ -177,31 +177,31 @@ serializeSymFnEnv symFnEnv = assembleSymFnEnv (map go symFnEnv)
     go (nm, SomeSome symFn) = mkSymFnEnvEntry nm (serializeSymFn symFn)
 
 
-throwErr :: HasCallStack => MonadFail m => String -> m a
+throwErr :: HasCallStack => MF.MonadFail m => String -> m a
 throwErr msg = do
   let (_, src): _ = getCallStack callStack
-  fail ("At: " ++ prettySrcLoc src ++ ": " ++ msg) 
+  MF.fail ("At: " ++ prettySrcLoc src ++ ": " ++ msg)
 
-badSExpr :: HasCallStack => MonadFail m => SExpr -> m a
+badSExpr :: HasCallStack => MF.MonadFail m => SExpr -> m a
 badSExpr sexpr = withFrozenCallStack (throwErr $ "Unexpected s-expression: " ++ show sexpr)
 
 -- | Parse text into a wellformed s-expression, failing on any parse errors.
-parseSExpr :: MonadFail m => T.Text -> m SExpr
+parseSExpr :: MF.MonadFail m => T.Text -> m SExpr
 parseSExpr src = case WSF.parseSExpr src of
   Left err -> throwErr err
   Right sexpr -> return sexpr
 
-deserializeBaseType :: MonadFail m => SExpr -> m (Some WI.BaseTypeRepr)
+deserializeBaseType :: MF.MonadFail m => SExpr -> m (Some WI.BaseTypeRepr)
 deserializeBaseType sexpr = case WPD.deserializeBaseType sexpr of
   Left err -> throwErr err
   Right bt -> return bt
 
-deserializeBaseTypes :: MonadFail m => [SExpr] -> m (Some (Ctx.Assignment WI.BaseTypeRepr))
+deserializeBaseTypes :: MF.MonadFail m => [SExpr] -> m (Some (Ctx.Assignment WI.BaseTypeRepr))
 deserializeBaseTypes sexprs = case WPD.readBaseTypes (S.L sexprs) of
   Left err -> throwErr err
   Right bt -> return bt
 
-deserializeFunSig :: MonadFail m => SExpr -> m (SomeSome FunSig)
+deserializeFunSig :: MF.MonadFail m => SExpr -> m (SomeSome FunSig)
 deserializeFunSig sexpr = case sexpr of
   S.L [ S.A (AStr _ name)
       , S.L argsSexprs
@@ -213,7 +213,7 @@ deserializeFunSig sexpr = case sexpr of
   _ -> badSExpr sexpr
 
 
-deserializeSigEnv :: forall m. MonadFail m => SExpr -> m [(T.Text, SomeSome FunSig)]
+deserializeSigEnv :: forall m. MF.MonadFail m => SExpr -> m [(T.Text, SomeSome FunSig)]
 deserializeSigEnv sexpr = case sexpr of
   S.L formals -> mapM go formals
   _ -> badSExpr sexpr
@@ -231,21 +231,21 @@ deserializeSigEnv sexpr = case sexpr of
 data FunctionMaker sym where
   FunctionMaker :: sym ->
     (forall args ret m
-     . (MonadIO m, MonadFail m)
+     . (MonadIO m, MF.MonadFail m)
     => T.Text -> FunSig args ret
     -> m (Either String (WI.SymFn sym args ret)))
     -> FunctionMaker sym
 
-makeFunction :: MonadFail m => MonadIO m => FunctionMaker sym -> T.Text -> FunSig args ret -> m (WI.SymFn sym args ret)
+makeFunction :: MF.MonadFail m => MonadIO m => FunctionMaker sym -> T.Text -> FunSig args ret -> m (WI.SymFn sym args ret)
 makeFunction (FunctionMaker _sym f) nm sig = f nm sig >>= \case
-  Left err -> fail err
+  Left err -> MF.fail err
   Right result -> return result
 
 symFromMaker :: FunctionMaker sym -> sym
 symFromMaker (FunctionMaker sym _) = sym
 
 deserializeSymFnBindingEnv :: forall m sym
-                            . MonadFail m
+                            . MF.MonadFail m
                            => MonadIO m
                            => FunctionMaker sym
                            -> SExpr
@@ -270,7 +270,7 @@ type SymFnEnv sym = Map T.Text (SomeSome (WI.SymFn sym))
 -- | Deserialize a single What4 function, translating function calls
 -- according to the provided 'FunctionMaker'.
 deserializeSymFn' :: (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
-                 => MonadFail m
+                 => MF.MonadFail m
                  => MonadIO m
                  => FunctionMaker sym
                  -> SExpr
@@ -301,7 +301,7 @@ fnMakerFromEnv sym env  = FunctionMaker sym $ \formalName sig ->
 -- | Deserialize a single What4 function, translating function calls according
 -- to the given 'SymFnEnv'
 deserializeSymFn :: (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
-                 => MonadFail m
+                 => MF.MonadFail m
                  => MonadIO m
                  => sym
                  -> SymFnEnv sym
@@ -313,7 +313,7 @@ deserializeSymFn sym env sexpr = deserializeSymFn' (fnMakerFromEnv sym env) sexp
 -- | Mapping informal (externally-visible) function names to functions
 type NamedSymFnEnv sym = Map T.Text (SomeSome (WI.SymFn sym))
 
-matchSigs :: (MonadFail m, WI.IsSymExprBuilder sym)
+matchSigs :: (MF.MonadFail m, WI.IsSymExprBuilder sym)
           => sym
           -> FunSig args ret
           -> WI.SymFn sym args' ret'
@@ -326,7 +326,7 @@ matchSigs _sym sig symFn =
              ++ "\nExpected: " ++ show sig
              ++ "\nGot: " ++ show (FunSig (fsName sig) (WI.fnArgTypes symFn)  (WI.fnReturnType symFn))
 
-lookupFnSig :: (MonadFail m, WI.IsSymExprBuilder sym)
+lookupFnSig :: (MF.MonadFail m, WI.IsSymExprBuilder sym)
             => sym
             -> NamedSymFnEnv sym
             -> FunSig args ret
@@ -344,7 +344,7 @@ lookupFnSig sym env sig =
     -- We do a substitution here so that lookups can succeed
     dotName = T.replace "df_" "df." (fsName sig)
 
-getSymFnEnv :: forall m. MonadFail m => SExpr -> m [(T.Text, SExpr)]
+getSymFnEnv :: forall m. MF.MonadFail m => SExpr -> m [(T.Text, SExpr)]
 getSymFnEnv = \case
   S.L [ S.A (AId "SymFnEnv"), S.L symFnSExprs ] -> mapM go symFnSExprs
   x -> badSExpr x
@@ -359,7 +359,7 @@ getSymFnEnv = \case
 -- to the given function.
 deserializeSymFnEnv' :: forall sym m env
                      . (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
-                    => MonadFail m
+                    => MF.MonadFail m
                     => MonadIO m
                     => sym
                     -> env
@@ -392,7 +392,7 @@ deserializeSymFnEnv' _sym env extendenv mkFun sexpr = do
 -- it is in-scope for subsequent functions.
 deserializeSymFnEnv :: forall sym m
                      . (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
-                    => MonadFail m
+                    => MF.MonadFail m
                     => MonadIO m
                     => sym
                     -> NamedSymFnEnv sym
@@ -452,7 +452,7 @@ mapFunctionMaker :: (forall args ret. sym -> WI.SymFn sym args ret -> IO (WI.Sym
                  -> FunctionMaker sym
                  -> FunctionMaker sym
 mapFunctionMaker g (FunctionMaker sym f) = FunctionMaker sym $ \nm sig -> f nm sig >>= \case
-  Left err -> fail err
+  Left err -> MF.fail err
   Right result -> Right <$> (liftIO $ g sym result)
 
 -- | Swap out the "unfold" condition for a function to be always true.
