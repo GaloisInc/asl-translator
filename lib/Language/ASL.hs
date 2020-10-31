@@ -369,7 +369,7 @@ executionFeatures nm sym = do
                          , "VSTMDB_T1", "VSTM_T1"
                          ]
         then [CS.genericToExecutionFeature gft] else []
-  timeout <- CS.genericToExecutionFeature <$> CS.timeoutFeature (20.00 :: NominalDiffTime)
+  timeout <- CS.genericToExecutionFeature <$> CS.timeoutFeature (2000.00 :: NominalDiffTime)
   let fts = psf ++ [timeout]
   let cfg = WI.getConfiguration sym
   _pathSetter <- WC.getOptionSetting CBO.solverInteractionFile cfg
