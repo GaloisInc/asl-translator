@@ -121,8 +121,9 @@ import           What4.ProblemFeatures
 
 import qualified What4.Serialize.Normalize as WN
 
+import qualified Prettyprinter as LPP
+import qualified Prettyprinter.Render.String as LPP
 import qualified Text.PrettyPrint.HughesPJClass as PP
-import qualified Text.PrettyPrint.ANSI.Leijen as LPP
 
 import           What4.Utils.Log ( HasLogCfg, LogCfg, withLogCfg )
 import qualified What4.Utils.Log as Log
@@ -620,7 +621,8 @@ prettySymFnBody symFn = case B.symFnInfo symFn of
   _ -> PP.text "[[uninterpreted]]"
 
 showExpr :: B.Expr t ret -> PP.Doc
-showExpr e = PP.text (LPP.displayS (LPP.renderPretty 0.4 80 (WI.printSymExpr e)) "")
+showExpr e = PP.text (LPP.renderString (LPP.layoutPretty opts (WI.printSymExpr e)))
+  where opts = LPP.LayoutOptions (LPP.AvailablePerLine 80 0.4)
 
 doSimulation :: TranslatorOptions
              -> CFH.HandleAllocator
