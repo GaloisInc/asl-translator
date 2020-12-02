@@ -39,7 +39,7 @@ import qualified Lang.Crucible.Simulator.Evaluation as CSE
 import qualified Lang.Crucible.Simulator.GlobalState as CSG
 import qualified Lang.Crucible.Simulator.RegValue as CSR
 import qualified Lang.Crucible.Types as CT
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import qualified Prettyprinter as PP
 import qualified What4.BaseTypes as WT
 import qualified What4.Interface as WI
 import qualified What4.Symbol as WS
@@ -240,12 +240,12 @@ instance CCExt.PrettyApp (ASLStmt arch) where
   ppApp pp a =
     case a of
       GetRegState _reps regs ->
-        PP.hsep [ PP.text "GetRegState"
-                , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.text . showF) regs)))
+        PP.hsep [ PP.pretty "GetRegState"
+                , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.pretty . showF) regs)))
                 ]
       SetRegState gvs vs ->
-        PP.hsep [ PP.text "SetRegState"
-                , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.text . showF) gvs)))
+        PP.hsep [ PP.pretty "SetRegState"
+                , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.pretty . showF) gvs)))
                 , PP.comma
                 , PP.brackets (pp vs)
                 ]
@@ -283,20 +283,20 @@ instance CCExt.PrettyApp ASLApp where
   ppApp pp a =
     case a of
       UF name fresh trep argReps vals ->
-        PP.hsep [ PP.text (T.unpack name)
-               , PP.text (show fresh)
-               , PP.text (show trep)
-               , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.text . showF) argReps)))
+        PP.hsep [ PP.pretty name
+               , PP.viaShow fresh
+               , PP.viaShow trep
+               , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.pretty . showF) argReps)))
                , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC pp vals)))
                ]
       GetBaseStruct _r i t ->
-        PP.hsep [ PP.text "GetBaseStruct"
-                , PP.text (showF i)
+        PP.hsep [ PP.pretty "GetBaseStruct"
+                , PP.pretty (showF i)
                 , pp t
                 ]
       MkBaseStruct _r _mems ->
-        PP.hsep [ PP.text "MkBaseStruct"
-                , PP.text "PP UNIMPLEMENTED"
+        PP.hsep [ PP.pretty "MkBaseStruct"
+                , PP.pretty "PP UNIMPLEMENTED"
                 ]
 
 instance FC.TestEqualityFC ASLApp where

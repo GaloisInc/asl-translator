@@ -73,8 +73,9 @@ import qualified Language.ASL.Signature as AS
 import qualified Language.ASL.Types as AT
 import qualified Language.ASL.Globals as G
 
+import qualified Prettyprinter as LPP
+import qualified Prettyprinter.Render.String as LPP
 import qualified Text.PrettyPrint.HughesPJClass as PP
-import qualified Text.PrettyPrint.ANSI.Leijen as LPP
 
 data SimulatorConfig scope =
   SimulatorConfig { simOutputHandle :: IO.Handle
@@ -413,8 +414,9 @@ instance Show SimulationException where
   show e = PP.render (PP.pPrint e)
 
 showExpr :: S.Expr t ret -> PP.Doc
-showExpr e = PP.text (LPP.displayS (LPP.renderPretty 0.4 80 (WI.printSymExpr e)) "")
-      
+showExpr e = PP.text (LPP.renderString (LPP.layoutPretty opts (WI.printSymExpr e)))
+  where opts = LPP.LayoutOptions (LPP.AvailablePerLine 80 0.4)
+
 showAbortedResult :: CS.AbortedResult c d -> T.Text
 showAbortedResult ar = case ar of
   CS.AbortedExec reason _ -> T.pack $ show reason
