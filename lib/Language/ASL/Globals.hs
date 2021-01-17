@@ -62,6 +62,7 @@ module Language.ASL.Globals
   , StructGlobalSymsCtx
   , StructGlobalsCtx
   , mapToGlobalsType
+  , SimpleGlobalsCtx
   , GPRCtx
   , SIMDCtx
   -- traversal of an assignment over a globals struct which projects a structured view
