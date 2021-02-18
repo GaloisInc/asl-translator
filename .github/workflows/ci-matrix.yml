@@ -59,14 +59,14 @@ jobs:
 
     - name: Install Solvers
       if: runner.os == 'Linux'
-      run: |
-        sudo apt install software-properties-common
-        sudo apt-add-repository ppa:sri-csl/formal-methods
-        sudo apt update
-        sudo apt install -y yices2
+      run: .github/ci.sh install_system_deps
+      env:
+        Z3_VERSION: "4.8.8"
+        YICES_VERSION: "2.6.2"
+        CVC4_VERSION: "4.1.8"
 
     - name: Test
       if: runner.os == 'Linux'
       run: |
-        cabal v2-run test:asl-translator-genarm-test
+        cabal v2-test pkg:asl-translator
 
