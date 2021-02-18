@@ -82,7 +82,7 @@ import qualified What4.Serialize.Parser as WPD
 import qualified What4.Serialize.FastSExpr as WSF
 
 -- | Environment mapping formal names to ExprSymFns
-type ExprSymFnEnv t = Map T.Text (SomeSome (WB.ExprSymFn t (WB.Expr t)))
+type ExprSymFnEnv t = Map T.Text (SomeSome (WB.ExprSymFn t))
 
 type FnNameEnv t = OMap (WP.SomeExprSymFn t) T.Text
 
@@ -97,7 +97,7 @@ data FunSig args ret = FunSig { fsName :: T.Text
                               }
   deriving Show
 
-mkFunSig :: WB.ExprSymFn t (WB.Expr t) args ret -> FunSig args ret
+mkFunSig :: WB.ExprSymFn t args ret -> FunSig args ret
 mkFunSig symFn = FunSig (WI.solverSymbolAsText $ WB.symFnName symFn) (WI.fnArgTypes symFn) (WI.fnReturnType symFn)
 
 mkSigEnv :: FnNameEnv t -> [(T.Text, SomeSome FunSig)]
@@ -125,14 +125,14 @@ serializeSigEnv binds = S.L (map go binds)
 extractEnv :: FnNameEnv t -> ExprSymFnEnv t
 extractEnv env = Map.fromList $ map go (OMap.assocs env)
   where
-    go :: (WP.SomeExprSymFn t, T.Text) -> (T.Text, SomeSome (WB.ExprSymFn t (WB.Expr t)))
+    go :: (WP.SomeExprSymFn t, T.Text) -> (T.Text, SomeSome (WB.ExprSymFn t))
     go (WP.SomeExprSymFn symFn, nm) = (nm, SomeSome symFn)
 
 -- | Serialize a What4 function as an s-expression, and return its
 -- binding environment mapping formal names (appearing in the
 -- resulting s-expression) to any functions which were called in
 -- its body.
-serializeSymFn' :: WB.ExprSymFn t (WB.Expr t) args ret -> (SExpr, ExprSymFnEnv t)
+serializeSymFn' :: WB.ExprSymFn t args ret -> (SExpr, ExprSymFnEnv t)
 serializeSymFn' symFn =
   let
     pcfg = WP.defaultConfig { WP.cfgAllowFreeVars = False
@@ -151,7 +151,7 @@ serializeSymFn' symFn =
   in (sexpr, extractEnv env)
 
 -- | Serialize a What4 function as an s-expression.
-serializeSymFn :: WB.ExprSymFn t (WB.Expr t) args ret -> SExpr
+serializeSymFn :: WB.ExprSymFn t args ret -> SExpr
 serializeSymFn symFn = fst $ serializeSymFn' symFn
 
 -- | Pair a serialized function with its name to create a valid
@@ -170,10 +170,10 @@ assembleSymFnEnv symFnEnvSExprs = S.L [ S.A (AId "SymFnEnv"), S.L symFnEnvSExprs
 -- In order to be read back in by 'deserializeSymFnEnv' the functions
 -- must already be topologically sorted with respect to their call graph
 -- (e.g. the last function may contain calls to any other function).
-serializeSymFnEnv :: [(T.Text, SomeSome (WB.ExprSymFn t (WB.Expr t)))] -> SExpr
+serializeSymFnEnv :: [(T.Text, SomeSome (WB.ExprSymFn t))] -> SExpr
 serializeSymFnEnv symFnEnv = assembleSymFnEnv (map go symFnEnv)
   where
-    go :: (T.Text, SomeSome (WB.ExprSymFn t (WB.Expr t))) -> SExpr
+    go :: (T.Text, SomeSome (WB.ExprSymFn t)) -> SExpr
     go (nm, SomeSome symFn) = mkSymFnEnvEntry nm (serializeSymFn symFn)
 
 
@@ -269,7 +269,7 @@ type SymFnEnv sym = Map T.Text (SomeSome (WI.SymFn sym))
 
 -- | Deserialize a single What4 function, translating function calls
 -- according to the provided 'FunctionMaker'.
-deserializeSymFn' :: (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
+deserializeSymFn' :: (sym ~ WB.ExprBuilder t st fs)
                  => MF.MonadFail m
                  => MonadIO m
                  => FunctionMaker sym
@@ -300,7 +300,7 @@ fnMakerFromEnv sym env  = FunctionMaker sym $ \formalName sig ->
 
 -- | Deserialize a single What4 function, translating function calls according
 -- to the given 'SymFnEnv'
-deserializeSymFn :: (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
+deserializeSymFn :: (sym ~ WB.ExprBuilder t st fs)
                  => MF.MonadFail m
                  => MonadIO m
                  => sym
@@ -357,8 +357,8 @@ getSymFnEnv = \case
 -- | Deserialize a What4 function environment into the given 'env' type.
 -- After each function is deserialized, it is added to the 'env' according
 -- to the given function.
-deserializeSymFnEnv' :: forall sym m env
-                     . (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
+deserializeSymFnEnv' :: forall sym m env t st fs
+                     . (sym ~ WB.ExprBuilder t st fs)
                     => MF.MonadFail m
                     => MonadIO m
                     => sym
@@ -390,8 +390,8 @@ deserializeSymFnEnv' _sym env extendenv mkFun sexpr = do
 -- the given function binding environment 'NamedSymFnEnv'.
 -- Each deserialized function is added to the environment, so
 -- it is in-scope for subsequent functions.
-deserializeSymFnEnv :: forall sym m
-                     . (WI.IsSymExprBuilder sym, ShowF (WI.SymExpr sym))
+deserializeSymFnEnv :: forall sym m t st fs
+                     . (sym ~ WB.ExprBuilder t st fs)
                     => MF.MonadFail m
                     => MonadIO m
                     => sym
@@ -458,8 +458,8 @@ mapFunctionMaker g (FunctionMaker sym f) = FunctionMaker sym $ \nm sig -> f nm s
 -- | Swap out the "unfold" condition for a function to be always true.
 expandSymFn :: sym ~ WB.ExprBuilder t st fs
             => sym
-            -> WB.ExprSymFn t (WB.Expr t) args ret
-            -> IO (WB.ExprSymFn t (WB.Expr t) args ret)
+            -> WB.ExprSymFn t args ret
+            -> IO (WB.ExprSymFn t args ret)
 expandSymFn sym symFn = case WB.symFnInfo symFn of
   WB.DefinedFnInfo args expr _ -> WI.definedFn sym (WB.symFnName symFn) args expr WI.AlwaysUnfold
   _ -> return symFn

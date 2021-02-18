@@ -30,7 +30,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified System.Directory as D
 
-import           Data.Parameterized.Classes
+import qualified What4.Expr.Builder as WB
 import qualified What4.Interface as WI
 import           What4.Utils.Util ( SomeSome(..) )
 import qualified System.IO as IO
@@ -70,10 +70,8 @@ fileCases fp fallback f1 f2 = do
     False -> IO.withFile fallback IO.ReadMode f2
 
 
-genGetFormulas :: forall sym
-                . (WI.IsSymExprBuilder sym,
-                  WI.IsExprBuilder sym,
-                  ShowF (WI.SymExpr sym))
+genGetFormulas :: forall sym t st fs
+                . (sym ~ WB.ExprBuilder t st fs)
                => (String, String) -> sym -> FS.NamedSymFnEnv sym -> IO [(T.Text, SomeSome (WI.SymFn sym))]
 genGetFormulas (fp', fallbackfp') sym env  = do
   fp <- P.getDataFileName fp'
@@ -90,17 +88,13 @@ genGetFormulas (fp', fallbackfp') sym env  = do
 -- | Given an initial function binding environment (i.e. for
 -- providing bindings for uninterpreted functions), read in the
 -- helper functions used in the specifications for the ARM instructions.
-getFunctionFormulas :: (WI.IsSymExprBuilder sym,
-                       WI.IsExprBuilder sym,
-                       ShowF (WI.SymExpr sym))
+getFunctionFormulas :: (sym ~ WB.ExprBuilder t st fs)
                     => sym -> FS.NamedSymFnEnv sym -> IO [(T.Text, SomeSome (WI.SymFn sym))]
 getFunctionFormulas = genGetFormulas functionFormulas
 
 
 -- | Given a function environment (i.e. as read in from 'getFunctionFormulas'), read in
 -- the functions that represent the semantics for each ARM instruction.
-getInstructionFormulas :: (WI.IsSymExprBuilder sym,
-                           WI.IsExprBuilder sym,
-                           ShowF (WI.SymExpr sym))
+getInstructionFormulas :: (sym ~ WB.ExprBuilder t st fs)
                        => sym -> FS.NamedSymFnEnv sym -> IO [(T.Text, SomeSome (WI.SymFn sym))]
 getInstructionFormulas = genGetFormulas instructionFormulas
