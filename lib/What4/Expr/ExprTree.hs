@@ -99,7 +99,6 @@ baseTreeRepr repr = case repr of
   WI.BaseStructRepr reprs -> BaseTypeTreeBranch reprs
   WI.BaseBoolRepr -> BaseTypeTreeLeaf repr
   WI.BaseBVRepr _ -> BaseTypeTreeLeaf repr
-  WI.BaseNatRepr -> BaseTypeTreeLeaf repr
   WI.BaseIntegerRepr -> BaseTypeTreeLeaf repr
   WI.BaseRealRepr -> BaseTypeTreeLeaf repr
   WI.BaseFloatRepr _ -> BaseTypeTreeLeaf repr

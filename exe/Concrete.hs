@@ -13,6 +13,7 @@ import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableFC
 import qualified Data.Ratio as R
 import qualified Data.Text as T
+import qualified LibBF as BF
 import qualified What4.Interface as WI
 import qualified What4.Expr.Builder as B
 import qualified What4.Utils.Complex as U
@@ -74,9 +75,6 @@ randomSymExpr sym tp = case tp of
   WI.BaseBVRepr w -> do
     randInt <- randomIO
     WI.bvLit sym w (BV.mkBV w randInt)
-  WI.BaseNatRepr -> do
-    randInt <- randomIO
-    WI.natLit sym (fromInteger randInt)
   WI.BaseIntegerRepr -> do
     randInt <- randomIO
     WI.intLit sym randInt
@@ -84,8 +82,8 @@ randomSymExpr sym tp = case tp of
     randRat <- randomRational
     WI.realLit sym randRat
   WI.BaseFloatRepr floatPrecision -> do
-    randRat <- randomRational
-    WI.floatLit sym floatPrecision randRat
+    randDbl <- randomIO
+    WI.floatLit sym floatPrecision (BF.bfFromDouble randDbl)
   WI.BaseStringRepr stringInfo -> case stringInfo of
     WI.Char8Repr -> WI.stringLit sym (WI.Char8Literal "CHAR8STRING")
     WI.Char16Repr -> WI.stringLit sym (WI.Char16Literal (U.fromLEByteString "CHAR16STRING"))

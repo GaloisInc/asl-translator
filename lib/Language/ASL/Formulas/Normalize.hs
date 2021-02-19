@@ -214,7 +214,7 @@ deserializeAndNormalize sym sexpr = do
 
     -- Trivial functions shouldn't be normalized, but instead simply inlined everywhere
     -- they appear
-    shouldInline :: WB.ExprSymFn t (WB.Expr t) args ret -> Bool
+    shouldInline :: WB.ExprSymFn t args ret -> Bool
     shouldInline symFn = case WB.symFnInfo symFn of
       WB.DefinedFnInfo _ expr _ -> exprDepthBounded 7 expr
       _ -> False
@@ -262,7 +262,6 @@ intToBVRepr repr = case repr of
   WI.BaseStructRepr _ -> IntToBVElse repr
   WI.BaseBoolRepr -> IntToBVElse repr
   WI.BaseBVRepr _ -> IntToBVElse repr
-  WI.BaseNatRepr -> IntToBVElse repr
   WI.BaseRealRepr -> IntToBVElse repr
   WI.BaseFloatRepr _ -> IntToBVElse repr
   WI.BaseStringRepr _ -> IntToBVElse repr
@@ -288,8 +287,8 @@ normIntRepr repr = case intToBVRepr repr of
   IntToBVInt -> integerBVTypeRepr
   IntToBVElse _ -> repr
 
-reduceSymFn :: WB.ExprSymFn t (WB.Expr t) args ret
-            -> RebindM t (WB.ExprSymFn t (WB.Expr t) args ret)
+reduceSymFn :: WB.ExprSymFn t args ret
+            -> RebindM t (WB.ExprSymFn t args ret)
 reduceSymFn symFn = case WB.symFnInfo symFn of
   WB.DefinedFnInfo args expr_0 eval -> withExpr "reduceSymFn" expr_0 $ do
     expr_1 <- withSym $ \sym -> AT.normFieldAccs sym expr_0
@@ -304,10 +303,10 @@ reduceSymFn symFn = case WB.symFnInfo symFn of
 -- this inner function in an outer function which projects out the original struct shape. This
 -- outer function is unconditionally unfolded, so it won't appear the body of any normalized
 -- functions.
-normalizeSymFn :: WB.ExprSymFn t (WB.Expr t) args ret
+normalizeSymFn :: WB.ExprSymFn t args ret
                -> RebindM t
-                    ( WB.ExprSymFn t (WB.Expr t) args ret
-                    , SomeSome (WB.ExprSymFn t (WB.Expr t)))
+                    ( WB.ExprSymFn t args ret
+                    , SomeSome (WB.ExprSymFn t))
 normalizeSymFn symFn = case WB.symFnInfo symFn of
   WB.DefinedFnInfo args expr_0 _eval -> withExpr "normalize" expr_0 $ do
     expr_1 <- withSym $ \sym -> AT.normFieldAccs sym expr_0
@@ -348,7 +347,7 @@ simplifiedSymFn :: forall t rets args
                 -> WB.Expr t (WI.BaseStructType rets)
                 -> Ctx.Assignment (WB.ExprBoundVar t) args
                 -> Ctx.Assignment (WB.Expr t) args
-                -> RebindM t (WB.Expr t (WI.BaseStructType rets), SomeSome (WB.ExprSymFn t (WB.Expr t)))
+                -> RebindM t (WB.Expr t (WI.BaseStructType rets), SomeSome (WB.ExprSymFn t))
 simplifiedSymFn name expr allbvs args = do
   WI.BaseStructRepr reprs <- return $ WI.exprType expr
   flds <- withSym $ \sym -> forWithIndex reprs $ \idx _ -> WI.structField sym expr idx
@@ -500,7 +499,7 @@ bvSize e = case WI.exprType e of
 mkUF :: String
      -> Ctx.Assignment WI.BaseTypeRepr args
      -> WI.BaseTypeRepr ret
-     -> RebindM t (WB.ExprSymFn t (WB.Expr t) args ret)
+     -> RebindM t (WB.ExprSymFn t args ret)
 mkUF nm args ret = do
   fnCache <- MS.gets rbFnCache
   case Map.lookup nm fnCache of
@@ -669,7 +668,7 @@ extractInts' expr =  withExpr "extractInts'" expr $ do
       _ -> ret
 
 data SomeSymFn t tp where
-  SomeSymFn :: WB.ExprSymFn t (WB.Expr t) args tp -> Ctx.Assignment (WB.Expr t) args -> SomeSymFn t tp
+  SomeSymFn :: WB.ExprSymFn t args tp -> Ctx.Assignment (WB.Expr t) args -> SomeSymFn t tp
 
 data AsBVRepr tp where
   AsBVRepr :: 1 <= n => NR.NatRepr n -> AsBVRepr (WI.BaseBVType n)
@@ -898,7 +897,7 @@ data RebindState t =
   RebindState { rbExtractIntsCache :: WB.IdxCache t (WB.Expr t)
                -- ^ cache for extractInts
               , rbSymFnMap :: MapF.MapF (Nonce t)  (FnCallCache t)
-              , rbFnCache :: Map String (SomeSome (WB.ExprSymFn t (WB.Expr t)))
+              , rbFnCache :: Map String (SomeSome (WB.ExprSymFn t))
               }
 
 instance Show (ExprPath t) where

@@ -138,6 +138,7 @@ executable asl-translator-concrete-test
   build-depends:       base >= 4.10.0.0 && < 5,
                        bv-sized,
                        filepath,
+                       libBF >= 0.6 && < 0.7,
                        what4-serialize,
                        what4,
                        parameterized-utils,
