@@ -330,7 +330,8 @@ initialSimulatorState symCfg symGlobalState econt retRepr = do
   let hdlAlloc = simHandleAllocator symCfg
   let outputHandle = simOutputHandle symCfg
   funsref <- newIORef (Map.empty :: AE.SymFnEnv sym)
-  let simContext = CS.initSimContext sym intrinsics hdlAlloc outputHandle CFH.emptyHandleMap (AC.aslExtImpl funsref) ()
+  let bindings = CS.FnBindings CFH.emptyHandleMap
+  let simContext = CS.initSimContext sym intrinsics hdlAlloc outputHandle bindings (AC.aslExtImpl funsref) ()
   let hdlr = CS.defaultAbortHandler
   return (CS.InitialState simContext symGlobalState hdlr retRepr econt, funsref)
 
