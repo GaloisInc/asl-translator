@@ -54,6 +54,7 @@ common shared-properties
                        time,
                        panic >= 0.3,
                        template-haskell,
+                       th-compat >= 0.1 && < 0.2,
                        vector,
                        directory,
                        bytestring,
