@@ -631,6 +631,7 @@ lookupGlobalRef str = case CT.someSymbol (T.pack str) of
 
 instance TH.Lift (GlobalRef s) where
   lift gr = [e| knownGlobalRef :: GlobalRef $(TH.litT (TH.strTyLit (T.unpack $ CT.symbolRepr $ globalRefSymbol gr))) |]
+  liftTyped = TH.unsafeTExpCoerce . TH.lift
 
 
 -- | Various static checks that ensure everything has been instantiated correctly.
