@@ -3,13 +3,15 @@ cabal-version:       2.2
 name:                asl-translator
 version:             0.1.0.0
 synopsis:            A conversion from ASL into an architecture specification
--- description:
+description:
+  Tools and libraries to convert from an XML-defined ASL into a specific architecture specification.
 -- bug-reports:
 license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Galois Inc.
 maintainer:          dmatichuk@galois.com
 copyright:           (c) Galois, Inc 2014-2020
+category:            Language
 
 extra-source-files:  CHANGELOG.md
 
@@ -93,6 +95,7 @@ library
                        Language.ASL.Formulas
                        Util.Log
                        What4.Expr.ExprTree
+  autogen-modules:     Paths_asl_translator
   other-modules:       Paths_asl_translator
   hs-source-dirs:      lib
   ghc-options:         -Wcompat -Wall

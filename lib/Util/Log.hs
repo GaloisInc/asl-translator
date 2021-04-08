@@ -15,7 +15,6 @@ module Util.Log
   , unindentLog
   , MonadLogT
   , WLog.LogCfg
-  , runMonadLogT
   ) where
 
 import           Control.Monad.Identity
@@ -126,5 +125,5 @@ instance MR.MonadReader r m => MR.MonadReader r (MonadLogT m) where
   local f (MonadLogT m) = MonadLogT $ MS.mapStateT (MW.mapWriterT (MR.local f)) m
 
 
-runMonadLogT :: Monad m => MonadLogT m a -> Integer -> m (a, [T.Text])
-runMonadLogT (MonadLogT m) logLvl = MW.runWriterT (MS.evalStateT m (0, logLvl))
+-- runMonadLogT :: Monad m => MonadLogT m a -> Integer -> m (a, [T.Text])
+-- runMonadLogT (MonadLogT m) logLvl = MW.runWriterT (MS.evalStateT m (0, logLvl))

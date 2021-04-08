@@ -285,7 +285,7 @@ data BuilderData t = NoBuilderData
 readAndNormalize :: TranslatorOptions -> IO ()
 readAndNormalize opts = do
   let
-    FilePathConfig { fpOutFuns, fpOutInstrs, fpNormFuns, fpNormInstrs, ..} = optFilePaths opts
+    FilePathConfig { fpOutFuns, fpOutInstrs, fpNormFuns, fpNormInstrs } = optFilePaths opts
 
   logMsgIO opts 0 $ "Reading functions from: " ++ fpOutFuns
   funsexpr <- T.readFile fpOutFuns >>= FS.parseSExpr
@@ -310,7 +310,7 @@ readAndNormalize opts = do
 serializeFormulas :: TranslatorOptions -> SigMap arch -> IO ()
 serializeFormulas opts (sFormulaPromises -> promises) = do
   let
-    FilePathConfig { fpOutFuns, fpOutInstrs, ..} = optFilePaths opts
+    FilePathConfig { fpOutFuns, fpOutInstrs } = optFilePaths opts
 
   (instrs, funs) <- (partitionEithers . reverse) <$> mapM getFormula promises
 
