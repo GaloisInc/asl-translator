@@ -3,3 +3,6 @@ cabal.project
 output/*
 *.th.hs
 *.dump-splices
+_darcs
+*~
+.boring

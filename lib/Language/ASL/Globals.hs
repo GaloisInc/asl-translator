@@ -164,6 +164,7 @@ import           Language.ASL.Globals.Definitions
 
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as TH
+import qualified Language.Haskell.TH.Syntax.Compat as THC
 
 data GlobalsTypeWrapper :: TyFun Symbol WI.BaseType -> Type
 type instance Apply GlobalsTypeWrapper s = GlobalsType s
@@ -631,6 +632,9 @@ lookupGlobalRef str = case CT.someSymbol (T.pack str) of
 
 instance TH.Lift (GlobalRef s) where
   lift gr = [e| knownGlobalRef :: GlobalRef $(TH.litT (TH.strTyLit (T.unpack $ CT.symbolRepr $ globalRefSymbol gr))) |]
+#if MIN_VERSION_template_haskell(2,16,0)
+  liftTyped = THC.liftTypedFromUntypedSplice
+#endif
 
 
 -- | Various static checks that ensure everything has been instantiated correctly.
