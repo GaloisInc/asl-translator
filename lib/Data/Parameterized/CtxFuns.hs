@@ -70,7 +70,7 @@ $(do
     n <- return $ TH.mkName "n"
     natK <- [t| Nat |]
     symbK <- [t| Symbol |]
-    tyHead <- return $ TH.TypeFamilyHead natToSymbol [TH.KindedTV n natK] (TH.KindSig symbK) Nothing
+    tyHead <- return $ TH.TypeFamilyHead natToSymbol [TH.kindedTV n natK] (TH.KindSig symbK) Nothing
 #if MIN_VERSION_template_haskell(2, 15, 0)
     let mkSyn i = TH.TySynEqn Nothing (TH.AppT (TH.ConT natToSymbol) (TH.LitT (TH.NumTyLit i))) (TH.LitT $ TH.StrTyLit (show i))
 #else
@@ -202,7 +202,7 @@ traverseMapCtx p1 f asn = case Ctx.viewAssign asn of
   Ctx.AssignExtend asn' x -> liftA2 (:>) (traverseMapCtx p1 f asn') (f x)
 
 revApplyMapCtx :: forall k1 k2 (f :: TyFun k1 k2 -> Type) (xs :: Ctx k1)
-                         (g :: k2 -> Type) (h :: k1 -> Type) 
+                         (g :: k2 -> Type) (h :: k1 -> Type)
                 . Proxy f -> (forall (x :: k1). g (Apply f x) -> h x)
                -> Ctx.Assignment g (MapCtx f xs)
                -> Ctx.Assignment h xs
