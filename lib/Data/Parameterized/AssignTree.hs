@@ -96,7 +96,7 @@ instance FC.FoldableFC AssignTree where
   foldMapFC = FC.foldMapFCDefault
 
 instance FC.TraversableFC AssignTree where
-  traverseFC = traverseAssignTree
+  traverseFC f = traverseAssignTree f
 
 
 type family FlattenCtxTrees (trees :: Ctx (CtxTree k)) :: Ctx k where
