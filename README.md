@@ -1,11 +1,22 @@
 # Overview
 
-This repository implements a translation of the [Arm Architecture Specification Language (ASL)][fn:asl-description] 
+This repository implements a translation of the [Arm Architecture Specification Language (ASL)][fn:asl-description]
 into a closed [What4][fn:what4] expression using the [Crucible][fn:crucible] symbolic execution library.
 
-The ASL source is extracted from the official [XML specifications from ARM][fn:arm-specs] using 
-a set of [tools][fn:mra_tools] developed by Alastair Reid. This source text is converted into a 
+The ASL source is extracted from the official [XML specifications from ARM][fn:arm-specs] using
+a set of [tools][fn:mra_tools] developed by Alastair Reid. This source text is converted into a
 parse tree by the [asl parser][fn:asl-parser], which is the representation used by this tool.
+
+# Building
+
+The dependencies of the project that are not on Hackage are specified using `git` submodules.  To build the code with a modern version of `cabal` (assuming you are in the root of the repository):
+
+```
+$ git submodule update --init
+$ ln -s cabal.project.newbuild cabal.project
+$ cabal v2-configure
+$ cabal v2-build asl-translator
+```
 
 # Running
 
@@ -23,7 +34,7 @@ will build these automatically.
 The interface functions in `Language.ASL.Formulas` will prefer to use the normalized files in
 `output` if they exist, otherwise falling back on the archived files in `archived`.
 
-The `make genarm` target will use cabal to run the translator, but also can build the source s-expression and asl files in 
+The `make genarm` target will use cabal to run the translator, but also can build the source s-expression and asl files in
 `data` from the source ARM XML specification (via the `Makefile` in the `arm-asl-parser` subrepository).
 
 # Archiving
