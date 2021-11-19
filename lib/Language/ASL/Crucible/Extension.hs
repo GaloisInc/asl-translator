@@ -106,15 +106,16 @@ data SymFnWrapper sym where
 type SymFnEnv sym = Map T.Text (SymFnWrapper sym)
 
 -- | The ASLExt app evaluator
-aslAppEvalFunc :: forall sym arch proxy
+aslAppEvalFunc :: forall sym arch proxy p ext rtp blocks r ctx
                 . (CB.IsSymInterface sym)
                => proxy arch
                -> IORef (SymFnEnv sym)
                -> sym
                -> CS.IntrinsicTypes sym
                -> (Int -> String -> IO ())
+               -> CS.CrucibleState p sym ext rtp blocks r ctx
                -> CSE.EvalAppFunc sym ASLApp
-aslAppEvalFunc _ funsref sym _ _ = \evalApp app ->
+aslAppEvalFunc _ funsref sym _ _ _ = \evalApp app ->
   case app of
     UF name fresh trep argTps args -> do
       case WS.userSymbol (T.unpack name) of
