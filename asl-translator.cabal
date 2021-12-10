@@ -15,8 +15,7 @@ category:            Language
 
 extra-source-files:  CHANGELOG.md
 
-data-files:          output/*.what4,
-                     archived/*.what4.gz
+data-files:          archived/*.what4.gz
 
 flag unsafe-operations
   Description: Use unsafe operations (e.g. coercions) to improve performance
