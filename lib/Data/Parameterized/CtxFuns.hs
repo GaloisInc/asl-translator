@@ -71,11 +71,7 @@ $(do
     natK <- [t| Nat |]
     symbK <- [t| Symbol |]
     tyHead <- return $ TH.TypeFamilyHead natToSymbol [TH.kindedTV n natK] (TH.KindSig symbK) Nothing
-#if MIN_VERSION_template_haskell(2, 15, 0)
     let mkSyn i = TH.TySynEqn Nothing (TH.AppT (TH.ConT natToSymbol) (TH.LitT (TH.NumTyLit i))) (TH.LitT $ TH.StrTyLit (show i))
-#else
-    let mkSyn i = TH.TySynEqn [TH.LitT (TH.NumTyLit i)] (TH.LitT $ TH.StrTyLit (show i))
-#endif
     return $ [TH.ClosedTypeFamilyD tyHead (map mkSyn [0..31])]
  )
 

@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE EmptyDataDecls #-}
@@ -222,7 +221,7 @@ staticBinOp bop msv msv' = do
   case bop of
     AS.BinOpEQ -> return $ StaticBool $ sv == sv'
     AS.BinOpNEQ -> return $ StaticBool $ sv /= sv'
-    _ -> fail ""  
+    _ -> fail ""
   <|> do
   StaticInt i <- msv
   StaticInt i' <- msv'
@@ -251,10 +250,10 @@ staticBinOp bop msv msv' = do
     AS.BinOpLogicalAnd -> do
       StaticBool False <- msv
       return $ StaticBool False
-      <|> do       
+      <|> do
       StaticBool False <- msv'
       return $ StaticBool False
-      <|> do      
+      <|> do
       StaticBool True <- msv
       StaticBool True <- msv'
       return $ StaticBool True
@@ -323,7 +322,7 @@ matchMask bv mask =
       (_, AS.MaskBitEither) -> True
       _ -> False
 
--- | Nondeterministic state monad for collecting possible variable assignments. 
+-- | Nondeterministic state monad for collecting possible variable assignments.
 newtype StaticEnvM a = StaticEnvM { getStaticPEnvs :: StaticEnvP -> [(StaticEnvP, a)] }
 
 instance Functor StaticEnvM where
@@ -338,16 +337,12 @@ instance Monad StaticEnvM where
     StaticEnvM (\env -> concat $ map (\(env', ret) -> getStaticPEnvs (g ret) env') (f env))
   return x = StaticEnvM (\env -> [(env, x)])
 
-#if !(MIN_VERSION_base(4,13,0))
-  fail = Fail.fail
-#endif
-
 instance Fail.MonadFail StaticEnvM where
   fail _ = StaticEnvM (\_ -> [])
 
 instance Alternative StaticEnvM where
   empty = Fail.fail ""
-  StaticEnvM x <|> StaticEnvM y = StaticEnvM (\env -> (x env) ++ (y env)) 
+  StaticEnvM x <|> StaticEnvM y = StaticEnvM (\env -> (x env) ++ (y env))
 
 instance MonadPlus StaticEnvM
 
@@ -552,7 +547,7 @@ stmtToStaticM s = case s of
   _ -> return ()
   where
     applyTests tests mfin = case tests of
-      (test, body) : rest -> do    
+      (test, body) : rest -> do
         testExpr test >>= \case
           True -> stmtsToStaticM body
           False -> applyTests rest mfin
@@ -561,7 +556,7 @@ stmtToStaticM s = case s of
         _ -> return ()
 
     casesToTests e = \case
-      (AS.CaseWhen (pat : pats) _ stmts) : rest -> let      
+      (AS.CaseWhen (pat : pats) _ stmts) : rest -> let
         (tests, fin) = casesToTests e rest
         test = foldr (\pat' -> \e' -> AS.ExprBinOp AS.BinOpLogicalOr e' (patToExpr e pat')) (patToExpr e pat) pats
         in ((test, stmts) : tests, fin)
