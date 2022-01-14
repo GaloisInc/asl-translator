@@ -85,6 +85,7 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
+import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified Lang.Crucible.FunctionHandle as CFH
 import qualified Language.ASL.Parser as AP
@@ -114,8 +115,6 @@ import           Language.ASL.StaticExpr
 
 import qualified What4.Expr.Builder as B
 import qualified What4.Interface as WI
-import qualified What4.Solver.Yices as Yices
-import qualified What4.Config as WC
 import           What4.ProblemFeatures
 
 import qualified What4.Serialize.Normalize as WN
@@ -488,20 +487,19 @@ runSigMapWithScope opts sigState sigEnv action = do
   runSigMapM action sigMap
 
 withOnlineBackend' :: forall a
-                    . (forall scope. CBO.YicesOnlineBackend scope (B.Flags B.FloatReal) -> IO a)
+                    . (forall scope. CBO.YicesOnlineBackend scope ASL.ASLSimState (B.Flags B.FloatReal) -> IO a)
                    -> IO a
 withOnlineBackend' action = do
   let feat =     useIntegerArithmetic
              .|. useBitvectors
              .|. useStructs
   Some gen <- newIONonceGenerator
-  CBO.withOnlineBackend B.FloatRealRepr gen feat $ \sym -> do
-    WC.extendConfig Yices.yicesOptions (WI.getConfiguration sym)
-    action sym
+  sym <- B.newExprBuilder B.FloatRealRepr ASL.ASLSimState gen
+  CBO.withYicesOnlineBackend sym CBO.NoUnsatFeatures feat action
 
 withOnlineBackend :: forall arch a
                    . ElemKey
-                  -> (forall scope. CBO.YicesOnlineBackend scope (B.Flags B.FloatReal) -> IO a)
+                  -> (forall scope. CBO.YicesOnlineBackend scope ASL.ASLSimState (B.Flags B.FloatReal) -> IO a)
                   -> SigMapM arch (Maybe a)
 withOnlineBackend key action = catchIO key $ withOnlineBackend' action
 
@@ -562,7 +560,8 @@ maybeSimulateInstruction ident (Just instr) = do
 
 mkUninterpretedFun :: ElemKey -> FunctionSignature globalReads globalWrites init tps -> SigMapM arch ()
 mkUninterpretedFun key sig = do
-  Just (SomeSymFn symFn) <- withOnlineBackend key $ \sym -> do
+  Just (SomeSymFn symFn) <- withOnlineBackend key $ \bak -> do
+     let sym = CB.backendGetSym bak
      let symbol = U.makeSymbol (T.unpack (funcName sig))
      let retT = funcSigBaseRepr sig
      let argTs = funcSigAllArgsRepr sig
@@ -641,11 +640,12 @@ doSimulation opts handleAllocator name p = do
 
     isCheck = optCheckSerialization opts
   withOnlineBackend' $ \backend -> do
+    let sym = CB.backendGetSym backend
     let cfg = ASL.SimulatorConfig { simOutputHandle = IO.stdout
                                   , simHandleAllocator = handleAllocator
-                                  , simSym = backend
+                                  , simBackend = backend
                                   }
-    when isCheck $ B.startCaching backend
+    when isCheck $ B.startCaching sym
     logMsgIO opts 2 $ "Simulating: " ++ show name
     U.SomeSome symFn <- trySimulation cfg
     (symFnSExpr, fenv) <- return $ FS.serializeSymFn' symFn
@@ -653,8 +653,8 @@ doSimulation opts handleAllocator name p = do
     when isCheck $ do
       serializedSymFn <- return $ FS.printSExpr symFnSExpr
       symFnSExpr' <- FS.parseSExpr serializedSymFn
-      SomeSome symFn' <- FS.deserializeSymFn backend fenv symFnSExpr'
-      WN.testEquivSymFn backend symFn symFn' >>= \case
+      SomeSome symFn' <- FS.deserializeSymFn sym fenv symFnSExpr'
+      WN.testEquivSymFn sym symFn symFn' >>= \case
         WN.ExprUnequal ->
           X.throw $ SimulationDeserializationMismatch serializedSymFn symFn  symFn'
         _ -> logMsgIO opts 2 $ "Deserialized function matches."
