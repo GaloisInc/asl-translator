@@ -80,17 +80,17 @@ import qualified Text.PrettyPrint.HughesPJClass as PP
 data SimulatorConfig scope =
   SimulatorConfig { simOutputHandle :: IO.Handle
                   , simHandleAllocator :: CFH.HandleAllocator
-                  , simSym :: CBO.YicesOnlineBackend scope (S.Flags S.FloatReal)
+                  , simBackend :: CBO.YicesOnlineBackend scope S.EmptyExprBuilderState (S.Flags S.FloatReal)
                   }
 
-type OnlineSolver scope sym = sym ~ CBO.YicesOnlineBackend scope (S.Flags S.FloatReal)
+type IsSym scope sym = sym ~ S.ExprBuilder scope S.EmptyExprBuilderState (S.Flags S.FloatReal)
 
 freshRegEntries :: Ctx.Assignment (FreshArg sym) btps -> Ctx.Assignment (CS.RegEntry sym) (AT.ToCrucTypes btps)
 freshRegEntries Ctx.Empty = Ctx.Empty
 freshRegEntries (fargs Ctx.:> farg) = (freshRegEntries fargs Ctx.:> (freshArgEntry farg))
 
 genSimulation :: forall arch sym init innerReads innerWrites outerReads outerWrites tps scope a
-               . (CB.IsSymInterface sym, OnlineSolver scope sym)
+               . IsSym scope sym
               => SimulatorConfig scope
               -> AC.GenFunction arch innerReads innerWrites outerReads outerWrites init tps
               -> (CS.RegEntry sym (AS.FuncReturn innerWrites tps)
@@ -101,10 +101,11 @@ genSimulation :: forall arch sym init innerReads innerWrites outerReads outerWri
 genSimulation symCfg crucFunc extractResult =
   case AC.funcCFG crucFunc of
     CCC.SomeCFG cfg -> do
-      let sym = simSym symCfg
+      let bak = simBackend symCfg
+      let sym = CB.backendGetSym bak
       let sig = AC.funcSig crucFunc
       let argReprNames = FC.fmapFC (\(AT.LabeledValue (AS.FunctionArg nm _) v) -> AT.LabeledValue nm v) (AC.funcArgReprs sig)
-      initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) argReprNames
+      initArgs <- FC.traverseFC (allocateFreshArg sym) argReprNames
       let retRepr = AS.funcSigRepr sig
       let econt = CS.runOverrideSim retRepr $ do
             re <- CS.callCFG cfg (CS.RegMap $ freshRegEntries initArgs)
@@ -125,9 +126,9 @@ genSimulation symCfg crucFunc extractResult =
 
       let globalState = initGlobals symCfg globalsInitEs globalsInitVars
       (s0, _) <- initialSimulatorState symCfg globalState econt retRepr
-      ft <- executionFeatures (AS.funcName $ AC.funcSig crucFunc) (simSym symCfg)
+      ft <- executionFeatures (AS.funcName $ AC.funcSig crucFunc) bak
       let onlineDisabled = MF.fail "`concretize` requires online solving to be enabled"
-      CBO.withSolverProcess sym onlineDisabled $ \p -> do
+      CBO.withSolverProcess bak onlineDisabled $ \p -> do
         let argBVs = FC.fmapFC freshArgBoundVar initArgs
         let allBVs = getBVs initArgs ++ [Some gbv]
         eres <- WPO.inNewFrameWithVars p allBVs $ do
@@ -170,14 +171,16 @@ pairToCtxs = go Ctx.empty Ctx.empty
 -- suitable for the top-level instruction semantics, which operate in the same way (but take no
 -- arguments)
 simulateFunction :: forall arch sym init globalReads globalWrites tps scope
-                  . (CB.IsSymInterface sym, OnlineSolver scope sym)
+                  . IsSym scope sym
                  => SimulatorConfig scope
                  -> AC.Function arch globalReads globalWrites init tps
                  -> IO (S.ExprSymFn scope (init Ctx.::> WT.BaseStructType globalReads) (WT.BaseStructType (AS.FuncReturnCtx globalWrites tps)))
 simulateFunction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
   where
     sig = AC.funcSig crucFunc
-    sym = simSym symCfg
+    bak = simBackend symCfg
+    sym = CB.backendGetSym bak
+
     retType = AS.funcSigBaseRepr sig
 
     extractResult re argBVs globalBV =
@@ -201,14 +204,16 @@ simulateFunction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
 
 
 simulateInstruction :: forall arch sym init globalReads globalWrites scope
-                     . (CB.IsSymInterface sym, OnlineSolver scope sym)
+                     . IsSym scope sym
                     => SimulatorConfig scope
                     -> AC.Instruction arch globalReads globalWrites init
                     -> IO (S.ExprSymFn scope (init Ctx.::> WT.BaseStructType G.StructGlobalsCtx) (WT.BaseStructType G.StructGlobalsCtx))
 simulateInstruction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
   where
     sig = AC.funcSig crucFunc
-    sym = simSym symCfg
+    bak = simBackend symCfg
+    sym = CB.backendGetSym bak
+
     retType = AS.funcSigBaseRepr sig
 
     mkStructField :: WI.SymExpr sym (WT.BaseStructType G.StructGlobalsCtx)
@@ -243,7 +248,7 @@ simulateInstruction symCfg crucFunc = genSimulation symCfg crucFunc extractResul
           | otherwise -> X.throwIO (UnexpectedReturnType btr)
 
 checkClosedTerm :: forall scope sym ctx tp
-                 . OnlineSolver scope sym
+                 . IsSym scope sym
                 => Ctx.Assignment (WI.BoundVar sym) ctx
                 -> WI.SymExpr sym tp
                 -> IO ()
@@ -262,7 +267,7 @@ type family ToCrucTypes (wtps :: CT.Ctx WT.BaseType) :: CT.Ctx CT.CrucibleType w
   ToCrucTypes (wtps CT.::> wtp) = ToCrucTypes wtps CT.::> CT.BaseToType wtp
 
 
-allocateFreshArg :: (CB.IsSymInterface sym, OnlineSolver scope sym)
+allocateFreshArg :: IsSym scope sym
                  => sym
                  -> AC.LabeledValue T.Text CT.BaseTypeRepr btp
                  -> IO (FreshArg sym btp)
@@ -318,7 +323,7 @@ toSolverSymbol s' =
     Right sy -> return sy
     Left _err -> X.throwIO (InvalidSymbolName s)
 
-initialSimulatorState :: (CB.IsSymInterface sym, OnlineSolver scope sym)
+initialSimulatorState :: IsSym scope sym
                       => SimulatorConfig scope
                       -> CS.SymGlobalState sym
                       -> CS.ExecCont () sym (AC.ASLExt arch) (CS.RegEntry sym ret) (CSC.OverrideLang ret) ('Just CT.EmptyCtx)
@@ -326,19 +331,19 @@ initialSimulatorState :: (CB.IsSymInterface sym, OnlineSolver scope sym)
                       -> IO (CS.ExecState () sym (AC.ASLExt arch) (CS.RegEntry sym ret), IORef (AE.SymFnEnv sym))
 initialSimulatorState symCfg symGlobalState econt retRepr = do
   let intrinsics = CS.emptyIntrinsicTypes
-  let sym = simSym symCfg
+  let bak = simBackend symCfg
   let hdlAlloc = simHandleAllocator symCfg
   let outputHandle = simOutputHandle symCfg
   funsref <- newIORef (Map.empty :: AE.SymFnEnv sym)
   let bindings = CS.FnBindings CFH.emptyHandleMap
-  let simContext = CS.initSimContext sym intrinsics hdlAlloc outputHandle bindings (AC.aslExtImpl funsref) ()
+  let simContext = CS.initSimContext bak intrinsics hdlAlloc outputHandle bindings (AC.aslExtImpl funsref) ()
   let hdlr = CS.defaultAbortHandler
   return (CS.InitialState simContext symGlobalState hdlr retRepr econt, funsref)
 
 -- | Allocate all of the globals that will be referred to by the statement
 -- sequence (even indirectly) and use them to populate a 'CS.GlobalSymState'
 initGlobals :: forall sym env scope
-             . (CB.IsSymInterface sym, OnlineSolver scope sym)
+             . IsSym scope sym
             => SimulatorConfig scope
             -> Ctx.Assignment (S.Expr scope) env
             -> Ctx.Assignment AC.BaseGlobalVar env
@@ -355,13 +360,15 @@ initGlobals _ globalExprs globalVars = do
         AC.BaseGlobalVar gv = globalVars Ctx.! idx
       in CSG.insertGlobal gv (globalExprs Ctx.! idx) gs
 
-executionFeatures :: sym ~ CBO.OnlineBackend scope solver fs
+executionFeatures :: IsSym scope sym
                   => WPO.OnlineSolver solver
-                  => CB.IsSymInterface sym
                   => CCE.IsSyntaxExtension ext
-                  => T.Text -> sym -> IO [CS.ExecutionFeature p sym ext rtp]
-executionFeatures nm sym = do
-  gft <- CSP.pathSatisfiabilityFeature sym (CBO.considerSatisfiability sym)
+                  => T.Text
+                  -> CBO.OnlineBackend solver scope S.EmptyExprBuilderState (S.Flags S.FloatReal)
+                  -> IO [CS.ExecutionFeature p sym ext rtp]
+executionFeatures nm bak = do
+  let sym = CB.backendGetSym bak
+  gft <- CSP.pathSatisfiabilityFeature sym (CBO.considerSatisfiability bak)
   -- FIXME: What is the general requirement here?
   let psf = if nm `elem` [ "VLDMDB_A1", "VLDM_A1", "FLDMDBX_A1"
                          , "FLDMIAX_A1", "FSTMDBX_A1", "FSTMIAX_A1"

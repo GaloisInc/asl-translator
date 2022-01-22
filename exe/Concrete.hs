@@ -15,7 +15,7 @@ import qualified Data.Ratio as R
 import qualified Data.Text as T
 import qualified LibBF as BF
 import qualified What4.Interface as WI
-import qualified What4.Expr.Builder as B
+import qualified What4.Expr as B
 import qualified What4.Utils.Complex as U
 import qualified What4.Utils.Util as U
 import qualified What4.Utils.Word16String as U
@@ -31,7 +31,7 @@ formulaName = "uf.HaveBTIExt_0"
 main :: IO ()
 main = do
   Some r <- liftIO $ newIONonceGenerator
-  sym <- liftIO $ B.newExprBuilder B.FloatRealRepr NoBuilderData r
+  sym <- liftIO $ B.newExprBuilder B.FloatRealRepr B.EmptyExprBuilderState r
   putStrLn $ "Reading formulas..."
   env <- M.fromList <$> FS.getFunctionFormulas sym M.empty
   putStrLn $ "Testing " <> formulaName <> " ..."
@@ -47,8 +47,6 @@ main = do
       putStrLn "Result:"
       res <- WI.applySymFn sym symFn args
       print res
-
-data BuilderData t = NoBuilderData
 
 
 -- FIXME: There is probably a better way to handle 0 denominators, but
