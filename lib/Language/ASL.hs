@@ -21,7 +21,6 @@ module Language.ASL (
   , simulateInstruction
   , SimulatorConfig(..)
   , SimulationException(..)
-  , ASLSimState(..)
   ) where
 
 import           Data.IORef
@@ -78,15 +77,13 @@ import qualified Prettyprinter as LPP
 import qualified Prettyprinter.Render.String as LPP
 import qualified Text.PrettyPrint.HughesPJClass as PP
 
-data ASLSimState t = ASLSimState
-
 data SimulatorConfig scope =
   SimulatorConfig { simOutputHandle :: IO.Handle
                   , simHandleAllocator :: CFH.HandleAllocator
-                  , simBackend :: CBO.YicesOnlineBackend scope ASLSimState (S.Flags S.FloatReal)
+                  , simBackend :: CBO.YicesOnlineBackend scope S.EmptyExprBuilderState (S.Flags S.FloatReal)
                   }
 
-type IsSym scope sym = sym ~ S.ExprBuilder scope ASLSimState (S.Flags S.FloatReal)
+type IsSym scope sym = sym ~ S.ExprBuilder scope S.EmptyExprBuilderState (S.Flags S.FloatReal)
 
 freshRegEntries :: Ctx.Assignment (FreshArg sym) btps -> Ctx.Assignment (CS.RegEntry sym) (AT.ToCrucTypes btps)
 freshRegEntries Ctx.Empty = Ctx.Empty
@@ -367,7 +364,7 @@ executionFeatures :: IsSym scope sym
                   => WPO.OnlineSolver solver
                   => CCE.IsSyntaxExtension ext
                   => T.Text
-                  -> CBO.OnlineBackend solver scope ASLSimState (S.Flags S.FloatReal)
+                  -> CBO.OnlineBackend solver scope S.EmptyExprBuilderState (S.Flags S.FloatReal)
                   -> IO [CS.ExecutionFeature p sym ext rtp]
 executionFeatures nm bak = do
   let sym = CB.backendGetSym bak

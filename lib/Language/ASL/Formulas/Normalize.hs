@@ -113,6 +113,7 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified What4.Interface as WI
 import qualified What4.Symbol as WI
 import qualified What4.SemiRing as WI
+import qualified What4.Expr as WB
 import qualified What4.Expr.Builder as WB
 import qualified What4.Expr.WeightedSum as WSum
 import           What4.Utils.Util ( SomeSome(..) )
@@ -135,13 +136,11 @@ integerBVSzRepr = NR.knownNat
 integerBVTypeRepr :: WI.BaseTypeRepr IntegerBVType
 integerBVTypeRepr = knownRepr
 
-data BuilderData t = NoBuilderData
-
 -- | Normalize and re-serialize a serialized formula library.
 normalizeSymFnEnv :: FS.SExpr -> Maybe FS.SExpr -> IO (FS.SExpr, Maybe FS.SExpr)
 normalizeSymFnEnv funsexpr minstexpr = do
   Some r <- newIONonceGenerator
-  sym <- WB.newExprBuilder WB.FloatRealRepr NoBuilderData r
+  sym <- WB.newExprBuilder WB.FloatRealRepr WB.EmptyExprBuilderState r
   WB.startCaching sym
   NormalizeSymFnEnv _ funsexprsrev proxyFns <- deserializeAndNormalize sym funsexpr
   let normFunSExprs = reverse $ (funsexprsrev)
@@ -176,7 +175,7 @@ reserializeInstr :: Map T.Text FS.SExpr
                  -> IO (T.Text, FS.SExpr)
 reserializeInstr env name sexpr = do
   Some r <- newIONonceGenerator
-  sym <- WB.newExprBuilder WB.FloatRealRepr NoBuilderData r
+  sym <- WB.newExprBuilder WB.FloatRealRepr WB.EmptyExprBuilderState r
   doSerialize sym
   where
     doSerialize :: forall sym t st fs

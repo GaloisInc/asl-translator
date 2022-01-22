@@ -108,7 +108,7 @@ type SymFnEnv sym = Map T.Text (SymFnWrapper sym)
 -- | The ASLExt app evaluator
 -- | The ASLExt app evaluator
 aslAppEvalFunc :: forall sym bak arch proxy p ext rtp blocks r ctx
-                . (CB.IsSymInterface sym, CB.IsBoolSolver sym bak)
+                . (CB.IsSymBackend sym bak)
                => proxy arch
                -> IORef (SymFnEnv sym)
                -> bak

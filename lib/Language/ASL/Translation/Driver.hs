@@ -113,7 +113,7 @@ import           Language.ASL.Translation.Exceptions
 import           Language.ASL.Signature
 import           Language.ASL.StaticExpr
 
-import qualified What4.Expr.Builder as B
+import qualified What4.Expr as B
 import qualified What4.Interface as WI
 import           What4.ProblemFeatures
 
@@ -277,8 +277,6 @@ translateAndSimulate opts = do
   (sigEnv, sigState) <- buildSigState spec (optLogCfg opts)
   translateAndSimulate' opts spec sigEnv sigState
 
-data BuilderData t = NoBuilderData
-
 -- | Read in an existing specification, perform a normalization pass and
 -- then write out the result.
 readAndNormalize :: TranslatorOptions -> IO ()
@@ -314,7 +312,7 @@ serializeFormulas opts (sFormulaPromises -> promises) = do
   (instrs, funs) <- (partitionEithers . reverse) <$> mapM getFormula promises
 
   Some r <- liftIO $ newIONonceGenerator
-  sym <- liftIO $ B.newExprBuilder B.FloatRealRepr NoBuilderData r
+  sym <- liftIO $ B.newExprBuilder B.FloatRealRepr B.EmptyExprBuilderState r
 
   case (optSimulationMode opts) of
     SimulateAll -> do
@@ -487,19 +485,19 @@ runSigMapWithScope opts sigState sigEnv action = do
   runSigMapM action sigMap
 
 withOnlineBackend' :: forall a
-                    . (forall scope. CBO.YicesOnlineBackend scope ASL.ASLSimState (B.Flags B.FloatReal) -> IO a)
+                    . (forall scope. CBO.YicesOnlineBackend scope B.EmptyExprBuilderState (B.Flags B.FloatReal) -> IO a)
                    -> IO a
 withOnlineBackend' action = do
   let feat =     useIntegerArithmetic
              .|. useBitvectors
              .|. useStructs
   Some gen <- newIONonceGenerator
-  sym <- B.newExprBuilder B.FloatRealRepr ASL.ASLSimState gen
+  sym <- B.newExprBuilder B.FloatRealRepr B.EmptyExprBuilderState gen
   CBO.withYicesOnlineBackend sym CBO.NoUnsatFeatures feat action
 
 withOnlineBackend :: forall arch a
                    . ElemKey
-                  -> (forall scope. CBO.YicesOnlineBackend scope ASL.ASLSimState (B.Flags B.FloatReal) -> IO a)
+                  -> (forall scope. CBO.YicesOnlineBackend scope B.EmptyExprBuilderState (B.Flags B.FloatReal) -> IO a)
                   -> SigMapM arch (Maybe a)
 withOnlineBackend key action = catchIO key $ withOnlineBackend' action
 
