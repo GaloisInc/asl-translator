@@ -1125,15 +1125,12 @@ translateSlice' :: CCG.Atom s tp
 translateSlice' atom' slice constraint = do
   SliceRange signed lenRepr wRepr loAtom hiAtom atom <- getSliceRange slice atom' constraint
   case lenRepr `WT.testNatCases` wRepr of
-    WT.NatCaseEQ ->
-      -- when the slice covers the whole range we just return the whole atom
-      return $ Some $ atom
-    WT.NatCaseLT WT.LeqProof -> do
+    WT.NatCaseGT _ -> throwTrace $ UnsupportedSlice slice constraint
+    _ -> do
       signedAtom <- mkAtom $ CCG.App $ CCE.BoolLit signed
       Just (sresult, _) <- translateFunctionCall (AS.VarName "getSlice")
         [Some atom, Some signedAtom, Some loAtom, Some hiAtom] (ConstraintSingle (CT.BVRepr lenRepr))
       return sresult
-    _ -> throwTrace $ UnsupportedSlice slice constraint
 
 normalizeSlice :: AS.Slice -> (AS.Expr, AS.Expr)
 normalizeSlice slice = case slice of

@@ -41,23 +41,24 @@ bits(length) getSlice(bits(N) inbv, boolean signed, integer lo, integer hi)
 
     bits(N) bv = inbv;
     // bv = [ bv_(N-1) .. bv_hi(hi) .. bv_lo(lo) .. bv_0](N)
+
+    // shift off the top bits
+    bv = bv << (N - 1 - hi);
+    // bv = [ bv_hi(N-1) .. bv_lo(lo + (N - 1 - hi)) .. bv_0 .. 0 0](N)
+
+    // shift off the bottom bits
     if signed then
-        bv = primitive_ASR(bv, lo);
-        // bv = [ 1 1 .. bv_hi(hi-lo) .. bv_lo(0) ] (N)
+        bv = primitive_ASR(bv, lo + (N - 1 - hi));
+        // where S == bv_hi
+        // bv = [ S S .. bv_hi(hi-lo) .. bv_lo(0) ] (N)
     else
-        bv = bv >> lo;
+        bv = bv >> (lo + (N - 1 - hi));
         // bv = [ 0 0 .. bv_hi(hi-lo) .. bv_lo(0) ] (N)
 
-    // where S == 1 iff signed
-    // bv = [ S S .. bv_hi(hi-lo) .. bv_lo(lo) ] (N)
-    bits(N) mask = Ones(N);
-    // mask = [ 1 1 .. 1 1 ] (N)
-    mask = NOT (mask << length);
-    // mask = [ 0 0 .. 1(length) .. 1(0) ] (N)
-    bv = bv AND mask;
-    // bv = [ 0 0 .. S(length) S .. bv_hi(hi - lo) .. bv_lo(0) ] (N)
+    // where S == bv_hi if signed and S == 0 if unsigned
+    // bv = [ S S .. bv_hi(hi-lo) .. bv_lo(0) ] (N)
     return truncate(bv, length);
-    // [ S(length) S .. bv_hi(hi - lo) .. bv_lo(0) ] (length)
+    // [ S(length) .. bv_hi(hi - lo) .. bv_lo(0) ] (length)
 
 // The length of the input bitvector may be larger than
 // the range we are setting, in which case we simply drop
