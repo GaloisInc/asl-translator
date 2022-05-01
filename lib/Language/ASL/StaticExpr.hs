@@ -329,13 +329,12 @@ instance Functor StaticEnvM where
   fmap f (StaticEnvM spenvs) = StaticEnvM (map (\(env', ret) -> (env', f ret)) . spenvs)
 
 instance Applicative StaticEnvM where
-  pure x = return x
+  pure x = StaticEnvM (\env -> [(env, x)])
   (<*>) = ap
 
 instance Monad StaticEnvM where
   StaticEnvM f >>= g =
     StaticEnvM (\env -> concat $ map (\(env', ret) -> getStaticPEnvs (g ret) env') (f env))
-  return x = StaticEnvM (\env -> [(env, x)])
 
 instance Fail.MonadFail StaticEnvM where
   fail _ = StaticEnvM (\_ -> [])

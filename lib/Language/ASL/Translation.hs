@@ -905,7 +905,7 @@ translatelValSlice :: AS.LValExpr
                    -- ^ any known constraints determining the size of the slice
                    -> Generator h s arch ret ()
 translatelValSlice lv slice asnAtom' constraint = do
-  let Just lve = lValToExpr lv
+  Just lve <- return $ lValToExpr lv
   Some atom' <- translateExpr lve
   SliceRange signed lenRepr _ loAtom hiAtom atom <- getSliceRange slice atom' constraint
   asnAtom <- extBVAtom signed lenRepr asnAtom'
@@ -1051,7 +1051,7 @@ translateExpr'' expr ty = do
               _ -> X.throw $ UnexpectedExtendedType struct ext
 
           AS.ExprMemberBits var bits -> do
-            let (hdvar : tlvars) = map (\member -> AS.ExprMember var member) bits
+            (hdvar : tlvars) <- return $ map (\member -> AS.ExprMember var member) bits
             let expr' = foldl (\var' -> \e -> AS.ExprBinOp AS.BinOpConcat var' e) hdvar tlvars
             translateExpr' expr' ty
 
@@ -1646,8 +1646,8 @@ translateType t = do
            WT.BaseArrayRepr (Ctx.empty Ctx.:> WT.BaseBVRepr (WT.knownNat @52)) (WT.BaseBVRepr nRepr)
     AS.TypeArray t'' (AS.IxTypeRange (AS.ExprLitInt _) (AS.ExprLitInt _)) -> do
       Some ty <- asBaseType <$> translateType t''
-      return $ Some $ CT.SymbolicArrayRepr (Ctx.empty Ctx.:> WT.BaseIntegerRepr) ty    
-    AS.TypeArray _ty _idxTy -> throwTrace $ UnsupportedType t'    
+      return $ Some $ CT.SymbolicArrayRepr (Ctx.empty Ctx.:> WT.BaseIntegerRepr) ty
+    AS.TypeArray _ty _idxTy -> throwTrace $ UnsupportedType t'
     AS.TypeFun _ _ -> throwTrace $ UnsupportedType t'
 
     AS.TypeReg _i _flds -> throwTrace $ UnsupportedType t'
@@ -1699,7 +1699,7 @@ translateFunctionCall qIdent args ty = do
             result <- mkAtom (CCG.App $ CCE.ExtensionApp returnResult)
             case retT of
               WT.BaseStructRepr ctx@(Ctx.Empty Ctx.:> _) -> do
-                let [ret] = sfuncRet sig
+                [ret] <- return $ sfuncRet sig
                 ext <- mkExtendedTypeData ret
                 let retTC = CT.SymbolicStructRepr ctx
                 let returnResult' = GetBaseStruct retTC (Ctx.baseIndex) (CCG.AtomExpr result)
@@ -2153,7 +2153,7 @@ mkExtendedTypeData = mkExtendedTypeData' getUT getExtendedTypeData
 addExtendedTypeData :: AS.Identifier
                     -- ^ the name of the variable to be assigned extended type data
                     -> AS.Type
-                    -- ^ the type potentially implying 'ExtendedTypeData' 
+                    -- ^ the type potentially implying 'ExtendedTypeData'
                     -> Generator h s arch ret ()
 addExtendedTypeData ident ty = do
   ext <- mkExtendedTypeData ty
@@ -2436,7 +2436,7 @@ getBVLength mexpr ty = do
 
 -- This is a dead code path that no longer appears when all of the memory translation
 -- functions are stubbed out.
-  
+
 -- getSymbolicBVLength :: AS.Expr
 --                     -> Maybe (Generator h s arch ret (CCG.Atom s CT.IntegerType))
 -- getSymbolicBVLength e = case e of

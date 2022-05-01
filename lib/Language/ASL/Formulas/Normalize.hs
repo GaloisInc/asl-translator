@@ -217,7 +217,7 @@ deserializeAndNormalize sym sexpr = do
     shouldInline symFn = case WB.symFnInfo symFn of
       WB.DefinedFnInfo _ expr _ -> exprDepthBounded 7 expr
       _ -> False
-    
+
     augmentEnv :: T.Text
                -> SomeSome (WI.SymFn sym)
                -> NormalizeSymFnEnv sym
@@ -312,8 +312,8 @@ normalizeSymFn symFn = case WB.symFnInfo symFn of
     (expr_2, exprBoundVars, flattenBoundVars) <- AT.normExprVars intNormOps args expr_1
     (expr_3, unflattenExpr) <- AT.flatExpr intNormOps expr_2
     validateNormalForm expr_3
-    let Right innerName =
-          WI.userSymbol ("df_" ++ T.unpack (WI.solverSymbolAsText (WB.symFnName symFn)) ++ "_norm")
+    let innerName =
+          WI.safeSymbol ("df_" ++ T.unpack (WI.solverSymbolAsText (WB.symFnName symFn)) ++ "_norm")
     freshArgs <- withSym $ \sym -> FC.traverseFC (refreshBoundVar sym) args
     argExprs <- withSym $ \sym -> return $ FC.fmapFC (WI.varExpr sym) freshArgs
     flatArgExprs <- flattenBoundVars $ argExprs
@@ -910,7 +910,11 @@ data RebindException t = RebindError String
 
 errorHere :: HasCallStack => String -> RebindM t a
 errorHere msg = do
-  let (_, src): _ = getCallStack callStack
+  -- The only way for HasCallStack to be empty is for a user to manually
+  -- construct one as an implicit argument, which is unlikely.
+  src <- case getCallStack callStack of
+           (_, src): _ -> return src
+           []          -> error "errorHere: Unexpected empty call stack"
   path <- MR.asks rbPath
   nm <- MR.asks rbFunName
   let msg' = "In expression path:\n" ++ show path ++ "\n Error Message: " ++ msg ++ " at: " ++ prettySrcLoc src ++ "\n" ++ "When normalizing function: " ++ T.unpack nm
