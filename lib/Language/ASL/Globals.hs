@@ -507,8 +507,12 @@ flattenGlobalsStruct :: forall f g m
                      -> m (Assignment g GlobalSymsCtx)
 flattenGlobalsStruct (GlobalsStruct simples gprs simds mem) fsimple fgprs fsimds fmem = do
   simples' <- FC.traverseFC applyFSimple simpleGlobalRefs
-  gprs' <- FC.traverseFC (\(GPRRef ref) -> fgprs ref gprs) gprGlobalRefsSym
-  simds' <- FC.traverseFC (\(SIMDRef ref) -> fsimds ref simds) simdGlobalRefsSym
+  gprs' <- FC.traverseFC (\case GPRRef ref -> fgprs ref gprs
+                                _          -> error "Expected GPRRef")
+                         gprGlobalRefsSym
+  simds' <- FC.traverseFC (\case SIMDRef ref -> fsimds ref simds
+                                 _           -> error "Expected SIMDRef")
+                          simdGlobalRefsSym
   mem' <- fmem mem
   return $ (simples' <++> gprs' <++> simds') :> mem'
   where

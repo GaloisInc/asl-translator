@@ -75,7 +75,7 @@ import qualified What4.Expr.Builder as WB
 import           What4.Utils.Util ( SomeSome(..) )
 import qualified What4.Utils.Util as U
 
-import qualified What4.Serialize.Printer as S ( pattern L, pattern A ) 
+import qualified What4.Serialize.Printer as S ( pattern L, pattern A )
 import           What4.Serialize.Printer ( Atom(..), SExpr )
 import qualified What4.Serialize.Printer as WP
 import qualified What4.Serialize.Parser as WPD
@@ -179,7 +179,11 @@ serializeSymFnEnv symFnEnv = assembleSymFnEnv (map go symFnEnv)
 
 throwErr :: HasCallStack => MF.MonadFail m => String -> m a
 throwErr msg = do
-  let (_, src): _ = getCallStack callStack
+  -- The only way for HasCallStack to be empty is for a user to manually
+  -- construct one as an implicit argument, which is unlikely.
+  src <- case getCallStack callStack of
+           (_, src): _ -> return src
+           []          -> error "throwErr: Unexpected empty call stack"
   MF.fail ("At: " ++ prettySrcLoc src ++ ": " ++ msg)
 
 badSExpr :: HasCallStack => MF.MonadFail m => SExpr -> m a
@@ -370,7 +374,7 @@ deserializeSymFnEnv' :: forall sym m env t st fs
                     -> (env -> FunctionMaker sym)
                     -- ^ how to build a 'FunctionMaker' according to
                     -- the latest environment in order to interpret
-                    -- function calls 
+                    -- function calls
                     -> SExpr
                     -> m ([(T.Text, SomeSome (WI.SymFn sym))], env)
 deserializeSymFnEnv' _sym env extendenv mkFun sexpr = do
