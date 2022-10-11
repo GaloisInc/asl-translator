@@ -97,6 +97,7 @@ import qualified Dismantle.ARM.A32 as A32
 import qualified Dismantle.ARM.ASL as DA ( Encoding(..) )
 import           Dismantle.ARM.ASL ( encodingIdentifier )
 
+import           System.FilePath ((</>))
 import qualified System.IO as IO
 import           System.IO (hPutStrLn, stderr)
 
@@ -151,7 +152,7 @@ data TranslatorOptions = TranslatorOptions
   , optFilePaths :: FilePathConfig
   -- ^ specification of input/output file paths
   , optLogCfg :: LogCfg
-  -- ^ internal log configuration 
+  -- ^ internal log configuration
   , optParallel :: Bool
   -- ^ if true, execute symbolic simulation for each function on a separate thread
   , optNormalizeMode :: NormalizeMode
@@ -378,14 +379,14 @@ translateAndSimulate' opts spec env state = do
     forM (zip [1..] encodings) $ \(i :: Int, (daEnc, (instr, instrEnc))) -> do
       logMsgStr 1 $ "Processing instruction: " ++ DA.encName daEnc ++ " (" ++ DA.encASLIdent daEnc ++ ")"
         ++ "\n" ++ show i ++ "/" ++ show (length encodings)
-      runTranslation daEnc instr instrEnc   
+      runTranslation daEnc instr instrEnc
   IO.withFile "./output/global_sigs.txt" IO.WriteMode $ \handle -> do
     forM_ (catMaybes sigs) $ \(SomeInstructionSignature sig) -> do
       hPutStrLn handle $ T.unpack $ funcName sig
       FC.forFC_ (funcGlobalReadReprs sig) $ \(AC.LabeledValue nm ty) -> do
         hPutStrLn handle $ "  " ++ T.unpack nm ++ ": " ++ show ty
   return sigmap
-      
+
 
 runTranslation :: DA.Encoding
                -> AS.Instruction
@@ -694,7 +695,7 @@ simulateGenFunction key p = do
 
 getASL :: TranslatorOptions -> IO (ASLSpec)
 getASL opts = do
-  let getPath f = (fpDataRoot (optFilePaths opts)) ++ (f (optFilePaths opts))
+  let getPath f = fpDataRoot (optFilePaths opts) </> f (optFilePaths opts)
   eAslDefs <- AP.parseAslDefsFile (getPath fpDefs)
   eAslSupportDefs <- AP.parseAslDefsFile (getPath fpSupport)
   eAslExtraDefs <- AP.parseAslDefsFile (getPath fpExtraDefs)
