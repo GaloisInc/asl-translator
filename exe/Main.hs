@@ -146,6 +146,10 @@ arguments =
   , Option "p" ["parallel"] (NoArg (Left (\opts -> Just $ opts { optParallel = True  })))
     "Run symbolic simulation concurrently with multiple threads."
 
+  , Option [] ["output-global-sigs"]
+    (ReqArg (\f -> Left (\opts -> Just $ opts { optFilePaths = (optFilePaths opts){ fpOutGlobalSigs = f} })) "PATH")
+   "Path to type signatures for global variables."
+
   , Option [] ["output-functions"]
     (ReqArg (\f -> Left (\opts -> Just $ opts { optFilePaths = (optFilePaths opts){ fpOutFuns = f} })) "PATH")
    "Path to serialized function formulas."

@@ -166,6 +166,7 @@ data FilePathConfig = FilePathConfig
   , fpRegs :: FilePath
   , fpSupport :: FilePath
   , fpExtraDefs :: FilePath
+  , fpOutGlobalSigs :: FilePath
   , fpOutFuns :: FilePath
   , fpOutInstrs :: FilePath
   , fpNormFuns :: FilePath
@@ -192,6 +193,7 @@ defaultFilePaths = FilePathConfig
   , fpRegs = "arm_regs.sexpr"
   , fpSupport = "support.sexpr"
   , fpExtraDefs = "extra_defs.sexpr"
+  , fpOutGlobalSigs = "./output/global_sigs.txt"
 #ifdef ASL_LITE
   , fpOutFuns = "./output/functions-lite.what4"
   , fpOutInstrs = "./output/instructions-lite.what4"
@@ -370,6 +372,9 @@ translateAndSimulate' :: HasCallStack
                 -> SigState
                 -> IO (SigMap arch)
 translateAndSimulate' opts spec env state = do
+  let
+    FilePathConfig { fpOutGlobalSigs } = optFilePaths opts
+
   let doInstrFilter (daEnc, (instr, enc)) = do
         let test = instrFilter $ optFilters $ opts
         test (instrToIdent daEnc instr enc)
@@ -380,7 +385,7 @@ translateAndSimulate' opts spec env state = do
       logMsgStr 1 $ "Processing instruction: " ++ DA.encName daEnc ++ " (" ++ DA.encASLIdent daEnc ++ ")"
         ++ "\n" ++ show i ++ "/" ++ show (length encodings)
       runTranslation daEnc instr instrEnc
-  IO.withFile "./output/global_sigs.txt" IO.WriteMode $ \handle -> do
+  IO.withFile fpOutGlobalSigs IO.WriteMode $ \handle -> do
     forM_ (catMaybes sigs) $ \(SomeInstructionSignature sig) -> do
       hPutStrLn handle $ T.unpack $ funcName sig
       FC.forFC_ (funcGlobalReadReprs sig) $ \(AC.LabeledValue nm ty) -> do
