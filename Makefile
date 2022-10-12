@@ -33,21 +33,21 @@ SOURCE_FILES = $(SPEC_FILES:%.sexpr=${PARSED}/%.sexpr)
 
 ./output/instructions.what4 ./output/functions.what4 &:: ${SOURCE_FILES} ${HS_SOURCES}
 	cabal v2-build --builddir=asl-build dismantle-arm-xml -f -asl-lite
-	cabal v2-run --builddir=asl-build asl-translator-exec -f -asl-lite -- --output-functions="./output/functions.what4" --output-instructions="./output/instructions.what4" --asl-spec="${PARSED}/" --parallel
+	cabal v2-run --builddir=asl-build asl-translator-exec -f -asl-lite -- --output-functions="./output/functions.what4" --output-instructions="./output/instructions.what4" --output-global-sigs="./output/global_sigs.txt" --asl-spec="${PARSED}/" --parallel
 
 
 ./output/instructions-lite.what4 ./output/functions-lite.what4 &:: ${SOURCE_FILES} ${HS_SOURCES}
 	cabal v2-build --builddir=asl-lite-build dismantle-arm-xml -f asl-lite
-	cabal v2-run --builddir=asl-lite-build asl-translator-exec -f asl-lite -- --output-functions="./output/functions-lite.what4" --output-instructions="./output/instructions-lite.what4" --asl-spec="${PARSED}/" --parallel
+	cabal v2-run --builddir=asl-lite-build asl-translator-exec -f asl-lite -- --output-functions="./output/functions-lite.what4" --output-instructions="./output/instructions-lite.what4" --output-global-sigs="./output/global_sigs.txt" --asl-spec="${PARSED}/" --parallel
 
 
 ./output/instructions-norm.what4 ./output/functions-norm.what4 &:: ./output/instructions.what4 ./output/functions.what4 ./lib/Language/ASL/Formulas/Normalize.hs
 	cabal v2-build --builddir=asl-build dismantle-arm-xml -f -asl-lite
-	cabal v2-run --builddir=asl-build asl-translator-exec -f -asl-lite -- --output-norm-functions="./output/functions-norm.what4" --output-norm-instructions="./output/instructions-norm.what4" --output-instructions="./output/instructions.what4" --output-functions="./output/functions.what4" --normalize-mode=all
+	cabal v2-run --builddir=asl-build asl-translator-exec -f -asl-lite -- --output-norm-functions="./output/functions-norm.what4" --output-norm-instructions="./output/instructions-norm.what4" --output-instructions="./output/instructions.what4" --output-functions="./output/functions.what4" --output-global-sigs="./output/global_sigs.txt" --normalize-mode=all
 
 ./output/instructions-norm-lite.what4 ./output/functions-norm-lite.what4 &:: ./output/instructions-lite.what4 ./output/functions-lite.what4 ./lib/Language/ASL/Formulas/Normalize.hs
 	cabal v2-build --builddir=asl-lite-build dismantle-arm-xml -f asl-lite
-	cabal v2-run --builddir=asl-lite-build asl-translator-exec -f asl-lite -- --output-norm-functions="./output/functions-norm-lite.what4" --output-norm-instructions="./output/instructions-norm-lite.what4" --output-instructions="./output/instructions-lite.what4" --output-functions="./output/functions-lite.what4" --normalize-mode=all
+	cabal v2-run --builddir=asl-lite-build asl-translator-exec -f asl-lite -- --output-norm-functions="./output/functions-norm-lite.what4" --output-norm-instructions="./output/instructions-norm-lite.what4" --output-instructions="./output/instructions-lite.what4" --output-functions="./output/functions-lite.what4" --output-global-sigs="./output/global_sigs.txt" --normalize-mode=all
 
 ./archived/%.what4.gz: ./output/%.what4
 	gzip --best --stdout $< > $@
