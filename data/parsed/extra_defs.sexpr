@@ -438,13 +438,6 @@
                 (QualifiedIdentifier Any lo))))
           (StmtAssert
             (ExprBinOp
-              "<="
-              (ExprVarRef
-                (QualifiedIdentifier Any hi))
-              (ExprVarRef
-                (QualifiedIdentifier Any length))))
-          (StmtAssert
-            (ExprBinOp
               ">="
               (ExprVarRef
                 (QualifiedIdentifier Any lo))
@@ -460,6 +453,20 @@
                   (QualifiedIdentifier Any lo)))
               (ExprVarRef
                 (QualifiedIdentifier Any length))))
+          (StmtVarDeclInit
+            (SymDecl
+              slicelen
+              (TypeRef
+                (QualifiedIdentifier Any integer)))
+            (ExprBinOp
+              "+"
+              (ExprBinOp
+                "-"
+                (ExprVarRef
+                  (QualifiedIdentifier Any hi))
+                (ExprVarRef
+                  (QualifiedIdentifier Any lo)))
+              (ExprLitNat 1)))
           (StmtVarDeclInit
             (SymDecl
               bv
@@ -481,7 +488,7 @@
                 (ExprVarRef
                   (QualifiedIdentifier Any length))
                 (ExprVarRef
-                  (QualifiedIdentifier Any hi)))))
+                  (QualifiedIdentifier Any slicelen)))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any bv))
@@ -494,30 +501,88 @@
                 (ExprVarRef
                   (QualifiedIdentifier Any length))
                 (ExprVarRef
-                  (QualifiedIdentifier Any hi)))))
+                  (QualifiedIdentifier Any slicelen)))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any ebv))
             (ExprCall
               (QualifiedIdentifier Any ZeroExtend)
               (list
-                (ExprCall
-                  (QualifiedIdentifier Any NOT)
-                  (list
-                    (ExprVarRef
-                      (QualifiedIdentifier Any bv))))
+                (ExprVarRef
+                  (QualifiedIdentifier Any bv))
                 (ExprVarRef
                   (QualifiedIdentifier Any N)))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any ebv))
+            (ExprBinOp
+              "<<"
+              (ExprVarRef
+                (QualifiedIdentifier Any ebv))
+              (ExprVarRef
+                (QualifiedIdentifier Any lo))))
+          (StmtVarDeclInit
+            (SymDecl
+              smask
+              (TypeFun
+                bits
+                (ExprVarRef
+                  (QualifiedIdentifier Any length))))
+            (ExprCall
+              (QualifiedIdentifier Any Ones)
+              (list
+                (ExprVarRef
+                  (QualifiedIdentifier Any length)))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any smask))
+            (ExprBinOp
+              "<<"
+              (ExprVarRef
+                (QualifiedIdentifier Any smask))
+              (ExprBinOp
+                "-"
+                (ExprVarRef
+                  (QualifiedIdentifier Any length))
+                (ExprVarRef
+                  (QualifiedIdentifier Any slicelen)))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any smask))
+            (ExprBinOp
+              ">>"
+              (ExprVarRef
+                (QualifiedIdentifier Any smask))
+              (ExprBinOp
+                "-"
+                (ExprVarRef
+                  (QualifiedIdentifier Any length))
+                (ExprVarRef
+                  (QualifiedIdentifier Any slicelen)))))
+          (StmtVarDeclInit
+            (SymDecl
+              mask
+              (TypeFun
+                bits
+                (ExprVarRef
+                  (QualifiedIdentifier Any N))))
+            (ExprCall
+              (QualifiedIdentifier Any ZeroExtend)
+              (list
+                (ExprVarRef
+                  (QualifiedIdentifier Any smask))
+                (ExprVarRef
+                  (QualifiedIdentifier Any N)))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any mask))
             (ExprCall
               (QualifiedIdentifier Any NOT)
               (list
                 (ExprBinOp
                   "<<"
                   (ExprVarRef
-                    (QualifiedIdentifier Any ebv))
+                    (QualifiedIdentifier Any mask))
                   (ExprVarRef
                     (QualifiedIdentifier Any lo))))))
           (StmtAssign
@@ -527,6 +592,15 @@
               "AND"
               (ExprVarRef
                 (QualifiedIdentifier Any basebv))
+              (ExprVarRef
+                (QualifiedIdentifier Any mask))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any result))
+            (ExprBinOp
+              "OR"
+              (ExprVarRef
+                (QualifiedIdentifier Any result))
               (ExprVarRef
                 (QualifiedIdentifier Any ebv))))
           (StmtReturn
