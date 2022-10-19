@@ -217,18 +217,14 @@ mkSyntaxOverrides defs =
               let mkVar nm = AS.ExprVarRef (mkIdent nm)
               let args = map getSliceExpr slices
               let old = "__oldGetterValue"
-              let width = AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "sizeOf") [mkVar old]
-              let mask = "__maskedGetterValue"
               let stmts =
                     [ AS.StmtAssign (AS.LValVarRef $ mkIdent old)
                        (AS.ExprCall getter args)
-                    ,  AS.StmtAssign (AS.LValVarRef $ mkIdent mask)
-                       (AS.ExprCall (mkIdent "Ones") [width])
-                    , AS.StmtAssign (AS.LValSliceOf (AS.LValVarRef $ mkIdent mask) outerSlices)
+                    , AS.StmtAssign (AS.LValSliceOf (AS.LValVarRef $ mkIdent old) outerSlices)
                        rhs
-                    , AS.StmtCall setter (AS.ExprBinOp AS.BinOpBitwiseAnd (mkVar mask) (mkVar old) : args)
+                    , AS.StmtCall setter ((mkVar old) : args)
                     ]
-              letInStmt [old, mask] stmts
+              letInStmt [old] stmts
         AS.LValVarRef qName
           | Set.member (mkFunctionName (mkSetterName False qName) 1) setters ->
             Just $ \rhs -> AS.StmtCall (mkSetterName False qName) [rhs]
