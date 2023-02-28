@@ -388,7 +388,23 @@ abnormalExit = do
   SomeFunctionSignature sig <- MS.gets tsSig
   let retT = CT.SymbolicStructRepr (funcRetRepr sig)
   defaultv <- getDefaultValue retT
-  returnWithGlobals' defaultv
+  case funcIsInstruction sig of
+    -- NOTE: in the case of undefined behavior, we can continue
+    -- instruction execution after having set the "Undefined" flag, in order
+    -- to avoid simply creating meaningless no-ops
+    -- TODO: For certain vector instructions this approach seems to be problematic
+    -- (likely due to the static evaluation logic)
+    -- so for now we can just default to early termination for undefined behavior
+    True -> case isVector (funcName sig) of
+      True -> returnWithGlobals' defaultv
+      False -> return ()
+    False -> returnWithGlobals' defaultv
+
+isVector :: T.Text -> Bool
+isVector nm = foldr (\p b -> b || T.isPrefixOf p nm) False vectorPrefixes
+
+vectorPrefixes :: [T.Text]
+vectorPrefixes = ["V", "FST", "FLD" ]
 
 -- | Translate an @if@ statement block into a collection of Crucible
 -- if-then-else blocks with 'ifte_'.

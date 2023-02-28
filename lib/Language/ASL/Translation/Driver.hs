@@ -310,6 +310,7 @@ serializeFormulas opts (sFormulaPromises -> promises) = do
     FilePathConfig { fpOutFuns, fpOutInstrs } = optFilePaths opts
 
   (instrs, funs) <- (partitionEithers . reverse) <$> mapM getFormula promises
+  IO.putStrLn $ "Done with formulas"
 
   Some r <- liftIO $ newIONonceGenerator
   sym <- liftIO $ B.newExprBuilder B.FloatRealRepr B.EmptyExprBuilderState r
@@ -344,10 +345,14 @@ serializeFormulas opts (sFormulaPromises -> promises) = do
 
     getFormula :: (ElemKey, IO FS.SExpr) -> IO (Either FS.SExpr FS.SExpr)
     getFormula (key, getresult) = do
+      IO.putStrLn $ "Getting Result for:" ++ (show key)
       result <- getresult
+      IO.putStrLn $ "Done!" ++ (show key)
       case key of
         KeyInstr _ -> return $ Left result
         KeyFun _ -> return $ Right result
+      
+
 
 checkSerialization :: (sym ~ B.ExprBuilder t st fs)
                    => sym
