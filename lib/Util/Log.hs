@@ -29,7 +29,7 @@ import qualified Control.Monad.Writer as MW
 import qualified Control.Monad.RWS as RWS
 import qualified Data.Text as T
 
-import qualified What4.Utils.Log as WLog
+import qualified What4.Serialize.Log as WLog
 
 -- Simple logging monad transformer/class
 class Monad m => MonadLog m where

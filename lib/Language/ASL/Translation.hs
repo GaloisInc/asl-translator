@@ -94,8 +94,8 @@ import qualified Lang.Crucible.CFG.Reg as CCR
 import qualified What4.Utils.MonadST as MST
 import qualified Data.STRef as STRef
 
-import           What4.Utils.Log ( MonadHasLogCfg(..), LogCfg, logTrace )
-import qualified What4.Utils.Log as Log
+import           What4.Serialize.Log ( MonadHasLogCfg(..), LogCfg, logTrace )
+import qualified What4.Serialize.Log as Log
 
 import           Util.Log ( MonadLog(..), logMsg, logIntToLvl, indentLog, unindentLog )
 

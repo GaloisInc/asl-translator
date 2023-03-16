@@ -118,7 +118,7 @@ import qualified Language.ASL.Globals as G
 import qualified Lang.Crucible.CFG.Extension as CCExt
 
 -- FIXME: this should be moved somewhere general
-import           What4.Utils.Log ( HasLogCfg, getLogCfg )
+import           What4.Serialize.Log ( HasLogCfg, getLogCfg )
 
 
 data GenFunction arch innerReads innerWrites outerReads outerWrites init tps =

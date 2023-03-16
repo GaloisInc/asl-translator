@@ -120,15 +120,17 @@ import           What4.ProblemFeatures
 
 import qualified What4.Serialize.Normalize as WN
 
+import qualified What4.Utils.Serialize as WUS
+
 import qualified Prettyprinter as LPP
 import qualified Prettyprinter.Render.String as LPP
 import qualified Text.PrettyPrint.HughesPJClass as PP
 
-import           What4.Utils.Log ( HasLogCfg, LogCfg, withLogCfg )
-import qualified What4.Utils.Log as Log
-import           What4.Utils.Util ( SomeSome(..) )
-import qualified What4.Utils.Util as U
+import           What4.Serialize.Log ( HasLogCfg, LogCfg, withLogCfg )
+import qualified What4.Serialize.Log as Log
 import           Util.Log ( MonadLog(..), logIntToLvl, logMsgStr )
+
+import           Util.SomeSome
 
 -- | Configuration options controlling translation and simulation
 data TranslatorOptions = TranslatorOptions
@@ -549,7 +551,7 @@ maybeSimulateFunction _ _ Nothing = return ()
 maybeSimulateFunction fromInstr name (Just func) = do
   let key = KeyFun name
   isKeySimFilteredOut fromInstr key >>= \case
-    False -> simulateGenFunction key (\cfg -> U.SomeSome <$> ASL.simulateFunction cfg func)
+    False -> simulateGenFunction key (\cfg -> SomeSome <$> ASL.simulateFunction cfg func)
     True -> mkUninterpretedFun key (AC.funcSig func)
 
 maybeSimulateInstruction :: InstructionIdent
@@ -559,14 +561,14 @@ maybeSimulateInstruction _ Nothing = return ()
 maybeSimulateInstruction ident (Just instr) = do
   let key = KeyInstr ident
   isKeySimFilteredOut ident key >>= \case
-    False -> simulateGenFunction key (\cfg -> U.SomeSome <$> ASL.simulateInstruction cfg instr)
+    False -> simulateGenFunction key (\cfg -> SomeSome <$> ASL.simulateInstruction cfg instr)
     True -> mkUninterpretedFun key (AC.funcSig instr)
 
 mkUninterpretedFun :: ElemKey -> FunctionSignature globalReads globalWrites init tps -> SigMapM arch ()
 mkUninterpretedFun key sig = do
   Just (SomeSymFn symFn) <- withOnlineBackend key $ \bak -> do
      let sym = CB.backendGetSym bak
-     let symbol = U.makeSymbol (T.unpack (funcName sig))
+     let symbol = WUS.makeSymbol (T.unpack (funcName sig))
      let retT = funcSigBaseRepr sig
      let argTs = funcSigAllArgsRepr sig
      SomeSymFn <$> WI.freshTotalUninterpFn sym symbol argTs retT
@@ -629,13 +631,13 @@ showExpr e = PP.text (LPP.renderString (LPP.layoutPretty opts (WI.printSymExpr e
 doSimulation :: TranslatorOptions
              -> CFH.HandleAllocator
              -> T.Text
-             -> (forall scope. ASL.SimulatorConfig scope -> IO (U.SomeSome (B.ExprSymFn scope)))
+             -> (forall scope. ASL.SimulatorConfig scope -> IO (SomeSome (B.ExprSymFn scope)))
              -> IO FS.SExpr
 doSimulation opts handleAllocator name p = do
   let
     trySimulation :: forall scope
                    . ASL.SimulatorConfig scope
-                  -> IO (U.SomeSome (B.ExprSymFn scope))
+                  -> IO (SomeSome (B.ExprSymFn scope))
     trySimulation cfg = do
       p cfg
         `X.catch`
@@ -651,7 +653,7 @@ doSimulation opts handleAllocator name p = do
                                   }
     when isCheck $ B.startCaching sym
     logMsgIO opts 2 $ "Simulating: " ++ show name
-    U.SomeSome symFn <- trySimulation cfg
+    SomeSome symFn <- trySimulation cfg
     (symFnSExpr, fenv) <- return $ FS.serializeSymFn' symFn
 
     when isCheck $ do
@@ -668,7 +670,7 @@ doSimulation opts handleAllocator name p = do
 -- | Simulate the given crucible CFG, and if it is a function add it to
 -- the formula map.
 simulateGenFunction :: ElemKey
-                    -> (forall scope. ASL.SimulatorConfig scope -> IO (U.SomeSome (B.ExprSymFn scope )))
+                    -> (forall scope. ASL.SimulatorConfig scope -> IO (SomeSome (B.ExprSymFn scope )))
                     -> SigMapM arch ()
 simulateGenFunction key p = do
   opts <- MSS.gets sOptions

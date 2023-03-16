@@ -32,11 +32,11 @@ import qualified System.Directory as D
 
 import qualified What4.Expr.Builder as WB
 import qualified What4.Interface as WI
-import           What4.Utils.Util ( SomeSome(..) )
 import qualified System.IO as IO
 import qualified Codec.Compression.GZip as GZ
 
 import qualified Language.ASL.Formulas.Serialize as FS
+import           Util.SomeSome
 import           Paths_asl_translator as P
 
 #ifdef ASL_LITE

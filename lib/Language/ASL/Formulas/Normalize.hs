@@ -116,7 +116,7 @@ import qualified What4.SemiRing as WI
 import qualified What4.Expr as WB
 import qualified What4.Expr.Builder as WB
 import qualified What4.Expr.WeightedSum as WSum
-import           What4.Utils.Util ( SomeSome(..) )
+import           Util.SomeSome
 
 import qualified What4.Serialize.Printer as WP
 
