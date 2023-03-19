@@ -124,10 +124,11 @@ import qualified Prettyprinter as LPP
 import qualified Prettyprinter.Render.String as LPP
 import qualified Text.PrettyPrint.HughesPJClass as PP
 
-import           What4.Utils.Log ( HasLogCfg, LogCfg, withLogCfg )
-import qualified What4.Utils.Log as Log
-import           What4.Utils.Util ( SomeSome(..) )
-import qualified What4.Utils.Util as U
+import qualified Data.Parameterized.SomeSome as U
+import           Data.Parameterized.SomeSome ( SomeSome(..) )
+import           What4.Serialize.Log ( HasLogCfg, LogCfg, withLogCfg )
+import qualified What4.Serialize.Log as Log
+import qualified What4.Utils.Serialize as U
 import           Util.Log ( MonadLog(..), logIntToLvl, logMsgStr )
 
 -- | Configuration options controlling translation and simulation

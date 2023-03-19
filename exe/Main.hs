@@ -30,7 +30,7 @@ import           Language.ASL.Translation.Driver ( TranslatorOptions(..), StatOp
                                                  )
 import qualified Language.ASL.Translation.Driver as ASL
 
-import qualified What4.Utils.Log as Log
+import qualified What4.Serialize.Log as Log
 
 import Debug.Trace
 
