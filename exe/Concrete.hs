@@ -10,6 +10,7 @@ import qualified Data.BitVector.Sized as BV
 import qualified Data.Map as M
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.SomeSome as U
 import           Data.Parameterized.TraversableFC
 import qualified Data.Ratio as R
 import qualified Data.Text as T
@@ -17,7 +18,6 @@ import qualified LibBF as BF
 import qualified What4.Interface as WI
 import qualified What4.Expr as B
 import qualified What4.Utils.Complex as U
-import qualified What4.Utils.Util as U
 import qualified What4.Utils.Word16String as U
 import           Control.Monad.IO.Class
 import           System.Exit

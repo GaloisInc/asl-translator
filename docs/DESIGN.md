@@ -10,7 +10,7 @@ a closed-form [What4][fn:what4] function in order to serve as the formal semanti
 for the AArch32 architecture for the purpose of perform binary analysis on
 compiled executables.
 
-This document outlines some of the key technical challenges addressed by 
+This document outlines some of the key technical challenges addressed by
 the translator
 
 # Architecture
@@ -52,7 +52,7 @@ instantiation for AArch32.
 +--------------------------+       semmc-asl
 ```
 # ASL Translation Pipeline
-The `asl-translation-exec` executable (`./exe/Main.hs`) and driver library (`Language.ASL.Translation.Driver`) 
+The `asl-translation-exec` executable (`./exe/Main.hs`) and driver library (`Language.ASL.Translation.Driver`)
 implements the pipeline to transform the parsed ASL specification into formal semantics (as a collection
 of What4 functions). Translation proceeds as follows:
 
@@ -170,7 +170,7 @@ bits(32) S_GETTER(integer n)
     assert n >= 0 && n <= 31;
     base = (n MOD 4) * 32;
     return _V[n DIV 4]<base+31:base>;
-    
+
 S_SETTER(integer n, bits(32) value)
     assert n >= 0 && n <= 31;
     base = (n MOD 4) * 32;
@@ -261,7 +261,7 @@ bits(N) BitReverse(bits(N) data)
 This function is called by the `CRC32_A` instruction with the contents of some GPR.
 
 ```
-acc = R[n]; 
+acc = R[n];
 tempacc = BitReverse(acc):Zeros(size);
 ```
 
@@ -431,11 +431,11 @@ After unification, we create an uninterpreted function with the appropriate
 signature, and with a name that will allow us to later associate it with its
 translated semantics.  The function signature tells us which global variables to
 provide to the function (i.e. its global reads), and what global variables may
-have been modified after its execution (i.e. its global writes). We collect 
+have been modified after its execution (i.e. its global writes). We collect
 the global reads from the current register state of the CFG and package them
 into a single struct. This is passed to the uninterpreted function, along with
 its natural arguments. The output of the uninterpreted function is then
-unpacked into its natural return value, as well as the resulting set of 
+unpacked into its natural return value, as well as the resulting set of
 global writes. Each global write is then assigned to the corresponding register
 state of the CFG, and the natural return value is finally given as the value
 of the function evaluation.
@@ -609,7 +609,7 @@ Along with its Crucible representation, each ASL expression is therefore given
 some `ExtendedTypeData` which tracks additional type information. In the case
 of a struct, it contains a mapping from struct names to indexes. When
 the translator is initialized for a function, an `ExtendedTypeData` is provided
-for each argument based on its ASL type. This extended data is propagated 
+for each argument based on its ASL type. This extended data is propagated
 during translation, and used to resolve named field accesses.
 
 Each ASL expression is also translated under some `TypeConstraint`, representing
@@ -708,7 +708,7 @@ bindings that have been calculated so far during unification.
 
 In our example, `Zeros(16)` is translated without constraints, since its
 corresponding formal argument type `bits(N*M)` cannot be fully resolved under
-the binding environment `[M := 2]`. 
+the binding environment `[M := 2]`.
 
 Next the type of the resulting Crucible atom is unified against its argument
 type, potentially discovering bindings for type variables.
@@ -728,7 +728,7 @@ unified against the current type constraint. Here we unify `BaseBVType 10` with
 The function signature is then evaluated in the binding environment to confirm
 that all bitvector widths have been fully monomorphized. A variant name is
 derived from the binding environment (e.g. `f_L_2_N_8_M_2`) as the formal
-handle for the monomorphized variant of the function, and then translated 
+handle for the monomorphized variant of the function, and then translated
 into a function call. The function name and binding environment pair are
 then recorded as a dependency of the current function, potentially creating
 a future translation obligation.
@@ -794,7 +794,7 @@ ASL instruction or function.
 Once all the target instructions and dependent functions have been successfully
 translated and simulated, they are serialized as s-expressions with
 `Language.ASL.Formulas.Serialize`, which uses
-[what4-serialize][fn:what4-serialize] as its backend. 
+[what4's serialization machinery][fn:what4-serialize] as its backend.
 The `Language.ASL.Driver` produces two files by default: `functions.what4` and
 `instructions.what4`, corresponding to the translated and serialized functions
 from `arm_defs.asl` and the instructions from `arm_instrs.asl` respectively.
@@ -838,7 +838,7 @@ For example, a function which takes and returns a single integer `integer
 f(integer x) := x` would be rewritten to instead use a 65-bit bitvector (able to
 hold a 64 bit value with an additional sign bit): `bits(65) f_norm(bits(65) x)
 := x`. The proxy function then simply projects to and from this bitvector to
-re-create the original function: 
+re-create the original function:
 `integer f(integer x) := sbvToInteger(f_norm(integerToBV(x)))`.
 
 This proxy function is then added to the environment instead of the original,
@@ -936,7 +936,7 @@ TODO
 * replacing integers with `bits(65)` everywhere.
 * rewriting integer arithmetic with guarded bitvector arithmetic
 * rewriting `integerToBV`, `bvToInteger` and `sbvToInteger` as either
-a bitvector truncation, sign-extend or zero-extend as appropriate, with 
+a bitvector truncation, sign-extend or zero-extend as appropriate, with
 assertions that information is not thrown away.
 
 
@@ -960,17 +960,17 @@ after a block of statements has been executed
 
 # Outstanding Issues
 
-* EndOfInstruction 
+* EndOfInstruction
   - what are the intended semantics of this function?
   - Does this affect the semantics of normal (user-mode) instructions?
 
 * Inlining `getSlice` and `setSlice` for concrete arguments
   - normalization could avoid the bitshifting implementation in favor of standard
   bitvector primitives when the bitvector indexes are statically-known
-  
+
 * Removing dead code (especially old hacks)
   - hacks for renaming functions with clashing names
-  
+
 * Use What4 `ConcreteVal` instead of manually-defined `StaticExpr`
   - Possibly able to use What4 static evaluation?
   - Reduce risk of inconsistencies between the static ASL semantics and
@@ -983,7 +983,7 @@ after a block of statements has been executed
 
 
 [fn:semmc]: https://github.com/GaloisInc/semmc
-[fn:what4-serialize]: https://github.com/GaloisInc/what4-serialize/
+[fn:what4-serialize]: https://github.com/GaloisInc/what4/tree/master/what4/src/What4/Serialize
 [fn:asl-description]: https://alastairreid.github.io/dissecting-ARM-MRA/
 [fn:what4]: https://github.com/GaloisInc/crucible/tree/master/what4/
 [fn:mra_tools]: https://github.com/alastairreid/mra_tools

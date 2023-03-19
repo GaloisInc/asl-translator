@@ -7,9 +7,6 @@
 [submodule "submodules/dismantle"]
 	path = submodules/dismantle
 	url = https://github.com/travitch/dismantle.git
-[submodule "submodules/what4-serialize"]
-	path = submodules/what4-serialize
-	url = https://github.com/GaloisInc/what4-serialize.git
 [submodule "submodules/what4"]
 	path = submodules/what4
 	url = https://github.com/GaloisInc/what4
