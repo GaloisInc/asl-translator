@@ -36,6 +36,7 @@ normalized, then written out again.
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Language.ASL.Translation.Driver
   ( TranslatorOptions(..)
