@@ -22,6 +22,7 @@
 
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 
 {-# OPTIONS_GHC -ddump-splices -ddump-to-file -dth-dec-file #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
