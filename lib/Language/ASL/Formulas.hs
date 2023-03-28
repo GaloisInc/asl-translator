@@ -16,6 +16,7 @@ semantics, represented as a library of what4 expressions.
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Language.ASL.Formulas
     ( getFunctionFormulas
