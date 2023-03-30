@@ -1048,10 +1048,13 @@ validateEncoding daEnc (SomeInstructionSignature iSig) = do
       WT.BaseBVRepr nr -> return $ Const $ (T.unpack nm, NR.intValue nr)
       _ -> E.throwError $ InvalidInstructionOperand (nm, tr)
 
+finishInstruction :: [AS.Stmt]
+finishInstruction = [AS.StmtCall (AS.VarName "finishInstruction") []]
+
 wrapConditionCheck :: Bool -> [AS.Stmt] -> [AS.Stmt]
 wrapConditionCheck cond body = case cond of
-  True -> [AS.StmtIf [((AS.ExprCall (AS.VarName "ConditionPassed") []), body)] (Just [])]
-  False -> body
+  True -> [AS.StmtIf [((AS.ExprCall (AS.VarName "ConditionPassed") []), (body ++ finishInstruction))] (Just finishInstruction)]
+  False -> body ++ finishInstruction
 
 initGlobals :: [AS.Stmt]
 initGlobals = [AS.StmtCall (AS.VarName "initGlobals") []]
@@ -1081,7 +1084,7 @@ computeInstructionSignature daEnc AS.Instruction{..} enc = do
   labeledArgs <- getFunctionArgSig enc daEnc
 
   computeSignatures instStmts
-  globalVars <- globalsOfStmts (AS.StmtCall (AS.VarName "finishInstruction") [] : instStmts)
+  globalVars <- globalsOfStmts instStmts
 
   (globalReads, globalWrites) <- return $ unpackGVarRefs globalVars
   missingGlobals <- liftM catMaybes $ forM globalReads $ \(varName, Some varTp) ->
