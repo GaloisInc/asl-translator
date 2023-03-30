@@ -119,8 +119,13 @@ doAssert(boolean b)
     else
         return;
 
+// assume IT instruction is always enabled
+AArch32.CheckITEnabled(bits(4) mask)
+    return;
 
 initGlobals()
+    // this is unset by the IT instruction
+    ShouldAdvanceIT = TRUE;
     setDefaultCond();
 
 setDefaultCond()
@@ -206,6 +211,8 @@ bits(32) PC[]
 finishInstruction()
     if !__BranchTaken then
         _PC = NextInstrAddr();
+    if __ThisInstrEnc == __T16 && PSTATE.T == '1' && ShouldAdvanceIT then
+        AArch32.ITAdvance();
 
 // Allow us to model the internal PC as a 32 bit value
 bits(N) ThisInstrAddr()
