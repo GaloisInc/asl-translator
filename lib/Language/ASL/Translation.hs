@@ -344,9 +344,6 @@ translateStatement' stmt = do
 
       _ -> throwTrace $ UnsupportedStmt stmt
 
-finishInstruction :: Generator h s arch ret ()
-finishInstruction = void $ translateFunctionCall (AS.VarName "finishInstruction") ([] :: [Void]) ConstraintNone
-
 -- | Translate a @return@ from the current function, combining the
 -- current value of all global variables into a struct and returning
 -- it with the natural return value of the function.
@@ -365,7 +362,6 @@ returnWithGlobals retVal = do
     forM_ postconds $ \(nm, condE) -> do
       condA <- mkAtom condE
       assertAtom condA Nothing $ "Postcondition: " <> nm
-    finishInstruction
   returnWithGlobals' retVal
 
 returnWithGlobals' :: ret ~ FuncReturn globalWrites tps
