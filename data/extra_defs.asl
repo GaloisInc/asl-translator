@@ -73,21 +73,33 @@ bits(N) setSlice(bits(N) basebv, integer lo, integer hi, bits(length) asnbv)
     assert (hi - lo) <= length;
 
     bits(length) bv = asnbv;
-    // bv = [bv(length) .. bv_hi(hi) .. bv_0(0)](length)
+    // bv = [bv(length-1) .. bv_hi(hi) .. bv_0(0)](length)
 
-    bv = bv << (length - hi);
-    // bv = [ bv_hi (length) .. bv_0(length - hi) .. 0 0 ](length)
+    bv = bv << (length - 1 - hi);
+    // bv = [ bv_hi (length-1) .. bv_0(length - 1 - hi) .. 0 0 ](length)
 
-    bv = bv >> (length - hi);
+    bv = bv >> (length - 1 - hi);
     // bv = [ 0 0 .. bv_hi(hi) .. bv_0(0)](length)
 
-    ebv = ZeroExtend(NOT(bv), N);
-    // ebv = [0 0 0 .. -bv_hi(hi) .. -bv_0(0)](N)
+    ebv = ZeroExtend(bv, N);
+    // ebv = [0 0 0 .. bv_hi(hi) .. bv_0(0)](N)
 
-    ebv = NOT(ebv << lo);
-    // ebv = [1 1 .. bv_hi(hi + lo) .. bv_0(lo) .. 1](N)
+    ebv = (ebv << lo);
+    // ebv = [0 0 .. bv_hi(hi + lo) .. bv_0(lo) .. 0](N)
 
-    result = basebv AND ebv;
+    masked_hi = Ones(N) << (hi + lo + 1);
+    // masked_hi = [1(N-1) 1 .. 0(hi + lo) .. 0]
+
+    masked_lo = NOT(Ones(N) << lo);
+    // masked_lo = [0(N-1) 0 .. 1(lo-1) .. 1]
+
+    masked_both = masked_hi OR masked_lo;
+    // mask_both = [1(N-1) 1 .. 0(hi + lo) .. 0(lo) .. 1 .. 1(0)]
+
+    masked = basebv AND masked_both;
+    // masked = [basebv_(N-1) .. 0(hi + lo) .. 0(lo) .. basebv_0](N)
+
+    result = masked OR ebv;
     // [basebv_(N-1) .. bv_hi(hi + lo) .. bv_0(lo) .. basebv_0](N)
     return result;
 
