@@ -111,9 +111,7 @@ boolean HaveAnyAArch32()
     return TRUE;
 
 boolean HighestELUsingAArch32()
-    if !HaveAnyAArch32() then return FALSE;
-    // return boolean IMPLEMENTATION_DEFINED;       // e.g. CFG32SIGNAL == HIGH
-    return FALSE;
+    return TRUE;
 
 boolean HaveEL(bits(2) el)
     if el IN {EL1,EL0} then
