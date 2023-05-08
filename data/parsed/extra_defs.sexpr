@@ -478,8 +478,11 @@
                 (QualifiedIdentifier Any bv))
               (ExprBinOp
                 "-"
-                (ExprVarRef
-                  (QualifiedIdentifier Any length))
+                (ExprBinOp
+                  "-"
+                  (ExprVarRef
+                    (QualifiedIdentifier Any length))
+                  (ExprLitNat 1))
                 (ExprVarRef
                   (QualifiedIdentifier Any hi)))))
           (StmtAssign
@@ -491,8 +494,11 @@
                 (QualifiedIdentifier Any bv))
               (ExprBinOp
                 "-"
-                (ExprVarRef
-                  (QualifiedIdentifier Any length))
+                (ExprBinOp
+                  "-"
+                  (ExprVarRef
+                    (QualifiedIdentifier Any length))
+                  (ExprLitNat 1))
                 (ExprVarRef
                   (QualifiedIdentifier Any hi)))))
           (StmtAssign
@@ -501,32 +507,78 @@
             (ExprCall
               (QualifiedIdentifier Any ZeroExtend)
               (list
-                (ExprCall
-                  (QualifiedIdentifier Any NOT)
-                  (list
-                    (ExprVarRef
-                      (QualifiedIdentifier Any bv))))
+                (ExprVarRef
+                  (QualifiedIdentifier Any bv))
                 (ExprVarRef
                   (QualifiedIdentifier Any N)))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any ebv))
+            (ExprBinOp
+              "<<"
+              (ExprVarRef
+                (QualifiedIdentifier Any ebv))
+              (ExprVarRef
+                (QualifiedIdentifier Any lo))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any masked_hi))
+            (ExprBinOp
+              "<<"
+              (ExprCall
+                (QualifiedIdentifier Any Ones)
+                (list
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))))
+              (ExprBinOp
+                "+"
+                (ExprBinOp
+                  "+"
+                  (ExprVarRef
+                    (QualifiedIdentifier Any hi))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any lo)))
+                (ExprLitNat 1))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any masked_lo))
             (ExprCall
               (QualifiedIdentifier Any NOT)
               (list
                 (ExprBinOp
                   "<<"
-                  (ExprVarRef
-                    (QualifiedIdentifier Any ebv))
+                  (ExprCall
+                    (QualifiedIdentifier Any Ones)
+                    (list
+                      (ExprVarRef
+                        (QualifiedIdentifier Any N))))
                   (ExprVarRef
                     (QualifiedIdentifier Any lo))))))
           (StmtAssign
             (LValVarRef
-              (QualifiedIdentifier Any result))
+              (QualifiedIdentifier Any masked_both))
+            (ExprBinOp
+              "OR"
+              (ExprVarRef
+                (QualifiedIdentifier Any masked_hi))
+              (ExprVarRef
+                (QualifiedIdentifier Any masked_lo))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any masked))
             (ExprBinOp
               "AND"
               (ExprVarRef
                 (QualifiedIdentifier Any basebv))
+              (ExprVarRef
+                (QualifiedIdentifier Any masked_both))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any result))
+            (ExprBinOp
+              "OR"
+              (ExprVarRef
+                (QualifiedIdentifier Any masked))
               (ExprVarRef
                 (QualifiedIdentifier Any ebv))))
           (StmtReturn
@@ -588,12 +640,30 @@
                 (list
                   (StmtReturn Nothing)))))))))
   (DefCallable
+    (QualifiedIdentifier AArch32 CheckITEnabled)
+    (list
+      (SymDecl
+        mask
+        (TypeFun
+          bits
+          (ExprLitNat 4))))
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn Nothing)))))
+  (DefCallable
     (QualifiedIdentifier Any initGlobals)
     (list)
     Nothing
     (Just
       (StmtBlock
         (list
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any ShouldAdvanceIT))
+            (ExprVarRef
+              (QualifiedIdentifier Any TRUE)))
           (StmtCall
             (QualifiedIdentifier Any setDefaultCond)
             (list))))))
@@ -1198,6 +1268,33 @@
                   (ExprCall
                     (QualifiedIdentifier Any NextInstrAddr)
                     (list)))))
+            (list)
+            Nothing)
+          (StmtIf
+            (ExprBinOp
+              "&&"
+              (ExprBinOp
+                "&&"
+                (ExprBinOp
+                  "=="
+                  (ExprVarRef
+                    (QualifiedIdentifier Any __ThisInstrEnc))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any __T16)))
+                (ExprBinOp
+                  "=="
+                  (ExprMember
+                    (ExprVarRef
+                      (QualifiedIdentifier Any PSTATE))
+                    T)
+                  (ExprLitBin '1')))
+              (ExprVarRef
+                (QualifiedIdentifier Any ShouldAdvanceIT)))
+            (StmtBlock
+              (list
+                (StmtCall
+                  (QualifiedIdentifier AArch32 ITAdvance)
+                  (list))))
             (list)
             Nothing)))))
   (DefCallable

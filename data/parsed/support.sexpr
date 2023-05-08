@@ -391,24 +391,10 @@
     (Just
       (StmtBlock
         (list
-          (StmtIf
-            (ExprUnOp
-              "!"
-              (ExprCall
-                (QualifiedIdentifier Any HaveAnyAArch32)
-                (list)))
-            (StmtBlock
-              (list
-                (StmtReturn
-                  (Just
-                    (ExprVarRef
-                      (QualifiedIdentifier Any FALSE))))))
-            (list)
-            Nothing)
           (StmtReturn
             (Just
               (ExprVarRef
-                (QualifiedIdentifier Any FALSE))))))))
+                (QualifiedIdentifier Any TRUE))))))))
   (DefCallable
     (QualifiedIdentifier Any HaveEL)
     (list
