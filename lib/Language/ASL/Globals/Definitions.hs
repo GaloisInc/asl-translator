@@ -235,7 +235,7 @@ untrackedGlobals' = Some $ empty
   -- memory model
   :> noflag "__ExclusiveLocal"
   -- this flag is set but never read
-  :> noflag "ShouldAdvanceIT"
+  :> bool "ShouldAdvanceIT"
   -- this is initialized before it is read, so we don't need to track it
   -- the translator assigns this to a copy of SIMDS as its initial value
   :> def "SIMDS_clone" (knownRepr :: WI.BaseTypeRepr AllSIMDBaseType) domainUnbounded
