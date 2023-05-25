@@ -229,7 +229,7 @@ mapCtxTreeLeafInject :: (MapCtxTree f ctxt) ~ CtxLeaf k => Apply f x ~ k => Prox
 mapCtxTreeLeafInject _ _ _ _ = unsafeCoerce Refl
 
 mapCtxTreeBranchInject :: (MapCtxTree f ctxt) ~ CtxBranch ctxts' => MapCtx (MapCtxTreeWrapper f) ctxts ~ ctxts' => Proxy f -> Proxy ctxt -> Proxy ctxts' -> Proxy ctxts -> ctxt :~: ('CtxBranch ctxts)
-mapCtxTreeBranchInject _ _ _ = unsafeCoerce Refl
+mapCtxTreeBranchInject _ _ _ _ = unsafeCoerce Refl
 
 -- | Lift the 'MapCtxTree' type family to a 'TyFun'
 data MapCtxTreeWrapper :: (TyFun k1 k2 -> Type) -> TyFun (CtxTree k1) (CtxTree k2) -> Type
