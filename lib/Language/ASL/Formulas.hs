@@ -16,6 +16,7 @@ semantics, represented as a library of what4 expressions.
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Language.ASL.Formulas
     ( getFunctionFormulas
@@ -32,10 +33,10 @@ import qualified System.Directory as D
 
 import qualified What4.Expr.Builder as WB
 import qualified What4.Interface as WI
-import           What4.Utils.Util ( SomeSome(..) )
 import qualified System.IO as IO
 import qualified Codec.Compression.GZip as GZ
 
+import           Data.Parameterized.SomeSome ( SomeSome(..) )
 import qualified Language.ASL.Formulas.Serialize as FS
 import           Paths_asl_translator as P
 

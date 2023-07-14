@@ -68,9 +68,9 @@ bits(N) setSlice(bits(N) basebv, integer lo, integer hi, bits(length) asnbv)
     assert length <= N;
     assert length >= 1;
     assert hi >= lo;
-    assert hi <= length;
     assert lo >= 0;
     assert (hi - lo) <= length;
+    integer slicelen = (hi - lo) + 1;
 
     bits(length) bv = asnbv;
     // bv = [bv(length-1) .. bv_hi(hi) .. bv_0(0)](length)

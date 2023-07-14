@@ -116,13 +116,13 @@ import qualified What4.SemiRing as WI
 import qualified What4.Expr as WB
 import qualified What4.Expr.Builder as WB
 import qualified What4.Expr.WeightedSum as WSum
-import           What4.Utils.Util ( SomeSome(..) )
 
 import qualified What4.Serialize.Printer as WP
 
 -- from this package
 import qualified Language.ASL.Formulas.Serialize as FS
 import           Data.Parameterized.CtxFuns
+import           Data.Parameterized.SomeSome ( SomeSome(..) )
 import qualified What4.Expr.ExprTree as AT
 import           What4.Expr.ExprTree ( withSym, forWithIndex )
 

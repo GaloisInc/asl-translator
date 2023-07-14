@@ -30,7 +30,7 @@ import           Language.ASL.Translation.Driver ( TranslatorOptions(..), StatOp
                                                  )
 import qualified Language.ASL.Translation.Driver as ASL
 
-import qualified What4.Utils.Log as Log
+import qualified What4.Serialize.Log as Log
 
 import Debug.Trace
 
@@ -145,6 +145,10 @@ arguments =
 
   , Option "p" ["parallel"] (NoArg (Left (\opts -> Just $ opts { optParallel = True  })))
     "Run symbolic simulation concurrently with multiple threads."
+
+  , Option [] ["output-global-sigs"]
+    (ReqArg (\f -> Left (\opts -> Just $ opts { optFilePaths = (optFilePaths opts){ fpOutGlobalSigs = f} })) "PATH")
+   "Path to type signatures for global variables."
 
   , Option [] ["output-functions"]
     (ReqArg (\f -> Left (\opts -> Just $ opts { optFilePaths = (optFilePaths opts){ fpOutFuns = f} })) "PATH")

@@ -71,15 +71,15 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified What4.Symbol as WI
 import qualified What4.Interface as WI
 import qualified What4.Expr.Builder as WB
-
-import           What4.Utils.Util ( SomeSome(..) )
-import qualified What4.Utils.Util as U
+import qualified What4.Utils.Serialize as U
 
 import qualified What4.Serialize.Printer as S ( pattern L, pattern A )
 import           What4.Serialize.Printer ( Atom(..), SExpr )
 import qualified What4.Serialize.Printer as WP
 import qualified What4.Serialize.Parser as WPD
 import qualified What4.Serialize.FastSExpr as WSF
+
+import           Data.Parameterized.SomeSome ( SomeSome(..) )
 
 -- | Environment mapping formal names to ExprSymFns
 type ExprSymFnEnv t = Map T.Text (SomeSome (WB.ExprSymFn t))

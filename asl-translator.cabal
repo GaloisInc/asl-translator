@@ -34,11 +34,12 @@ common shared-properties
                        constraints,
                        dismantle-arm-xml,
                        dismantle-tablegen,
+                       filepath,
                        hashtables,
                        ilist,
                        integer-logarithms,
                        bimap,
-                       text >= 1 && < 2,
+                       text >= 1 && < 2.1,
                        mtl,
                        transformers,
                        lens,
@@ -48,7 +49,6 @@ common shared-properties
                        crucible,
                        what4,
                        asl-parser,
-                       what4-serialize,
                        s-cargot,
                        ordered-containers,
                        split,
@@ -90,6 +90,7 @@ library
                        Language.ASL.Globals.ConsistencyCheck
                        Data.Parameterized.CtxFuns
                        Data.Parameterized.AssignTree
+                       Data.Parameterized.SomeSome
                        Language.ASL.Formulas.Attach
                        Language.ASL.Formulas
                        Util.Log
@@ -102,11 +103,10 @@ library
 executable asl-translator-exec
   main-is:             Main.hs
   build-depends:       base >=4.10.0.0 && < 5,
-                       filepath,
-                       what4-serialize,
+                       what4,
                        asl-translator,
                        split,
-                       text >= 1 && < 2
+                       text >= 1 && < 2.1
   hs-source-dirs:      exe
   ghc-options:         -Wcompat -Wall -O2 -threaded -rtsopts "-with-rtsopts=-N"
   default-language: Haskell2010
@@ -117,8 +117,7 @@ test-suite asl-translator-genarm-test
   hs-source-dirs: tests/Translation
   default-language: Haskell2010
   build-depends:       base >= 4.10.0.0 && < 5,
-                       filepath,
-                       what4-serialize,
+                       what4,
                        asl-translator
   main-is: Main.hs
 
@@ -140,9 +139,7 @@ executable asl-translator-concrete-test
   main-is: Concrete.hs
   build-depends:       base >= 4.10.0.0 && < 5,
                        bv-sized,
-                       filepath,
                        libBF >= 0.6 && < 0.7,
-                       what4-serialize,
                        what4,
                        parameterized-utils,
                        asl-translator,

@@ -438,13 +438,6 @@
                 (QualifiedIdentifier Any lo))))
           (StmtAssert
             (ExprBinOp
-              "<="
-              (ExprVarRef
-                (QualifiedIdentifier Any hi))
-              (ExprVarRef
-                (QualifiedIdentifier Any length))))
-          (StmtAssert
-            (ExprBinOp
               ">="
               (ExprVarRef
                 (QualifiedIdentifier Any lo))
@@ -460,6 +453,20 @@
                   (QualifiedIdentifier Any lo)))
               (ExprVarRef
                 (QualifiedIdentifier Any length))))
+          (StmtVarDeclInit
+            (SymDecl
+              slicelen
+              (TypeRef
+                (QualifiedIdentifier Any integer)))
+            (ExprBinOp
+              "+"
+              (ExprBinOp
+                "-"
+                (ExprVarRef
+                  (QualifiedIdentifier Any hi))
+                (ExprVarRef
+                  (QualifiedIdentifier Any lo)))
+              (ExprLitNat 1)))
           (StmtVarDeclInit
             (SymDecl
               bv
@@ -484,7 +491,7 @@
                     (QualifiedIdentifier Any length))
                   (ExprLitNat 1))
                 (ExprVarRef
-                  (QualifiedIdentifier Any hi)))))
+                  (QualifiedIdentifier Any slicelen)))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any bv))
@@ -500,7 +507,7 @@
                     (QualifiedIdentifier Any length))
                   (ExprLitNat 1))
                 (ExprVarRef
-                  (QualifiedIdentifier Any hi)))))
+                  (QualifiedIdentifier Any slicelen)))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any ebv))
