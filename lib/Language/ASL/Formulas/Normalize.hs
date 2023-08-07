@@ -73,7 +73,7 @@ import           Prelude hiding ( fail )
 import           GHC.Stack
 import           GHC.TypeLits
 
-import           Control.Monad ( forM, void )
+import           Control.Monad ( forM, liftM, void )
 import           Control.Lens hiding (Index, (:>), Empty)
 import           Control.Monad.Fail
 
@@ -338,7 +338,7 @@ getUsedBVs :: Ctx.Assignment (WB.ExprBoundVar t) args
            -> RebindM t (Set (Some (WB.ExprBoundVar t)))
 getUsedBVs asn expr = do
   let allBvs = Set.fromList $ FC.toListFC Some asn
-  usedbvsSet <- IO.liftIO $ ME.liftM (Set.unions . map snd) $ ST.stToIO $ H.toList =<< WB.boundVars expr
+  usedbvsSet <- IO.liftIO $ liftM (Set.unions . map snd) $ ST.stToIO $ H.toList =<< WB.boundVars expr
   return $ Set.intersection allBvs usedbvsSet
 
 simplifiedSymFn :: forall t rets args

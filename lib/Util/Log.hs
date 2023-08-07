@@ -17,7 +17,9 @@ module Util.Log
   , WLog.LogCfg
   ) where
 
-import           Control.Monad.Identity
+import           Control.Monad (when)
+import           Data.Functor (void)
+import           Data.Functor.Identity (Identity)
 
 import qualified Control.Monad.IO.Class as IO
 

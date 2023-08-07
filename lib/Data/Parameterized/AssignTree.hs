@@ -43,10 +43,10 @@ module Data.Parameterized.AssignTree
   , revTraverseMapCtxTree
   ) where
 
-import           Unsafe.Coerce
-import           Data.Proxy
+import           Data.Functor.Identity (Identity(..))
 import           Data.Kind
-import           Control.Monad.Identity hiding (zipWithM)
+import           Data.Proxy
+import           Unsafe.Coerce
 
 import           Data.Parameterized.Context hiding (zipWithM)
 import qualified Data.Parameterized.Context as Ctx
