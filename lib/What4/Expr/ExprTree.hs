@@ -265,7 +265,7 @@ withExprBuilder' sym f = evalExperBuilderM sym (unliftHasBuilder f)
 --
 --
 -- Example:
--- 
+--
 -- Given the function :
 --
 -- @
