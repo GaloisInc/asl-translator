@@ -47,7 +47,7 @@ module Language.ASL.SyntaxTraverse
   )
 where
 
-import           Control.Applicative ( liftA2 )
+import qualified Control.Applicative as App ( liftA2 )
 import qualified Control.Monad.Writer.Lazy as W
 import qualified Control.Monad.Identity as I
 import qualified Control.Monad.Trans as MT
@@ -449,8 +449,8 @@ traverseSlice tr slice =
 
   in case slice of
      AS.SliceSingle e -> AS.SliceSingle <$> (f e)
-     AS.SliceOffset e e' -> liftA2 AS.SliceOffset (f e) (f e')
-     AS.SliceRange e e' -> liftA2 AS.SliceRange (f e) (f e')
+     AS.SliceOffset e e' -> App.liftA2 AS.SliceOffset (f e) (f e')
+     AS.SliceRange e e' -> App.liftA2 AS.SliceRange (f e) (f e')
 
 traverseExpr :: forall m. MonadLog m => SyntaxTraverser m -> AS.Expr -> m AS.Expr
 traverseExpr tr expr =
@@ -460,24 +460,24 @@ traverseExpr tr expr =
 
     foldSetElems slice = case slice of
       AS.SetEltSingle e -> AS.SetEltSingle <$> f e
-      AS.SetEltRange e e' -> liftA2 AS.SetEltRange (f e) (f e')
+      AS.SetEltRange e e' -> App.liftA2 AS.SetEltRange (f e) (f e')
 
   in shallowTraverseCall tr expr >>= \expr' -> indentLog $ case expr' of
     AS.ExprSlice e slices ->
-      liftA2 AS.ExprSlice (f e) (traverse (traverseSlice tr) slices)
+      App.liftA2 AS.ExprSlice (f e) (traverse (traverseSlice tr) slices)
 
     AS.ExprIndex e slices ->
-      liftA2 AS.ExprIndex (f e)
+      App.liftA2 AS.ExprIndex (f e)
         (traverse (traverseSlice tr) slices)
     AS.ExprUnOp uop e -> (AS.ExprUnOp uop) <$> f e
-    AS.ExprBinOp bop e e' -> liftA2 (AS.ExprBinOp bop) (f e) (f e')
+    AS.ExprBinOp bop e e' -> App.liftA2 (AS.ExprBinOp bop) (f e) (f e')
     AS.ExprMembers e mems -> (\e' -> AS.ExprMembers e' mems) <$> f e
     AS.ExprInMask e mask -> (\e' -> AS.ExprInMask e' mask) <$> f e
     AS.ExprMemberBits e bits -> (\e' -> AS.ExprMemberBits e' bits) <$> f e
     AS.ExprCall ident es -> (\es' -> AS.ExprCall ident es') <$> traverse f es
-    AS.ExprInSet e se -> liftA2 AS.ExprInSet (f e) $ traverse foldSetElems se
+    AS.ExprInSet e se -> App.liftA2 AS.ExprInSet (f e) $ traverse foldSetElems se
     AS.ExprTuple es -> AS.ExprTuple <$> traverse f es
-    AS.ExprIf pes e -> liftA2 AS.ExprIf (indentLog $ traverse (\(x,y) -> liftA2 (,) (f x) (f y)) pes) (f e)
+    AS.ExprIf pes e -> App.liftA2 AS.ExprIf (indentLog $ traverse (\(x,y) -> App.liftA2 (,) (f x) (f y)) pes) (f e)
     AS.ExprMember e mem -> (\e' -> AS.ExprMember e' mem) <$> f e
     AS.ExprUnknown t -> (\t' -> AS.ExprUnknown t') <$> f t
     _ -> return expr'
@@ -491,8 +491,8 @@ traverseLVal tr lval =
   in tr lval >>= \lval' -> indentLog $ case lval' of
     AS.LValMember lv mem -> (\lv' -> AS.LValMember lv' mem) <$> f lv
     AS.LValMemberArray lv idx -> (\lv' -> AS.LValMemberArray lv' idx) <$> f lv
-    AS.LValArrayIndex lv slices -> liftA2 AS.LValArrayIndex (f lv) $ traverse (traverseSlice tr) slices
-    AS.LValSliceOf lv slices -> liftA2 AS.LValSliceOf (f lv) $ traverse (traverseSlice tr) slices
+    AS.LValArrayIndex lv slices -> App.liftA2 AS.LValArrayIndex (f lv) $ traverse (traverseSlice tr) slices
+    AS.LValSliceOf lv slices -> App.liftA2 AS.LValSliceOf (f lv) $ traverse (traverseSlice tr) slices
     AS.LValArray lvs -> AS.LValArray <$> traverse f lvs
     AS.LValTuple lvs -> AS.LValTuple <$> traverse f lvs
     AS.LValMemberBits lv bits -> (\lv' -> AS.LValMemberBits lv' bits) <$> f lv
@@ -510,14 +510,14 @@ traverseType tr t =
         traverse (traverseSlice tr) slices
 
     foldIxType ix = case ix of
-      AS.IxTypeRange e e' -> liftA2 AS.IxTypeRange (f e) (f e')
+      AS.IxTypeRange e e' -> App.liftA2 AS.IxTypeRange (f e) (f e')
       _ -> return ix
 
   in tr t >>= \t' -> indentLog $ case t' of
     AS.TypeFun i e -> (\e' -> AS.TypeFun i e') <$> f e
     AS.TypeOf e -> AS.TypeOf <$> f e
     AS.TypeReg i fs -> (\fs' -> AS.TypeReg i fs') <$> traverse foldField fs
-    AS.TypeArray ty ixt -> liftA2 AS.TypeArray (f ty) (foldIxType ixt)
+    AS.TypeArray ty ixt -> App.liftA2 AS.TypeArray (f ty) (foldIxType ixt)
     _ -> return t'
 
 traverseStmt :: forall m. MonadLog m => SyntaxTraverser m -> AS.Stmt -> m AS.Stmt
@@ -530,36 +530,36 @@ traverseStmt tr stmt =
 
     foldCases cases = case cases of
       AS.CaseWhen pats me stmts ->
-        liftA2 (\me' stmts' -> AS.CaseWhen pats me' stmts')
+        App.liftA2 (\me' stmts' -> AS.CaseWhen pats me' stmts')
           (traverse f me)
           (traverse f stmts)
       AS.CaseOtherwise stmts -> AS.CaseOtherwise <$> traverse f stmts
 
     foldCatches catches = case catches of
       AS.CatchWhen e stmts ->
-        liftA2 AS.CatchWhen (f e) $ traverse f stmts
+        App.liftA2 AS.CatchWhen (f e) $ traverse f stmts
       AS.CatchOtherwise stmts -> AS.CatchOtherwise <$> traverse f stmts
 
   in shallowTraverseCall tr stmt >>= \stmt' -> indentLog $ case stmt' of
     AS.StmtVarsDecl ty idents -> (\ty' -> AS.StmtVarsDecl ty' idents) <$> f ty
-    AS.StmtVarDeclInit decl e -> liftA2 AS.StmtVarDeclInit (h' decl) (f e)
-    AS.StmtConstDecl decl e -> liftA2 AS.StmtConstDecl (h' decl) (f e)
-    AS.StmtAssign lv e ->  liftA2 AS.StmtAssign (f lv) (f e)
+    AS.StmtVarDeclInit decl e -> App.liftA2 AS.StmtVarDeclInit (h' decl) (f e)
+    AS.StmtConstDecl decl e -> App.liftA2 AS.StmtConstDecl (h' decl) (f e)
+    AS.StmtAssign lv e ->  App.liftA2 AS.StmtAssign (f lv) (f e)
     AS.StmtCall ident es -> (\es' -> AS.StmtCall ident es') <$> traverse f es
     AS.StmtReturn me -> (\me' -> AS.StmtReturn me') <$> traverse f me
     AS.StmtAssert e -> AS.StmtAssert <$> f e
     AS.StmtIf tests melse ->
-      liftA2 AS.StmtIf
-        (traverse (\(e, stmts) -> liftA2 (,) (f e) (indentLog $ traverse f stmts)) tests)
+      App.liftA2 AS.StmtIf
+        (traverse (\(e, stmts) -> App.liftA2 (,) (f e) (indentLog $ traverse f stmts)) tests)
         (indentLog $ traverse (\stmt'' -> traverse f stmt'') melse)
-    AS.StmtCase e alts -> liftA2 AS.StmtCase (f e) (traverse foldCases alts)
-    AS.StmtFor ident rng stmts -> liftA2 (\rng' stmts' -> AS.StmtFor ident rng' stmts')
-      (liftA2 (,) (f $ fst rng) (f $ snd rng))
+    AS.StmtCase e alts -> App.liftA2 AS.StmtCase (f e) (traverse foldCases alts)
+    AS.StmtFor ident rng stmts -> App.liftA2 (\rng' stmts' -> AS.StmtFor ident rng' stmts')
+      (App.liftA2 (,) (f $ fst rng) (f $ snd rng))
       (indentLog $ traverse f stmts)
-    AS.StmtWhile e stmts -> liftA2 AS.StmtWhile (f e) (indentLog $ traverse f stmts)
-    AS.StmtRepeat stmts e -> liftA2 AS.StmtRepeat (indentLog $ traverse f stmts) (f e)
+    AS.StmtWhile e stmts -> App.liftA2 AS.StmtWhile (f e) (indentLog $ traverse f stmts)
+    AS.StmtRepeat stmts e -> App.liftA2 AS.StmtRepeat (indentLog $ traverse f stmts) (f e)
     AS.StmtSeeExpr e -> AS.StmtSeeExpr <$> f e
-    AS.StmtTry stmts ident alts -> liftA2 (\stmts' alts' -> AS.StmtTry stmts' ident alts')
+    AS.StmtTry stmts ident alts -> App.liftA2 (\stmts' alts' -> AS.StmtTry stmts' ident alts')
       (indentLog $ traverse f stmts)
       (indentLog $ traverse foldCatches alts)
     _ -> return stmt'
