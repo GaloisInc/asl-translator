@@ -778,7 +778,7 @@ reportStats sopts sm = do
   when (not (Set.null unexpectedElems)) $ do
     putStrLn $ "Unexpected exceptions:"
     forMwithKey_ (instrExcepts sm) $ \ident -> \e ->
-      E.when (unexpected (KeyInstr ident) e) $ do
+      when (unexpected (KeyInstr ident) e) $ do
         putStrLn $ prettyIdent ident ++ " failed to translate:"
         putStrLn $ show e
     putStrLn "----------------------"
@@ -807,7 +807,7 @@ reportStats sopts sm = do
     if not (Map.member ident (instrExcepts sm)) &&
        Set.null (Set.filter (\dep -> Map.member dep (funExcepts sm)) deps)
     then do
-      E.when (reportSucceedingInstructions sopts) $ putStrLn $ prettyIdent ident
+      when (reportSucceedingInstructions sopts) $ putStrLn $ prettyIdent ident
       return $ Just ident
     else return Nothing) (instrDeps sm)
   putStrLn $ "Number of successfully translated functions: " <> show (Map.size $ r)
@@ -819,7 +819,7 @@ reportStats sopts sm = do
       KeyInstr ident -> putStrLn $ "Instruction: " <> prettyIdent ident
       KeyFun nm -> do
         putStrLn $ "Function: " <> show nm
-        E.when (reportFunctionDependencies sopts) $ do
+        when (reportFunctionDependencies sopts) $ do
           putStrLn $ "Which is depended on by: "
           case Map.lookup nm reverseDependencyMap of
             Just instrs -> mapM_ (\ident -> putStrLn $  "    " <> prettyIdent ident) instrs
