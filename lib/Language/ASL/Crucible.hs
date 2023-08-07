@@ -35,7 +35,6 @@ all instructions share the same set of global reads/writes
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Language.ASL.Crucible (
