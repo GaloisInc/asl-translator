@@ -48,7 +48,7 @@ import           GHC.TypeLits
 import           Unsafe.Coerce
 import qualified Language.Haskell.TH as TH
 
-import           Control.Applicative
+import qualified Control.Applicative as App
 
 import           Data.Proxy
 import           Data.Kind
@@ -194,7 +194,7 @@ traverseMapCtx :: forall k1 k2 (f :: TyFun k1 k2 -> Type) (xs :: Ctx.Ctx k1)
                -> m (Ctx.Assignment g (MapCtx f xs))
 traverseMapCtx p1 f asn = case Ctx.viewAssign asn of
   Ctx.AssignEmpty -> pure Ctx.empty
-  Ctx.AssignExtend asn' x -> liftA2 (:>) (traverseMapCtx p1 f asn') (f x)
+  Ctx.AssignExtend asn' x -> App.liftA2 (:>) (traverseMapCtx p1 f asn') (f x)
 
 revApplyMapCtx :: forall k1 k2 (f :: TyFun k1 k2 -> Type) (xs :: Ctx k1)
                          (g :: k2 -> Type) (h :: k1 -> Type)
@@ -214,7 +214,7 @@ revTraverseMapCtx :: forall k1 k2 (f :: TyFun k1 k2 -> Type) (xs :: Ctx k1)
 revTraverseMapCtx p1 _f Ctx.Empty | Refl <- zeroMapCtx p1 (Proxy @xs) = pure $ Ctx.empty
 revTraverseMapCtx p1 f (rest :> a)
   | ApplyRepr <- appliedMapCtx p1 (Proxy @xs) (viewCtxRepr (Ctx.size (rest :> a))) =
-    liftA2 (:>) (revTraverseMapCtx p1 f rest) (f a)
+    App.liftA2 (:>) (revTraverseMapCtx p1 f rest) (f a)
 
 -- fin
 
