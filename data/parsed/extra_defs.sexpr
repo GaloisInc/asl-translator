@@ -662,12 +662,30 @@
                 (list
                   (StmtReturn Nothing)))))))))
   (DefCallable
+    (QualifiedIdentifier AArch32 CheckITEnabled)
+    (list
+      (SymDecl
+        mask
+        (TypeFun
+          bits
+          (ExprLitNat 4))))
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn Nothing)))))
+  (DefCallable
     (QualifiedIdentifier Any initGlobals)
     (list)
     Nothing
     (Just
       (StmtBlock
         (list
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any ShouldAdvanceIT))
+            (ExprVarRef
+              (QualifiedIdentifier Any TRUE)))
           (StmtCall
             (QualifiedIdentifier Any setDefaultCond)
             (list))))))
@@ -1272,6 +1290,33 @@
                   (ExprCall
                     (QualifiedIdentifier Any NextInstrAddr)
                     (list)))))
+            (list)
+            Nothing)
+          (StmtIf
+            (ExprBinOp
+              "&&"
+              (ExprBinOp
+                "&&"
+                (ExprBinOp
+                  "=="
+                  (ExprVarRef
+                    (QualifiedIdentifier Any __ThisInstrEnc))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any __T16)))
+                (ExprBinOp
+                  "=="
+                  (ExprMember
+                    (ExprVarRef
+                      (QualifiedIdentifier Any PSTATE))
+                    T)
+                  (ExprLitBin '1')))
+              (ExprVarRef
+                (QualifiedIdentifier Any ShouldAdvanceIT)))
+            (StmtBlock
+              (list
+                (StmtCall
+                  (QualifiedIdentifier AArch32 ITAdvance)
+                  (list))))
             (list)
             Nothing)))))
   (DefCallable
