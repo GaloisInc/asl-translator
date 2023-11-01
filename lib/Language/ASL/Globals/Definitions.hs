@@ -234,8 +234,10 @@ untrackedGlobals' = Some $ empty
   :> bvbits @5 "10000" "PSTATE_M"
   -- memory model
   :> noflag "__ExclusiveLocal"
-  -- this flag is set but never read
-  :> noflag "ShouldAdvanceIT"
+  -- this is set by the instruction preamble when it is in a conditional block.
+  -- it is used to determine if the IT register should be incremented, which is ultimately used
+  -- to determine where the end of a conditional block is
+  :> bool "ShouldAdvanceIT"
   -- this is initialized before it is read, so we don't need to track it
   -- the translator assigns this to a copy of SIMDS as its initial value
   :> def "SIMDS_clone" (knownRepr :: WI.BaseTypeRepr AllSIMDBaseType) domainUnbounded
