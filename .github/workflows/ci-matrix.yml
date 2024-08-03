@@ -39,18 +39,18 @@ jobs:
     name: GHC ${{ matrix.ghc }} on ${{ matrix.os }} asl-translator
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
       with:
         submodules: 'true'
 
-    - uses: haskell/actions/setup@v1
+    - uses: haskell-actions/setup@v2
       id: setup-haskell
       name: Setup Haskell
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
 
-    - uses: actions/cache/restore@v3
+    - uses: actions/cache/restore@v4
       name: Restore cabal store cache
       with:
         path: |
@@ -80,7 +80,7 @@ jobs:
       run: |
         cabal v2-test pkg:asl-translator
 
-    - uses: actions/cache/save@v3
+    - uses: actions/cache/save@v4
       name: Save cabal store cache
       if: always()
       with:
