@@ -428,7 +428,7 @@ showExpr e = PP.text (LPP.renderString (LPP.layoutPretty opts (WI.printSymExpr e
 showAbortedResult :: CS.AbortedResult c d -> T.Text
 showAbortedResult ar = case ar of
   CS.AbortedExec reason _ -> T.pack $ show reason
-  CS.AbortedExit code -> T.pack $ show code
+  CS.AbortedExit code _ -> T.pack $ show code
   CS.AbortedBranch _ _ res' res'' -> "BRANCH: " <> showAbortedResult res' <> "\n" <> showAbortedResult res''
 
 
