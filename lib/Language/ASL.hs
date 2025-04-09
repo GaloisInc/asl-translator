@@ -198,7 +198,7 @@ simulateFunction symCfg crucFunc = genSimulation symCfg crucFunc extractResult
                 (CS.regValue re)
                 WI.NeverUnfold
               checkClosedTerm allArgBvs (CS.regValue re)
-              
+
               return $ fn
           | otherwise -> X.throwIO (UnexpectedReturnType btr)
 
@@ -398,7 +398,7 @@ data SimulationException = SimulationTimeout (Some AC.SomeFunctionSignature)
 
 instance PP.Pretty SimulationException where
   pPrint e = case e of
-    
+
     SimulationTimeout (Some fs) -> PP.text "SimulationTimeout:" PP.<+> PP.text (show fs)
     SimulationAbort (Some fs) msg ->
       PP.text "SimulationAbort:" PP.<+> PP.text (T.unpack msg) PP.<+> PP.text (show fs)
