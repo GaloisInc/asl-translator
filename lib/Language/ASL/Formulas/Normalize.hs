@@ -188,6 +188,7 @@ reserializeInstr env name sexpr = do
       let functionMaker = FS.lazyFunctionMaker sym (env, ref) (FS.uninterpFunctionMaker sym) `FS.composeMakers` FS.uninterpFunctionMaker sym
       SomeSome symFn <- FS.deserializeSymFn' functionMaker sexpr
       putStrLn $ "Reserializing Instruction: " ++ (T.unpack name)
+      WB.startCaching sym
       symFn' <- evalRebindM sym name $ reduceSymFn symFn
       return $! (name, FS.serializeSymFn symFn')
 
@@ -293,8 +294,9 @@ reduceSymFn symFn = case WB.symFnInfo symFn of
     expr_1 <- withSym $ \sym -> AT.normFieldAccs sym expr_0
     expr_2 <- extractInts expr_1
     expr_3 <- identifyExprs expr_2
-    validateNormalForm expr_3
-    withSym $ \sym -> WI.definedFn sym (WB.symFnName symFn) args expr_3 eval
+    expr_4 <- normMemoryOps expr_3
+    validateNormalForm expr_4
+    withSym $ \sym -> WI.definedFn sym (WB.symFnName symFn) args expr_4 eval
   _ -> errorHere "reduceSymFn: unexpected function kind"
 
 
@@ -975,3 +977,93 @@ extractInts e = do
         expr'' <- extractBitV' expr'
         withSym $ \sym -> WI.sbvToInteger sym expr''
       _ -> return expr'
+
+data CondCache t tp = CondCache (IO.IORef (Map (WB.Expr t WI.BaseBoolType) (WB.Expr t tp)))
+
+-- | Path-sensitive cached evaluation
+condCacheEval :: IO.MonadIO m => WB.IdxCache t (CondCache t) -> WB.Expr t WI.BaseBoolType -> WB.Expr t tp -> m (WB.Expr t tp) -> m (WB.Expr t tp)
+condCacheEval cache cond e f = case WB.exprMaybeId e of
+  Nothing -> f
+  Just n -> WB.lookupIdx cache n >>= \case
+    Just (CondCache ref) -> do
+      m <- IO.liftIO $ IO.readIORef ref
+      case Map.lookup cond m of
+        Just e' -> return e'
+        Nothing -> do
+          e' <- f
+          IO.liftIO $ IO.modifyIORef ref (Map.insert cond e')
+          return e'
+    Nothing -> do
+        e' <- f
+        ref <- IO.liftIO $ IO.newIORef (Map.singleton cond e')
+        WB.insertIdxValue cache n (CondCache ref)
+        return e'
+
+-- | Augment memory operations with a path condition when they are under if-then-else branches.
+--   This was added to address this macaw issue: https://github.com/GaloisInc/macaw/issues/266
+
+-- Takes a term of the shape: 
+-- ite p (x + read_mem y) (read_mem z)
+-- And turns it into:
+-- ite p (x + cond_read_mem y p) (cond_read_mem z (not p))
+
+--  The rationale for this transformation is to allow these values to be assigned unconditionally,
+--  without concern for emitting reads that are actually unused when resolving the resulting Mux
+--  expression. In theory this could be resolved later in the pipeline, but ultimately the logic
+--  would still be the same.
+
+-- NOTE: Using the full path condition can result in a combinatorial explosion, so we restrict
+-- this to only embed the most "recent" condition. This can be extended to include additional
+-- conditions if necessary (i.e. an instruction is still emitting a spurious read due to an earlier condition).
+-- The advantage of only including exactly one condition is that we aren't adding an additional predicate
+-- to the term (since the Mux condition is necessarily already included). Adding more conditions means
+-- that we are adding a conjunct that was not necessarily previously present.
+
+normMemoryOps :: forall t tp. WB.Expr t tp -> RebindM t (WB.Expr t tp)
+normMemoryOps expr = do
+  cache <- WB.newIdxCache
+  tru <- withSym $ \sym -> return $ WI.truePred sym
+  let
+    go_rec :: forall tp'. WB.Expr t WI.BaseBoolType -> WB.Expr t tp' -> RebindM t (WB.Expr t tp')
+    go_rec cond e | 
+      Just (SomeSymFn symFn args) <- asSymFn (\nm -> "uf_read_mem" `T.isPrefixOf` nm) e,
+      old_nm <- (WI.solverSymbolAsText $ WB.symFnName symFn),
+      Nothing <- WI.asConstantPred cond,
+      Just base_nm <- (T.stripPrefix "uf_" old_nm) = condCacheEval cache cond e $ do
+        let new_nm = "uf_cond_" <> base_nm
+        let argTs = FC.fmapFC WI.exprType args Ctx.:> WI.BaseBoolRepr
+        symFn' <- mkUF (T.unpack new_nm) argTs (WI.fnReturnType symFn)
+        args' <- FC.traverseFC (go_rec cond) args
+        withSym $ \sym -> WI.applySymFn sym symFn' (args' Ctx.:> cond)
+
+    go_rec cond e = condCacheEval cache cond e $ case e of
+      WB.AppExpr appExpr -> case WB.appExprApp appExpr of
+          (WB.BaseIte _ _ cond' bT bF) -> do
+            condT <- go_rec cond cond'
+            condT_full <- withSym $ \sym -> WI.andPred sym condT cond
+            case WI.asConstantPred condT_full of
+              Just True -> go_rec cond bT
+              Just False -> go_rec cond bF
+              Nothing -> do
+                bT' <- go_rec condT bT
+                condF <- withSym $ \sym -> WI.notPred sym condT
+                bF' <- go_rec condF bF
+                if bT' == bT && bF' == bF && condT == cond' then
+                  return e
+                else
+                  withSym $ \sym -> WI.baseTypeIte sym condT bT' bF'
+          app -> do
+            app' <- WB.traverseApp (go_rec cond) app
+            case app' == app of
+              True -> return e
+              False -> withSym $ \sym -> WB.sbMakeExpr sym app'
+      WB.NonceAppExpr nae ->
+        case WB.nonceExprApp nae of
+          WB.FnApp symFn args -> do
+            args' <- FC.traverseFC (go_rec cond) args
+            case (args' == args) of
+              True -> return e
+              False -> withSym $ \sym -> WI.applySymFn sym symFn args'
+          _ -> return e
+      _ -> return e
+  go_rec tru expr
