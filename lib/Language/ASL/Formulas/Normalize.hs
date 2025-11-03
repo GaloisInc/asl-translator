@@ -978,10 +978,15 @@ extractInts e = do
         withSym $ \sym -> WI.sbvToInteger sym expr''
       _ -> return expr'
 
-data CondCache t tp = CondCache (IO.IORef (Map (WB.Expr t WI.BaseBoolType) (WB.Expr t tp)))
+newtype CondCache t tp = CondCache (IO.IORef (Map (WB.Expr t WI.BaseBoolType) (WB.Expr t tp)))
 
 -- | Path-sensitive cached evaluation
-condCacheEval :: IO.MonadIO m => WB.IdxCache t (CondCache t) -> WB.Expr t WI.BaseBoolType -> WB.Expr t tp -> m (WB.Expr t tp) -> m (WB.Expr t tp)
+condCacheEval :: IO.MonadIO m
+              => WB.IdxCache t (CondCache t) -- ^ Cache reference
+              -> WB.Expr t WI.BaseBoolType -- ^ Path condition, used as secondary cache key
+              -> WB.Expr t tp -- ^ Expression, used as primary cache key
+              -> m (WB.Expr t tp) -- ^ Function for computing result on cache miss
+              -> m (WB.Expr t tp)
 condCacheEval cache cond e f = case WB.exprMaybeId e of
   Nothing -> f
   Just n -> WB.lookupIdx cache n >>= \case
