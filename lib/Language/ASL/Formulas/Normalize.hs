@@ -121,6 +121,7 @@ import qualified What4.Serialize.Printer as WP
 
 -- from this package
 import qualified Language.ASL.Formulas.Serialize as FS
+import           Language.ASL.Globals (MemoryBaseType, AllGPRBaseType, AllSIMDBaseType)
 import           Data.Parameterized.CtxFuns
 import           Data.Parameterized.SomeSome ( SomeSome(..) )
 import qualified What4.Expr.ExprTree as AT
@@ -190,7 +191,18 @@ reserializeInstr env name sexpr = do
       putStrLn $ "Reserializing Instruction: " ++ (T.unpack name)
       WB.startCaching sym
       symFn' <- evalRebindM sym name $ reduceSymFn symFn
-      return $! (name, FS.serializeSymFn symFn')
+      -- skip expensive preprocessing steps for Vector instructions, since
+      -- they are ultimately unused
+      case "V" `T.isPrefixOf` name of
+        True -> return $! (name, FS.serializeSymFn symFn')
+        False -> do
+          -- rebuilding the terms can help reduce them after preprocessing, since
+          -- the deserializer uses the smart expression constructors rather than
+          -- directly via sbMakeExpr
+          symFn'' <- evalRebindM sym name $ reduceSymFnWith symFn' normMemoryOps
+          let sexpr' = FS.serializeSymFn symFn''
+          SomeSome symFn''' <- FS.deserializeSymFn' functionMaker sexpr'
+          return $! (name, FS.serializeSymFn symFn''')
 
 
 data NormalizeSymFnEnv sym =
@@ -287,18 +299,23 @@ normIntRepr repr = case intToBVRepr repr of
   IntToBVInt -> integerBVTypeRepr
   IntToBVElse _ -> repr
 
+reduceSymFnWith :: WB.ExprSymFn t args ret
+                -> (forall tp. WB.Expr t tp -> RebindM t (WB.Expr t tp))
+                -> RebindM t (WB.ExprSymFn t args ret)
+reduceSymFnWith symFn f = case WB.symFnInfo symFn of
+  WB.DefinedFnInfo args expr_0 eval -> withExpr "reduceSymFn" expr_0 $ do
+    expr_1 <- f expr_0
+    withSym $ \sym -> WI.definedFn sym (WB.symFnName symFn) args expr_1 eval
+  _ -> errorHere "reduceSymFnWith: unexpected function kind"
+
 reduceSymFn :: WB.ExprSymFn t args ret
             -> RebindM t (WB.ExprSymFn t args ret)
-reduceSymFn symFn = case WB.symFnInfo symFn of
-  WB.DefinedFnInfo args expr_0 eval -> withExpr "reduceSymFn" expr_0 $ do
+reduceSymFn symFn = reduceSymFnWith symFn $ \expr_0 -> do
     expr_1 <- withSym $ \sym -> AT.normFieldAccs sym expr_0
     expr_2 <- extractInts expr_1
     expr_3 <- identifyExprs expr_2
-    expr_4 <- normMemoryOps expr_3
-    validateNormalForm expr_4
-    withSym $ \sym -> WI.definedFn sym (WB.symFnName symFn) args expr_4 eval
-  _ -> errorHere "reduceSymFn: unexpected function kind"
-
+    validateNormalForm expr_3
+    return expr_3
 
 -- | Normalize a symfn by expanding its body into one-dimensional struct, and then wrapping
 -- this inner function in an outer function which projects out the original struct shape. This
@@ -978,6 +995,13 @@ extractInts e = do
         withSym $ \sym -> WI.sbvToInteger sym expr''
       _ -> return expr'
 
+isStatePlaceholderType :: WI.BaseTypeRepr tp -> Bool
+isStatePlaceholderType tp = case tp of
+  _ | Just Refl <- testEquality tp (knownRepr :: WI.BaseTypeRepr MemoryBaseType) -> True
+  _ | Just Refl <- testEquality tp (knownRepr :: WI.BaseTypeRepr AllGPRBaseType) -> True
+  _ | Just Refl <- testEquality tp (knownRepr :: WI.BaseTypeRepr AllSIMDBaseType) -> True
+  _ -> False
+
 newtype CondCache t tp = CondCache (IO.IORef (Map (WB.Expr t WI.BaseBoolType) (WB.Expr t tp)))
 
 -- | Path-sensitive cached evaluation
@@ -1043,17 +1067,28 @@ normMemoryOps expr = do
 
     go_rec cond e = condCacheEval cache cond e $ case e of
       WB.AppExpr appExpr -> case WB.appExprApp appExpr of
-          (WB.BaseIte _ _ cond' bT bF) -> do
-            condT <- go_rec cond cond'
-            condT_full <- withSym $ \sym -> WI.andPred sym condT cond
+          (WB.BaseIte tp _ cond' bT bF) -> do
+            condT_local <- go_rec cond cond'
+            condT_full <- withSym $ \sym -> WI.andPred sym condT_local cond
             case WI.asConstantPred condT_full of
               Just True -> go_rec cond bT
               Just False -> go_rec cond bF
               Nothing -> do
+                condF_local <- withSym $ \sym -> WI.notPred sym condT_local
+                condF_full <- withSym $ \sym -> WI.andPred sym condF_local cond
+
+                let (condT,condF) = case isStatePlaceholderType tp of
+                      True -> 
+                        -- Macaw will translate this into a lazily-evaluate write, guarded
+                        -- on 'condT_local'. We therefore don't need to include it in the
+                        -- path condition for mem reads in either branch case. At runtime
+                        -- (i.e. analysis time) only the branch corresponding to the evaluated
+                        -- condition will execute (unless the condition is still symbolic)
+                        (condT_local, condF_local)
+                      False -> (condT_full, condF_full)
                 bT' <- go_rec condT bT
-                condF <- withSym $ \sym -> WI.notPred sym condT
                 bF' <- go_rec condF bF
-                if bT' == bT && bF' == bF && condT == cond' then
+                if bT' == bT && bF' == bF && condT_local == cond' then
                   return e
                 else
                   withSym $ \sym -> WI.baseTypeIte sym condT bT' bF'
