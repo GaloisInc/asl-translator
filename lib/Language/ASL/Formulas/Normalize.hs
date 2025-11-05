@@ -1035,13 +1035,6 @@ condCacheEval cache cond e f = case WB.exprMaybeId e of
 --  expression. In theory this could be resolved later in the pipeline, but ultimately the logic
 --  would still be the same.
 
--- NOTE: Using the full path condition can result in a combinatorial explosion, so we restrict
--- this to only embed the most "recent" condition. This can be extended to include additional
--- conditions if necessary (i.e. an instruction is still emitting a spurious read due to an earlier condition).
--- The advantage of only including exactly one condition is that we aren't adding an additional predicate
--- to the term (since the Mux condition is necessarily already included). Adding more conditions means
--- that we are adding a conjunct that was not necessarily previously present.
-
 normMemoryOps :: forall t tp. WB.Expr t tp -> RebindM t (WB.Expr t tp)
 normMemoryOps expr = do
   cache <- WB.newIdxCache
