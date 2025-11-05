@@ -1073,19 +1073,19 @@ normMemoryOps expr = do
 
                 let (condT,condF) = case isWritePlaceholderType tp of
                       True -> 
-                        -- Macaw will translate this into a lazily-evaluate write, guarded
+                        -- Macaw will translate this into a lazily-evaluated write, guarded
                         -- on 'condT_local'. We therefore don't need to include it in the
                         -- path condition for mem reads in either branch case. At runtime
                         -- (i.e. analysis time) only the branch corresponding to the evaluated
                         -- condition will execute (unless the condition is still symbolic)
-                        (condT_local, condF_local)
+                        (cond, cond)
                       False -> (condT_full, condF_full)
                 bT' <- go_rec condT bT
                 bF' <- go_rec condF bF
                 if bT' == bT && bF' == bF && condT_local == cond' then
                   return e
                 else
-                  withSym $ \sym -> WI.baseTypeIte sym condT bT' bF'
+                  withSym $ \sym -> WI.baseTypeIte sym condT_local bT' bF'
           app -> do
             app' <- WB.traverseApp (go_rec cond) app
             case app' == app of
