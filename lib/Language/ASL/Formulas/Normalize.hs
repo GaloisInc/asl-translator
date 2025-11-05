@@ -121,11 +121,12 @@ import qualified What4.Serialize.Printer as WP
 
 -- from this package
 import qualified Language.ASL.Formulas.Serialize as FS
-import           Language.ASL.Globals (MemoryBaseType, AllGPRBaseType, AllSIMDBaseType)
+import           Language.ASL.Globals.Definitions (isWritePlaceholderType)
 import           Data.Parameterized.CtxFuns
 import           Data.Parameterized.SomeSome ( SomeSome(..) )
 import qualified What4.Expr.ExprTree as AT
 import           What4.Expr.ExprTree ( withSym, forWithIndex )
+
 
 
 -- | Integers in the original expression are translated into 65-bit bitvectors.
@@ -995,13 +996,6 @@ extractInts e = do
         withSym $ \sym -> WI.sbvToInteger sym expr''
       _ -> return expr'
 
-isStatePlaceholderType :: WI.BaseTypeRepr tp -> Bool
-isStatePlaceholderType tp = case tp of
-  _ | Just Refl <- testEquality tp (knownRepr :: WI.BaseTypeRepr MemoryBaseType) -> True
-  _ | Just Refl <- testEquality tp (knownRepr :: WI.BaseTypeRepr AllGPRBaseType) -> True
-  _ | Just Refl <- testEquality tp (knownRepr :: WI.BaseTypeRepr AllSIMDBaseType) -> True
-  _ -> False
-
 newtype CondCache t tp = CondCache (IO.IORef (Map (WB.Expr t WI.BaseBoolType) (WB.Expr t tp)))
 
 -- | Path-sensitive cached evaluation
@@ -1077,7 +1071,7 @@ normMemoryOps expr = do
                 condF_local <- withSym $ \sym -> WI.notPred sym condT_local
                 condF_full <- withSym $ \sym -> WI.andPred sym condF_local cond
 
-                let (condT,condF) = case isStatePlaceholderType tp of
+                let (condT,condF) = case isWritePlaceholderType tp of
                       True -> 
                         -- Macaw will translate this into a lazily-evaluate write, guarded
                         -- on 'condT_local'. We therefore don't need to include it in the

@@ -58,6 +58,9 @@ module Language.ASL.Globals.Definitions
   , maxGPRRepr
   , maxSIMDRepr
   , UnitType
+  , WriteK(..)
+  , typeAsWriteKind
+  , isWritePlaceholderType
   ) where
 
 import           GHC.TypeNats ( KnownNat )
@@ -90,6 +93,18 @@ type MemoryBaseType = WI.BaseBVType 146
 type AllGPRBaseType = WI.BaseBVType 148
 type AllSIMDBaseType = WI.BaseBVType 149
 type UnitType = WI.BaseStructType Ctx.EmptyCtx
+
+data WriteK = MemoryWrite | GPRWrite | SIMDWrite
+
+typeAsWriteKind :: WI.BaseTypeRepr tp -> Maybe WriteK
+typeAsWriteKind tp = case tp of
+  _ | Just Refl <- testEquality tp (knownRepr :: WI.BaseTypeRepr MemoryBaseType) -> Just MemoryWrite
+  _ | Just Refl <- testEquality tp (knownRepr :: WI.BaseTypeRepr AllGPRBaseType) -> Just GPRWrite
+  _ | Just Refl <- testEquality tp (knownRepr :: WI.BaseTypeRepr AllSIMDBaseType) -> Just SIMDWrite
+  _ -> Nothing
+
+isWritePlaceholderType :: WI.BaseTypeRepr tp -> Bool
+isWritePlaceholderType tp = isJust (typeAsWriteKind tp)
 
 -- | A 'NR.NatRepr' for 'MaxGPR'
 maxGPRRepr :: NR.NatRepr MaxGPR
