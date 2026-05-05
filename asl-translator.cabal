@@ -42,7 +42,7 @@ common shared-properties
                        text >= 1 && < 2.2,
                        mtl,
                        transformers,
-                       lens,
+                       microlens,
                        parameterized-utils >= 2.1.1,
                        pretty,
                        prettyprinter >= 1.7.0,

@@ -44,7 +44,6 @@ module Language.ASL.Translation (
   , userTypeRepr
   ) where
 
-import           Control.Lens ( (&), (.~) )
 import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import           Control.Monad ( when, void, foldM, foldM_, (<=<), forM_, forM )
@@ -69,6 +68,8 @@ import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
+import           Lens.Micro ( (&), (.~) )
+
 import qualified Lang.Crucible.CFG.Expr as CCE
 import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.Types as CT

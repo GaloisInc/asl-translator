@@ -20,7 +20,6 @@ module Language.ASL.Crucible.Extension (
   ) where
 
 import qualified Control.Exception as X
-import           Control.Lens ( (^.), (&), (.~) )
 import           Control.Monad ( guard )
 import           Data.IORef
 import           Data.Maybe ( isNothing )
@@ -31,6 +30,8 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.TraversableFC as FC
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Text as T
+import           Lens.Micro ( (^.), (&), (.~) )
+
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.CFG.Extension as CCExt
 import qualified Lang.Crucible.Simulator as CS
