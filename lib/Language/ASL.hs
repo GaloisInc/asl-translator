@@ -25,7 +25,6 @@ module Language.ASL (
 
 import           Data.IORef
 import qualified Control.Exception as X
-import           Control.Lens ( (^.) )
 import           Control.Applicative ( Const(..) )
 import qualified Control.Monad.Fail as MF
 import qualified Control.Monad.Identity as I
@@ -45,6 +44,7 @@ import           Data.Set ( Set )
 import qualified Data.Set as Set
 import qualified Data.Vector as V
 import           Data.Maybe ( catMaybes )
+import           Lens.Micro ( (^.) )
 
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.CFG.Core as CCC

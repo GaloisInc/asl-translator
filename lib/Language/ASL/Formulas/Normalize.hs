@@ -74,7 +74,6 @@ import           GHC.Stack
 import           GHC.TypeLits
 
 import           Control.Monad ( forM, liftM, void )
-import           Control.Lens hiding (Index, (:>), Empty)
 import           Control.Monad.Fail
 
 import qualified Control.Monad.ST as ST
@@ -89,6 +88,7 @@ import qualified Control.Concurrent.MVar as IO
 import qualified Control.Concurrent as IO
 
 
+import           Data.Functor.Identity ( Identity(..), runIdentity )
 import           Data.Kind
 import qualified Data.Map.Ordered as OMap
 import           Data.Maybe ( catMaybes )
